@@ -1,22 +1,30 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
 
-// Custom APIs for renderer
-const api = {}
+contextBridge.exposeInMainWorld('api', {
+  createWindow: (name: string) =>
+    ipcRenderer.invoke('window:create', name),
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
-  }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
-}
+  listWindows: () =>
+    ipcRenderer.invoke('window:list'),
+
+  deleteWindow: (id: number) =>
+    ipcRenderer.invoke('window:delete', id),
+
+  openTerminal: (containerId: string) =>
+    ipcRenderer.invoke('terminal:open', containerId),
+
+  sendTerminalInput: (containerId: string, data: string) =>
+    ipcRenderer.send('terminal:input', containerId, data),
+
+  resizeTerminal: (containerId: string, cols: number, rows: number) =>
+    ipcRenderer.send('terminal:resize', containerId, cols, rows),
+
+  closeTerminal: (containerId: string) =>
+    ipcRenderer.send('terminal:close', containerId),
+
+  onTerminalData: (callback: (containerId: string, data: string) => void) =>
+    ipcRenderer.on('terminal:data', (_, containerId, data) => callback(containerId, data)),
+
+  offTerminalData: () =>
+    ipcRenderer.removeAllListeners('terminal:data'),
+})
