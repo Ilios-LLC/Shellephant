@@ -20,6 +20,14 @@ vi.mock('dockerode', () => ({
   })
 }))
 
+const { mockCloseTerminalSessionFor } = vi.hoisted(() => ({
+  mockCloseTerminalSessionFor: vi.fn(),
+}))
+
+vi.mock('../../src/main/terminalService', () => ({
+  closeTerminalSessionFor: mockCloseTerminalSessionFor,
+}))
+
 import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
 
 describe('windowService', () => {
@@ -100,6 +108,13 @@ describe('windowService', () => {
 
     it('throws when window id does not exist', async () => {
       await expect(deleteWindow(99999)).rejects.toThrow('Window 99999 not found')
+    })
+
+    it('calls closeTerminalSessionFor with the container_id', async () => {
+      await createWindow('with-terminal')
+      const [win] = listWindows()
+      await deleteWindow(win.id)
+      expect(mockCloseTerminalSessionFor).toHaveBeenCalledWith('mock-container-abc123')
     })
   })
 })

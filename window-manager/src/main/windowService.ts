@@ -1,5 +1,6 @@
 import Dockerode from 'dockerode'
 import { getDb } from './db'
+import { closeTerminalSessionFor } from './terminalService'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -61,6 +62,12 @@ export async function deleteWindow(id: number): Promise<void> {
   try {
     await getDocker().getContainer(row.container_id).stop({ t: 1 })
   } catch {
-    // Container may already be stopped; ignore
+    // Container may already be stopped or gone; ignore
+  }
+
+  try {
+    closeTerminalSessionFor(row.container_id)
+  } catch {
+    // Idempotent; ignore
   }
 }
