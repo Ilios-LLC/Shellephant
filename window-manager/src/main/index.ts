@@ -27,13 +27,12 @@ app.whenReady().then(() => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
 
-  const win = createWindow()
-  registerIpcHandlers(win)
+  registerIpcHandlers()
+  createWindow()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      const newWin = createWindow()
-      registerIpcHandlers(newWin)
+      createWindow()
     }
   })
 })

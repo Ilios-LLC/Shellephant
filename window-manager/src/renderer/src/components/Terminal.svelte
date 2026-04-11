@@ -13,6 +13,7 @@
 
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
+  let resizeObserver: ResizeObserver
 
   onMount(() => {
     term = new XTerm()
@@ -20,6 +21,9 @@
     term.loadAddon(fitAddon)
     term.open(terminalEl)
     fitAddon.fit()
+
+    resizeObserver = new ResizeObserver(() => fitAddon.fit())
+    resizeObserver.observe(terminalEl)
 
     window.api.openTerminal(win.container_id)
 
@@ -39,6 +43,7 @@
   })
 
   onDestroy(() => {
+    resizeObserver?.disconnect()
     window.api.offTerminalData()
     window.api.closeTerminal(win.container_id)
     term?.dispose()

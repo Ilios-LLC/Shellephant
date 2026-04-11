@@ -5,6 +5,9 @@ vi.mock('electron', () => ({
     handle: vi.fn(),
     on: vi.fn(),
   },
+  BrowserWindow: {
+    fromWebContents: vi.fn(),
+  },
 }))
 
 vi.mock('../../src/main/windowService', () => ({
@@ -20,7 +23,7 @@ vi.mock('../../src/main/terminalService', () => ({
   closeTerminal: vi.fn(),
 }))
 
-import { ipcMain } from 'electron'
+import { ipcMain, BrowserWindow } from 'electron'
 import {
   createWindow,
   listWindows,
@@ -53,7 +56,7 @@ function getListener(channel: string) {
 describe('registerIpcHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    registerIpcHandlers(mockWin)
+    registerIpcHandlers()
   })
 
   it('registers window:create handler that calls createWindow', async () => {
@@ -80,7 +83,8 @@ describe('registerIpcHandlers', () => {
 
   it('registers terminal:open handler that calls openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
-    await getHandler('terminal:open')({}, 'container-abc')
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc')
     expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin)
   })
 

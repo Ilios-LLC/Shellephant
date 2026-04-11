@@ -23,6 +23,7 @@
   async function handleDelete(id: number) {
     await window.api.deleteWindow(id)
     windows = windows.filter((w) => w.id !== id)
+    if (activeTerminal?.id === id) activeTerminal = null
   }
 
   function handleClose() {
