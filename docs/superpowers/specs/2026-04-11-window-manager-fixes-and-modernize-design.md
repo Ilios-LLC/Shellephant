@@ -268,12 +268,15 @@ API unchanged (`onCreated` prop + name input). Restyled: compact, sits in Sideba
 
 Local state extends with `expanded = $state(false)`. Existing `name`, `loading`, `error` state kept.
 
-### `src/renderer/src/types.ts` (UPDATED)
+### `WindowRecord` type (UPDATED in TWO places)
+
+The type is currently duplicated in `src/main/windowService.ts` and `src/renderer/src/types.ts`. Both must be updated to add the `status` field. They remain two separate declarations (no shared module) — keeping with the existing pattern. Keep them structurally identical.
 
 ```ts
+// both files
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
-export type WindowRecord = {
+export interface WindowRecord {
   id: number
   name: string
   container_id: string
@@ -282,14 +285,14 @@ export type WindowRecord = {
 }
 ```
 
-`status` is transient (not stored in SQLite). Populated at `listWindows` time from the main-process `statusMap`.
+`status` is transient (not stored in SQLite). Populated at `listWindows` / `createWindow` time from the main-process `statusMap`.
 
 ### Removed files
 
 - `src/renderer/src/components/WindowCard.svelte` (replaced by `SidebarItem`).
 - `src/renderer/src/components/Terminal.svelte` (replaced by `TerminalHost`).
 - `tests/renderer/WindowCard.test.ts`, `tests/renderer/Terminal.test.ts` (replaced by new tests — see Testing).
-- `src/renderer/src/components/Versions.svelte` if no longer imported. (Audit during implementation; remove only if unused.)
+- `src/renderer/src/components/Versions.svelte` — confirmed not imported anywhere. Delete.
 - `wavy-lines.svg` background image — no longer used.
 
 ## Data flow & IPC
