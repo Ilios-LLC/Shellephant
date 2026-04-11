@@ -1,8 +1,11 @@
+export type WindowStatus = 'running' | 'stopped' | 'unknown'
+
 export interface WindowRecord {
   id: number
   name: string
   container_id: string
   created_at: string
+  status: WindowStatus
 }
 
 export interface Api {

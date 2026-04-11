@@ -8,6 +8,7 @@ const mockWindow: WindowRecord = {
   name: 'My Test Window',
   container_id: 'abc123def456xyz',
   created_at: '2026-01-01T00:00:00Z',
+  status: 'running',
 }
 
 describe('WindowCard', () => {

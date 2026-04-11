@@ -60,7 +60,7 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers window:create handler that calls createWindow', async () => {
-    const record = { id: 1, name: 'test', container_id: 'abc', created_at: '2026-01-01' }
+    const record = { id: 1, name: 'test', container_id: 'abc', created_at: '2026-01-01', status: 'running' as const }
     vi.mocked(createWindow).mockResolvedValue(record)
     const result = await getHandler('window:create')({}, 'test')
     expect(createWindow).toHaveBeenCalledWith('test')
@@ -68,7 +68,7 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers window:list handler that calls listWindows', async () => {
-    const records = [{ id: 1, name: 'w', container_id: 'x', created_at: '2026-01-01' }]
+    const records = [{ id: 1, name: 'w', container_id: 'x', created_at: '2026-01-01', status: 'running' as const }]
     vi.mocked(listWindows).mockReturnValue(records)
     const result = await getHandler('window:list')({})
     expect(listWindows).toHaveBeenCalled()

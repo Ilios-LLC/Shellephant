@@ -1,11 +1,14 @@
 import Dockerode from 'dockerode'
 import { getDb } from './db'
 
+export type WindowStatus = 'running' | 'stopped' | 'unknown'
+
 export interface WindowRecord {
   id: number
   name: string
   container_id: string
   created_at: string
+  status: WindowStatus
 }
 
 let _docker: Dockerode | null = null
@@ -34,13 +37,15 @@ export async function createWindow(name: string): Promise<WindowRecord> {
     name,
     container_id: container.id,
     created_at: new Date().toISOString(),
+    status: 'unknown' as WindowStatus,
   }
 }
 
 export function listWindows(): WindowRecord[] {
-  return getDb()
+  return (getDb()
     .prepare('SELECT id, name, container_id, created_at FROM windows WHERE deleted_at IS NULL')
-    .all() as WindowRecord[]
+    .all() as Omit<WindowRecord, 'status'>[])
+    .map(r => ({ ...r, status: 'unknown' as WindowStatus }))
 }
 
 export async function deleteWindow(id: number): Promise<void> {
