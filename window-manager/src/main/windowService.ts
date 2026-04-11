@@ -13,6 +13,7 @@ export interface WindowRecord {
 }
 
 let _docker: Dockerode | null = null
+const statusMap = new Map<number, WindowStatus>()
 
 function getDocker(): Dockerode {
   if (!_docker) _docker = new Dockerode()
@@ -33,12 +34,42 @@ export async function createWindow(name: string): Promise<WindowRecord> {
     .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
     .run(name, container.id)
 
+  const id = result.lastInsertRowid as number
+  statusMap.set(id, 'running')
+
   return {
-    id: result.lastInsertRowid as number,
+    id,
     name,
     container_id: container.id,
     created_at: new Date().toISOString(),
-    status: 'unknown' as WindowStatus,
+    status: 'running' as WindowStatus,
+  }
+}
+
+export async function reconcileWindows(): Promise<void> {
+  const db = getDb()
+  const rows = db
+    .prepare('SELECT id, container_id FROM windows WHERE deleted_at IS NULL')
+    .all() as Array<{ id: number; container_id: string }>
+
+  for (const row of rows) {
+    try {
+      const inspect = await getDocker().getContainer(row.container_id).inspect()
+      if (inspect.State.Running === true) {
+        statusMap.set(row.id, 'running')
+      } else {
+        db.prepare("UPDATE windows SET deleted_at = datetime('now') WHERE id = ?").run(row.id)
+        statusMap.delete(row.id)
+      }
+    } catch (err) {
+      const errMsg = String(err)
+      if (errMsg.includes('404') || errMsg.includes('not found')) {
+        db.prepare("UPDATE windows SET deleted_at = datetime('now') WHERE id = ?").run(row.id)
+        statusMap.delete(row.id)
+      } else {
+        statusMap.set(row.id, 'unknown')
+      }
+    }
   }
 }
 
@@ -46,7 +77,7 @@ export function listWindows(): WindowRecord[] {
   return (getDb()
     .prepare('SELECT id, name, container_id, created_at FROM windows WHERE deleted_at IS NULL')
     .all() as Omit<WindowRecord, 'status'>[])
-    .map(r => ({ ...r, status: 'unknown' as WindowStatus }))
+    .map(r => ({ ...r, status: statusMap.get(r.id) ?? 'unknown' as WindowStatus }))
 }
 
 export async function deleteWindow(id: number): Promise<void> {

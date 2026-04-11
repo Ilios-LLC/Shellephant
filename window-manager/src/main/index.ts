@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { initDb } from './db'
 import { registerIpcHandlers } from './ipcHandlers'
+import { reconcileWindows } from './windowService'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -23,9 +24,15 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
+
+  try {
+    await reconcileWindows()
+  } catch (err) {
+    console.error('reconcileWindows failed; continuing with unknown statuses', err)
+  }
 
   registerIpcHandlers()
   createWindow()
