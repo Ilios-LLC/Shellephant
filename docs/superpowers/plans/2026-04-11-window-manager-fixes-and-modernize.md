@@ -67,7 +67,7 @@ Small, fast tasks that unblock the rest of the plan without changing behavior.
 - Modify: `window-manager/package.json`
 - Modify: `window-manager/package-lock.json`
 
-- [ ] **Step 1: Install the dependency**
+- [X] **Step 1: Install the dependency**
 
 Run:
 ```bash
@@ -76,7 +76,7 @@ cd window-manager && npm install @xterm/addon-web-links@^0.12.0
 
 Expected: `package.json` gains `"@xterm/addon-web-links": "^0.12.0"` under `dependencies`; `package-lock.json` is updated. The version must line up with the existing `@xterm/xterm@^6.0.0` major — addon-web-links 0.12 targets xterm 6.
 
-- [ ] **Step 2: Verify install**
+- [X] **Step 2: Verify install**
 
 Run:
 ```bash
@@ -85,7 +85,7 @@ cd window-manager && node -e "require('@xterm/addon-web-links')"
 
 Expected: no error output (successful require).
 
-- [ ] **Step 3: Run existing tests to confirm nothing broke**
+- [X] **Step 3: Run existing tests to confirm nothing broke**
 
 Run:
 ```bash
@@ -94,7 +94,7 @@ cd window-manager && npm run test
 
 Expected: all existing main + renderer tests still pass.
 
-- [ ] **Step 4: Commit**
+- [X] **Step 4: Commit**
 
 ```bash
 git add window-manager/package.json window-manager/package-lock.json
@@ -114,7 +114,7 @@ Update both copies of the type (main and renderer) and fix every existing test f
 - Modify: `window-manager/tests/renderer/Terminal.test.ts`
 - Modify: `window-manager/tests/main/ipcHandlers.test.ts`
 
-- [ ] **Step 1: Update renderer types**
+- [X] **Step 1: Update renderer types**
 
 Replace the contents of `window-manager/src/renderer/src/types.ts` with:
 
@@ -148,7 +148,7 @@ declare global {
 }
 ```
 
-- [ ] **Step 2: Update main service type**
+- [X] **Step 2: Update main service type**
 
 In `window-manager/src/main/windowService.ts`, replace the existing `WindowRecord` interface at the top of the file with:
 
@@ -177,7 +177,7 @@ export function listWindows(): WindowRecord[] {
 
 And for `createWindow`, add `status: 'unknown' as WindowStatus` to the returned object literal. These are bridge values — Task 3 replaces them with real logic.
 
-- [ ] **Step 3: Fix `WindowCard.test.ts` fixture**
+- [X] **Step 3: Fix `WindowCard.test.ts` fixture**
 
 In `window-manager/tests/renderer/WindowCard.test.ts`, update the `mockWindow` literal to include `status`:
 
@@ -191,7 +191,7 @@ const mockWindow: WindowRecord = {
 }
 ```
 
-- [ ] **Step 4: Fix `Terminal.test.ts` fixture**
+- [X] **Step 4: Fix `Terminal.test.ts` fixture**
 
 In `window-manager/tests/renderer/Terminal.test.ts`, update the `mockWindow` literal to include `status`:
 
@@ -205,7 +205,7 @@ const mockWindow: WindowRecord = {
 }
 ```
 
-- [ ] **Step 5: Fix `ipcHandlers.test.ts` fixtures**
+- [X] **Step 5: Fix `ipcHandlers.test.ts` fixtures**
 
 In `window-manager/tests/main/ipcHandlers.test.ts`, update the two literal records to include `status: 'running' as const`:
 
@@ -217,7 +217,7 @@ const record = { id: 1, name: 'test', container_id: 'abc', created_at: '2026-01-
 const records = [{ id: 1, name: 'w', container_id: 'x', created_at: '2026-01-01', status: 'running' as const }]
 ```
 
-- [ ] **Step 6: Run tests and typecheck**
+- [X] **Step 6: Run tests and typecheck**
 
 Run:
 ```bash
@@ -226,7 +226,7 @@ cd window-manager && npm run test && npm run typecheck
 
 Expected: all tests pass. Typecheck passes (Svelte + node). If typecheck fails complaining about missing `status` anywhere else, add the field there too — the only places currently constructing `WindowRecord` literals are the three tests listed above.
 
-- [ ] **Step 7: Commit**
+- [X] **Step 7: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/types.ts \
@@ -249,7 +249,7 @@ Write tests first, then update service.
 - Modify: `window-manager/src/main/windowService.ts`
 - Modify: `window-manager/tests/main/windowService.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Add to `window-manager/tests/main/windowService.test.ts` inside the top-level `describe('windowService', …)` block (place at the end, before the closing brace):
 
@@ -278,7 +278,7 @@ Add to `window-manager/tests/main/windowService.test.ts` inside the top-level `d
   })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [X] **Step 2: Run tests to verify they fail**
 
 Run:
 ```bash
@@ -287,7 +287,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: the three new tests FAIL (the current bridge code sets `status: 'unknown'` unconditionally, so `createWindow returns status "running"` fails; the `live` test also fails).
 
-- [ ] **Step 3: Implement `statusMap` and update `listWindows` / `createWindow`**
+- [X] **Step 3: Implement `statusMap` and update `listWindows` / `createWindow`**
 
 Replace the `listWindows` and `createWindow` function bodies in `window-manager/src/main/windowService.ts` and add the module-level `statusMap`. The whole section at the top of the file becomes:
 
@@ -350,7 +350,7 @@ export function listWindows(): WindowRecord[] {
 
 Keep the existing `deleteWindow` function body unchanged in this task — we'll update it in Task 5.
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [X] **Step 4: Run tests to verify they pass**
 
 Run:
 ```bash
@@ -359,7 +359,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: all `windowService` tests pass, including the three new ones.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/main/windowService.ts window-manager/tests/main/windowService.test.ts
@@ -376,7 +376,7 @@ Add the startup reconciliation function: inspect each persisted container, soft-
 - Modify: `window-manager/src/main/windowService.ts`
 - Modify: `window-manager/tests/main/windowService.test.ts`
 
-- [ ] **Step 1: Extend the dockerode mock with `inspect`**
+- [X] **Step 1: Extend the dockerode mock with `inspect`**
 
 At the top of `window-manager/tests/main/windowService.test.ts`, update the mock container and add `mockInspect`:
 
@@ -406,7 +406,7 @@ And in `beforeEach`, reset it:
   })
 ```
 
-- [ ] **Step 2: Write failing tests**
+- [X] **Step 2: Write failing tests**
 
 Add a new `describe` block at the end of the main `describe('windowService', …)`:
 
@@ -453,7 +453,7 @@ And extend the service import line at the top of the file:
 import { createWindow, listWindows, deleteWindow, reconcileWindows } from '../../src/main/windowService'
 ```
 
-- [ ] **Step 3: Run tests to verify they fail**
+- [X] **Step 3: Run tests to verify they fail**
 
 Run:
 ```bash
@@ -462,7 +462,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: compile error / test failure on `reconcileWindows` not exported.
 
-- [ ] **Step 4: Implement `reconcileWindows`**
+- [X] **Step 4: Implement `reconcileWindows`**
 
 Add to `window-manager/src/main/windowService.ts`, after `listWindows`:
 
@@ -495,7 +495,7 @@ export async function reconcileWindows(): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Run tests to verify they pass**
+- [X] **Step 5: Run tests to verify they pass**
 
 Run:
 ```bash
@@ -504,7 +504,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: all tests pass, including the four new `reconcileWindows` tests.
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add window-manager/src/main/windowService.ts window-manager/tests/main/windowService.test.ts
@@ -521,7 +521,7 @@ Change `deleteWindow` so it returns silently when the row is already gone instea
 - Modify: `window-manager/src/main/windowService.ts`
 - Modify: `window-manager/tests/main/windowService.test.ts`
 
-- [ ] **Step 1: Update existing test + add new tests**
+- [X] **Step 1: Update existing test + add new tests**
 
 In `window-manager/tests/main/windowService.test.ts`, **replace** the existing test `'throws when window id does not exist'` with:
 
@@ -559,7 +559,7 @@ In `window-manager/tests/main/windowService.test.ts`, **replace** the existing t
     })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [X] **Step 2: Run tests to verify they fail**
 
 Run:
 ```bash
@@ -568,7 +568,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: the new tests fail (current `deleteWindow` throws `'Window N not found'`).
 
-- [ ] **Step 3: Update `deleteWindow`**
+- [X] **Step 3: Update `deleteWindow`**
 
 Replace the `deleteWindow` function body in `window-manager/src/main/windowService.ts` with:
 
@@ -594,7 +594,7 @@ export async function deleteWindow(id: number): Promise<void> {
 
 (We will add the `closeTerminalSessionFor(row.container_id)` call in Task 7 once the export exists.)
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [X] **Step 4: Run tests to verify they pass**
 
 Run:
 ```bash
@@ -603,7 +603,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/main/windowService.ts window-manager/tests/main/windowService.test.ts
@@ -620,7 +620,7 @@ Create a new test file (none exists for `terminalService`) and update the servic
 - Create: `window-manager/tests/main/terminalService.test.ts`
 - Modify: `window-manager/src/main/terminalService.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Create `window-manager/tests/main/terminalService.test.ts` with:
 
@@ -801,7 +801,7 @@ describe('terminalService', () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [X] **Step 2: Run tests to verify they fail**
 
 Run:
 ```bash
@@ -810,7 +810,7 @@ cd window-manager && npm run test:main -- terminalService
 
 Expected: file doesn't compile — `closeTerminalSessionFor` isn't exported. Tests fail with import errors.
 
-- [ ] **Step 3: Update `terminalService.ts`**
+- [X] **Step 3: Update `terminalService.ts`**
 
 Replace the full contents of `window-manager/src/main/terminalService.ts` with:
 
@@ -887,7 +887,7 @@ export function closeTerminalSessionFor(containerId: string): void {
 }
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [X] **Step 4: Run tests to verify they pass**
 
 Run:
 ```bash
@@ -896,7 +896,7 @@ cd window-manager && npm run test:main -- terminalService
 
 Expected: all `terminalService` tests pass.
 
-- [ ] **Step 5: Run the full main test suite**
+- [X] **Step 5: Run the full main test suite**
 
 Run:
 ```bash
@@ -905,7 +905,7 @@ cd window-manager && npm run test:main
 
 Expected: all main-process tests pass (windowService, terminalService, ipcHandlers, db, placeholder).
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add window-manager/src/main/terminalService.ts window-manager/tests/main/terminalService.test.ts
@@ -922,7 +922,7 @@ Now that the export exists, make `deleteWindow` call it.
 - Modify: `window-manager/src/main/windowService.ts`
 - Modify: `window-manager/tests/main/windowService.test.ts`
 
-- [ ] **Step 1: Mock the terminalService inside windowService tests**
+- [X] **Step 1: Mock the terminalService inside windowService tests**
 
 At the top of `window-manager/tests/main/windowService.test.ts`, add a `vi.mock` for `terminalService` directly after the `vi.mock('dockerode', …)` block. Use `vi.hoisted` so the mock function reference is created before `vi.mock` runs (vitest 4 hoists `vi.mock` above top-level `const`s, so a plain `const mockX = vi.fn()` referenced inside the factory hits the TDZ):
 
@@ -942,7 +942,7 @@ And add a reset in `beforeEach`:
     mockCloseTerminalSessionFor.mockClear()
 ```
 
-- [ ] **Step 2: Add a failing test**
+- [X] **Step 2: Add a failing test**
 
 Inside `describe('deleteWindow', …)`, add:
 
@@ -955,7 +955,7 @@ Inside `describe('deleteWindow', …)`, add:
     })
 ```
 
-- [ ] **Step 3: Run to verify it fails**
+- [X] **Step 3: Run to verify it fails**
 
 Run:
 ```bash
@@ -964,7 +964,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: the new test fails.
 
-- [ ] **Step 4: Call `closeTerminalSessionFor` from `deleteWindow`**
+- [X] **Step 4: Call `closeTerminalSessionFor` from `deleteWindow`**
 
 In `window-manager/src/main/windowService.ts`, add the import at the top:
 
@@ -1000,7 +1000,7 @@ export async function deleteWindow(id: number): Promise<void> {
 }
 ```
 
-- [ ] **Step 5: Run to verify it passes**
+- [X] **Step 5: Run to verify it passes**
 
 Run:
 ```bash
@@ -1009,7 +1009,7 @@ cd window-manager && npm run test:main -- windowService
 
 Expected: all tests pass, including the new one.
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add window-manager/src/main/windowService.ts window-manager/tests/main/windowService.test.ts
@@ -1023,7 +1023,7 @@ git commit -m "feat(windowService): deleteWindow closes live terminal session"
 **Files:**
 - Modify: `window-manager/src/main/index.ts`
 
-- [ ] **Step 1: Update `main/index.ts`**
+- [X] **Step 1: Update `main/index.ts`**
 
 Replace the `app.whenReady().then(…)` block in `window-manager/src/main/index.ts` with:
 
@@ -1055,7 +1055,7 @@ And add the import at the top of the file:
 import { reconcileWindows } from './windowService'
 ```
 
-- [ ] **Step 2: Typecheck**
+- [X] **Step 2: Typecheck**
 
 Run:
 ```bash
@@ -1064,7 +1064,7 @@ cd window-manager && npm run typecheck:node
 
 Expected: passes.
 
-- [ ] **Step 3: Run full main suite**
+- [X] **Step 3: Run full main suite**
 
 Run:
 ```bash
@@ -1073,7 +1073,7 @@ cd window-manager && npm run test:main
 
 Expected: all pass.
 
-- [ ] **Step 4: Commit**
+- [X] **Step 4: Commit**
 
 ```bash
 git add window-manager/src/main/index.ts
@@ -1091,7 +1091,7 @@ git commit -m "feat(main): call reconcileWindows on startup"
 - Modify: `window-manager/src/renderer/src/main.ts`
 - Modify: `window-manager/src/renderer/src/app.css`
 
-- [ ] **Step 1: Create `theme.css`**
+- [X] **Step 1: Create `theme.css`**
 
 Create `window-manager/src/renderer/src/theme.css` with:
 
@@ -1130,7 +1130,7 @@ body {
 }
 ```
 
-- [ ] **Step 2: Import `theme.css` from `main.ts`**
+- [X] **Step 2: Import `theme.css` from `main.ts`**
 
 Replace `window-manager/src/renderer/src/main.ts` with:
 
@@ -1149,7 +1149,7 @@ const app = mount(App, {
 export default app
 ```
 
-- [ ] **Step 3: Trim `app.css` to only contain the reset**
+- [X] **Step 3: Trim `app.css` to only contain the reset**
 
 Replace `window-manager/src/renderer/src/app.css` with:
 
@@ -1165,7 +1165,7 @@ Replace `window-manager/src/renderer/src/app.css` with:
 
 We drop the old `body` background (dark navy), the `max-width: 1200px` centered `main`, the `.window-grid` rules, and the `.empty` rule. Those no longer apply — the new layout uses sidebar + main pane at full viewport.
 
-- [ ] **Step 4: Run typecheck**
+- [X] **Step 4: Run typecheck**
 
 Run:
 ```bash
@@ -1174,7 +1174,7 @@ cd window-manager && npm run typecheck
 
 Expected: passes.
 
-- [ ] **Step 5: Run renderer tests**
+- [X] **Step 5: Run renderer tests**
 
 Run:
 ```bash
@@ -1183,7 +1183,7 @@ cd window-manager && npm run test:renderer
 
 Expected: all existing renderer tests still pass.
 
-- [ ] **Step 6: Commit**
+- [X] **Step 6: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/theme.css \
@@ -1202,7 +1202,7 @@ Simple leaf component. Shown in main pane when no window is selected.
 - Create: `window-manager/src/renderer/src/components/EmptyState.svelte`
 - Create: `window-manager/tests/renderer/EmptyState.test.ts`
 
-- [ ] **Step 1: Write failing test**
+- [X] **Step 1: Write failing test**
 
 Create `window-manager/tests/renderer/EmptyState.test.ts`:
 
@@ -1226,7 +1226,7 @@ describe('EmptyState', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [X] **Step 2: Run to verify fail**
 
 Run:
 ```bash
@@ -1235,7 +1235,7 @@ cd window-manager && npm run test:renderer -- EmptyState
 
 Expected: fails — component doesn't exist.
 
-- [ ] **Step 3: Implement `EmptyState.svelte`**
+- [X] **Step 3: Implement `EmptyState.svelte`**
 
 Create `window-manager/src/renderer/src/components/EmptyState.svelte`:
 
@@ -1284,7 +1284,7 @@ Create `window-manager/src/renderer/src/components/EmptyState.svelte`:
 </style>
 ```
 
-- [ ] **Step 4: Run to verify it passes**
+- [X] **Step 4: Run to verify it passes**
 
 Run:
 ```bash
@@ -1293,7 +1293,7 @@ cd window-manager && npm run test:renderer -- EmptyState
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/EmptyState.svelte \
@@ -1309,7 +1309,7 @@ git commit -m "feat(renderer): add EmptyState component"
 - Create: `window-manager/src/renderer/src/components/SidebarItem.svelte`
 - Create: `window-manager/tests/renderer/SidebarItem.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Create `window-manager/tests/renderer/SidebarItem.test.ts`:
 
@@ -1398,7 +1398,7 @@ describe('SidebarItem', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [X] **Step 2: Run to verify fail**
 
 Run:
 ```bash
@@ -1407,7 +1407,7 @@ cd window-manager && npm run test:renderer -- SidebarItem
 
 Expected: fails — component doesn't exist.
 
-- [ ] **Step 3: Implement `SidebarItem.svelte`**
+- [X] **Step 3: Implement `SidebarItem.svelte`**
 
 Create `window-manager/src/renderer/src/components/SidebarItem.svelte`:
 
@@ -1618,7 +1618,7 @@ Create `window-manager/src/renderer/src/components/SidebarItem.svelte`:
 </style>
 ```
 
-- [ ] **Step 4: Run to verify tests pass**
+- [X] **Step 4: Run to verify tests pass**
 
 Run:
 ```bash
@@ -1627,7 +1627,7 @@ cd window-manager && npm run test:renderer -- SidebarItem
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/SidebarItem.svelte \
@@ -1645,11 +1645,11 @@ Before wiring into `Sidebar`, adjust `CreateWindow` so it fits in the sidebar he
 - Modify: `window-manager/src/renderer/src/components/CreateWindow.svelte`
 - Modify: `window-manager/tests/renderer/CreateWindow.test.ts`
 
-- [ ] **Step 1: Read existing test**
+- [X] **Step 1: Read existing test**
 
 Open `window-manager/tests/renderer/CreateWindow.test.ts` and confirm what it asserts. Do not change existing test assertions except where they assume the input is always visible. (Existing tests render the component and interact with the input directly — we need the input to be present for them to pass, so start expanded by default in a test override, OR change the default to start expanded and only collapse on `+` toggle. We'll take the simpler path: keep `expanded` state but accept an optional `startExpanded` prop that tests pass in, defaulting to `false` in production.)
 
-- [ ] **Step 2: Update the component**
+- [X] **Step 2: Update the component**
 
 Replace `window-manager/src/renderer/src/components/CreateWindow.svelte` with:
 
@@ -1808,7 +1808,7 @@ Replace `window-manager/src/renderer/src/components/CreateWindow.svelte` with:
 </style>
 ```
 
-- [ ] **Step 3: Update `CreateWindow.test.ts`**
+- [X] **Step 3: Update `CreateWindow.test.ts`**
 
 Open `window-manager/tests/renderer/CreateWindow.test.ts`. Where the test calls `render(CreateWindow, …)` and expects the input to be present, pass `startExpanded: true` in the props. Add a new test block at the end of the file (before the final closing brace) for the collapse/expand behavior:
 
@@ -1840,7 +1840,7 @@ Also update all prior tests in the file that render `CreateWindow` and expect th
 
 (Do this by inspection — every `render(CreateWindow, …)` in the file that then immediately queries for the input needs the flag.)
 
-- [ ] **Step 4: Run the renderer test suite**
+- [X] **Step 4: Run the renderer test suite**
 
 Run:
 ```bash
@@ -1849,7 +1849,7 @@ cd window-manager && npm run test:renderer -- CreateWindow
 
 Expected: all `CreateWindow` tests pass, including the three new ones.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/CreateWindow.svelte \
@@ -1867,7 +1867,7 @@ Composes header + list of `SidebarItem` + empty hint.
 - Create: `window-manager/src/renderer/src/components/Sidebar.svelte`
 - Create: `window-manager/tests/renderer/Sidebar.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Create `window-manager/tests/renderer/Sidebar.test.ts`:
 
@@ -1936,7 +1936,7 @@ describe('Sidebar', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [X] **Step 2: Run to verify fail**
 
 Run:
 ```bash
@@ -1945,7 +1945,7 @@ cd window-manager && npm run test:renderer -- Sidebar.test
 
 Expected: fails — Sidebar doesn't exist.
 
-- [ ] **Step 3: Implement `Sidebar.svelte`**
+- [X] **Step 3: Implement `Sidebar.svelte`**
 
 Create `window-manager/src/renderer/src/components/Sidebar.svelte`:
 
@@ -2033,7 +2033,7 @@ Create `window-manager/src/renderer/src/components/Sidebar.svelte`:
 </style>
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [X] **Step 4: Run to verify pass**
 
 Run:
 ```bash
@@ -2042,7 +2042,7 @@ cd window-manager && npm run test:renderer -- Sidebar.test
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/Sidebar.svelte \
@@ -2060,7 +2060,7 @@ Inline terminal host that fills the main pane, with web-links addon.
 - Create: `window-manager/src/renderer/src/components/TerminalHost.svelte`
 - Create: `window-manager/tests/renderer/TerminalHost.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Create `window-manager/tests/renderer/TerminalHost.test.ts`:
 
@@ -2220,7 +2220,7 @@ describe('TerminalHost', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [X] **Step 2: Run to verify fail**
 
 Run:
 ```bash
@@ -2229,7 +2229,7 @@ cd window-manager && npm run test:renderer -- TerminalHost
 
 Expected: fails — component doesn't exist.
 
-- [ ] **Step 3: Implement `TerminalHost.svelte`**
+- [X] **Step 3: Implement `TerminalHost.svelte`**
 
 Create `window-manager/src/renderer/src/components/TerminalHost.svelte`:
 
@@ -2345,7 +2345,7 @@ Create `window-manager/src/renderer/src/components/TerminalHost.svelte`:
 </style>
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [X] **Step 4: Run to verify pass**
 
 Run:
 ```bash
@@ -2354,7 +2354,7 @@ cd window-manager && npm run test:renderer -- TerminalHost
 
 Expected: all tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/TerminalHost.svelte \
@@ -2372,7 +2372,7 @@ Keyed wrapper around `EmptyState` / `TerminalHost`.
 - Create: `window-manager/src/renderer/src/components/MainPane.svelte`
 - Create: `window-manager/tests/renderer/MainPane.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [X] **Step 1: Write failing tests**
 
 Create `window-manager/tests/renderer/MainPane.test.ts`:
 
@@ -2450,7 +2450,7 @@ describe('MainPane', () => {
 })
 ```
 
-- [ ] **Step 2: Run to verify fail**
+- [X] **Step 2: Run to verify fail**
 
 Run:
 ```bash
@@ -2459,7 +2459,7 @@ cd window-manager && npm run test:renderer -- MainPane
 
 Expected: fails — component doesn't exist.
 
-- [ ] **Step 3: Implement `MainPane.svelte`**
+- [X] **Step 3: Implement `MainPane.svelte`**
 
 Create `window-manager/src/renderer/src/components/MainPane.svelte`:
 
@@ -2495,7 +2495,7 @@ Create `window-manager/src/renderer/src/components/MainPane.svelte`:
 </style>
 ```
 
-- [ ] **Step 4: Run to verify pass**
+- [X] **Step 4: Run to verify pass**
 
 Run:
 ```bash
@@ -2504,7 +2504,7 @@ cd window-manager && npm run test:renderer -- MainPane
 
 Expected: tests pass.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/components/MainPane.svelte \
@@ -2521,7 +2521,7 @@ Switch the root to use `Sidebar` + `MainPane`. The old `Terminal.svelte` and `Wi
 **Files:**
 - Modify: `window-manager/src/renderer/src/App.svelte`
 
-- [ ] **Step 1: Replace `App.svelte`**
+- [X] **Step 1: Replace `App.svelte`**
 
 Replace the full contents of `window-manager/src/renderer/src/App.svelte` with:
 
@@ -2585,7 +2585,7 @@ Replace the full contents of `window-manager/src/renderer/src/App.svelte` with:
 </style>
 ```
 
-- [ ] **Step 2: Typecheck**
+- [X] **Step 2: Typecheck**
 
 Run:
 ```bash
@@ -2594,7 +2594,7 @@ cd window-manager && npm run typecheck
 
 Expected: passes.
 
-- [ ] **Step 3: Run all renderer tests**
+- [X] **Step 3: Run all renderer tests**
 
 Run:
 ```bash
@@ -2603,7 +2603,7 @@ cd window-manager && npm run test:renderer
 
 Expected: all tests pass. The old `WindowCard.test.ts` and `Terminal.test.ts` still exist and still pass (they test components that exist but are no longer imported anywhere).
 
-- [ ] **Step 4: Commit**
+- [X] **Step 4: Commit**
 
 ```bash
 git add window-manager/src/renderer/src/App.svelte
@@ -2626,7 +2626,7 @@ git commit -m "feat(renderer): App.svelte now uses Sidebar + MainPane"
 - Delete: `window-manager/tests/renderer/Terminal.test.ts`
 - Delete: `window-manager/tests/renderer/WindowCard.test.ts`
 
-- [ ] **Step 1: Verify no imports reference the files to be deleted**
+- [X] **Step 1: Verify no imports reference the files to be deleted**
 
 Use the Grep tool to search for each of these strings inside `window-manager/src` and `window-manager/tests`:
 
@@ -2639,7 +2639,7 @@ Use the Grep tool to search for each of these strings inside `window-manager/src
 
 Expected: no matches in `src/` for `Terminal.svelte`, `WindowCard.svelte`, `Versions.svelte`, `wavy-lines`. The only matches for `Terminal.svelte` / `WindowCard.svelte` should be inside the test files we are about to delete. If `electron.svg` or `assets/main.css` still have matches in `src/` or `index.html`, skip deleting those two files for this task and note it — they'll be handled separately.
 
-- [ ] **Step 2: Delete files**
+- [X] **Step 2: Delete files**
 
 Run:
 ```bash
@@ -2657,7 +2657,7 @@ If Step 1 confirmed `electron.svg` and `assets/main.css` are unused, also delete
 cd window-manager && rm src/renderer/src/assets/electron.svg src/renderer/src/assets/main.css
 ```
 
-- [ ] **Step 3: Run full test suite**
+- [X] **Step 3: Run full test suite**
 
 Run:
 ```bash
@@ -2666,7 +2666,7 @@ cd window-manager && npm run test
 
 Expected: all main + renderer tests pass. No compile errors from missing files.
 
-- [ ] **Step 4: Typecheck**
+- [X] **Step 4: Typecheck**
 
 Run:
 ```bash
@@ -2675,7 +2675,7 @@ cd window-manager && npm run typecheck
 
 Expected: passes.
 
-- [ ] **Step 5: Commit**
+- [X] **Step 5: Commit**
 
 ```bash
 git add -u
@@ -2690,7 +2690,7 @@ git commit -m "chore: remove replaced components and unused assets"
 
 **Files:** none (verification only)
 
-- [ ] **Step 1: Run the full test suite**
+- [X] **Step 1: Run the full test suite**
 
 Run:
 ```bash
@@ -2699,7 +2699,7 @@ cd window-manager && npm run test
 
 Expected: all tests pass — `db`, `windowService`, `terminalService`, `ipcHandlers`, `placeholder` (main); `CreateWindow`, `EmptyState`, `MainPane`, `Sidebar`, `SidebarItem`, `TerminalHost`, `placeholder` (renderer).
 
-- [ ] **Step 2: Typecheck**
+- [X] **Step 2: Typecheck**
 
 Run:
 ```bash
@@ -2708,7 +2708,7 @@ cd window-manager && npm run typecheck
 
 Expected: passes (both `typecheck:node` and `svelte-check`).
 
-- [ ] **Step 3: Lint**
+- [X] **Step 3: Lint**
 
 Run:
 ```bash
@@ -2717,7 +2717,7 @@ cd window-manager && npm run lint
 
 Expected: no errors. Warnings are acceptable if pre-existing; note any new ones.
 
-- [ ] **Step 4: Build**
+- [X] **Step 4: Build**
 
 Run:
 ```bash
@@ -2726,7 +2726,7 @@ cd window-manager && npm run build
 
 Expected: typecheck passes, Vite builds main + preload + renderer without errors.
 
-- [ ] **Step 5: Commit any auto-fixed formatting (if needed)**
+- [X] **Step 5: Commit any auto-fixed formatting (if needed)**
 
 If `npm run lint` or `npm run build` produced any auto-fixes (e.g. via Prettier integration), stage and commit them:
 ```bash
