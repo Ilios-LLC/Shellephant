@@ -9,6 +9,7 @@ const mockRecord: WindowRecord = {
   name: 'My Window',
   container_id: 'abc123',
   created_at: '2026-01-01T00:00:00Z',
+  status: 'running'
 }
 
 describe('CreateWindow', () => {
@@ -24,16 +25,16 @@ describe('CreateWindow', () => {
     vi.unstubAllGlobals()
   })
 
-  it('renders a text input with placeholder and a Create Window button', () => {
-    render(CreateWindow)
-    expect(screen.getByPlaceholderText('Window name')).toBeDefined()
-    expect(screen.getByRole('button', { name: 'Create Window' })).toBeDefined()
+  it('renders a text input with placeholder and a create window button', () => {
+    render(CreateWindow, { startExpanded: true })
+    expect(screen.getByPlaceholderText('window name')).toBeDefined()
+    expect(screen.getByRole('button', { name: /create window/i })).toBeDefined()
   })
 
   it('calls window.api.createWindow with the trimmed name on button click', async () => {
-    render(CreateWindow)
-    const input = screen.getByPlaceholderText('Window name')
-    const button = screen.getByRole('button', { name: 'Create Window' })
+    render(CreateWindow, { startExpanded: true })
+    const input = screen.getByPlaceholderText('window name')
+    const button = screen.getByRole('button', { name: /create window/i })
 
     await fireEvent.input(input, { target: { value: '  My Window  ' } })
     await fireEvent.click(button)
@@ -44,32 +45,30 @@ describe('CreateWindow', () => {
   })
 
   it('clears the input after successful creation', async () => {
-    render(CreateWindow)
-    const input = screen.getByPlaceholderText('Window name') as HTMLInputElement
-    const button = screen.getByRole('button', { name: 'Create Window' })
+    render(CreateWindow, { startExpanded: true })
+    const input = screen.getByPlaceholderText('window name') as HTMLInputElement
+    const button = screen.getByRole('button', { name: /create window/i })
 
     await fireEvent.input(input, { target: { value: 'My Window' } })
     await fireEvent.click(button)
 
+    // After successful create, component collapses — input is gone.
     await waitFor(() => {
-      expect(input.value).toBe('')
+      expect(screen.queryByPlaceholderText('window name')).toBeNull()
     })
   })
 
   it('disables the button when input is empty', async () => {
-    render(CreateWindow)
-    const input = screen.getByPlaceholderText('Window name') as HTMLInputElement
-    const button = screen.getByRole('button', { name: 'Create Window' }) as HTMLButtonElement
+    render(CreateWindow, { startExpanded: true })
+    const input = screen.getByPlaceholderText('window name') as HTMLInputElement
+    const button = screen.getByRole('button', { name: /create window/i }) as HTMLButtonElement
 
-    // Initially empty → disabled
     expect(button.disabled).toBe(true)
 
-    // Type something → enabled
     await fireEvent.input(input, { target: { value: 'hello' } })
     await tick()
     expect(button.disabled).toBe(false)
 
-    // Clear it → disabled again
     await fireEvent.input(input, { target: { value: '' } })
     await tick()
     expect(button.disabled).toBe(true)
@@ -77,9 +76,9 @@ describe('CreateWindow', () => {
 
   it('calls onCreated callback with the new window record', async () => {
     const onCreated = vi.fn()
-    render(CreateWindow, { props: { onCreated } })
-    const input = screen.getByPlaceholderText('Window name')
-    const button = screen.getByRole('button', { name: 'Create Window' })
+    render(CreateWindow, { startExpanded: true, onCreated })
+    const input = screen.getByPlaceholderText('window name')
+    const button = screen.getByRole('button', { name: /create window/i })
 
     await fireEvent.input(input, { target: { value: 'My Window' } })
     await fireEvent.click(button)
@@ -91,9 +90,9 @@ describe('CreateWindow', () => {
 
   it('shows an error message if the API call fails', async () => {
     mockCreateWindow.mockRejectedValue(new Error('Docker error'))
-    render(CreateWindow)
-    const input = screen.getByPlaceholderText('Window name')
-    const button = screen.getByRole('button', { name: 'Create Window' })
+    render(CreateWindow, { startExpanded: true })
+    const input = screen.getByPlaceholderText('window name')
+    const button = screen.getByRole('button', { name: /create window/i })
 
     await fireEvent.input(input, { target: { value: 'Bad Window' } })
     await fireEvent.click(button)
@@ -101,5 +100,23 @@ describe('CreateWindow', () => {
     await waitFor(() => {
       expect(screen.getByText('Docker error')).toBeDefined()
     })
+  })
+
+  it('starts collapsed by default and shows a + button', () => {
+    render(CreateWindow, {})
+    expect(screen.getByRole('button', { name: /new window/i })).toBeDefined()
+  })
+
+  it('clicking + expands to show the input', async () => {
+    render(CreateWindow, {})
+    await fireEvent.click(screen.getByRole('button', { name: /new window/i }))
+    expect(screen.getByPlaceholderText(/window name/i)).toBeDefined()
+  })
+
+  it('pressing Escape collapses back to the + button', async () => {
+    render(CreateWindow, { startExpanded: true })
+    const input = screen.getByPlaceholderText(/window name/i)
+    await fireEvent.keyDown(input, { key: 'Escape' })
+    expect(screen.getByRole('button', { name: /new window/i })).toBeDefined()
   })
 })

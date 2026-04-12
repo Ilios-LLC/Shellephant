@@ -3,37 +3,33 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 vi.mock('electron', () => ({
   ipcMain: {
     handle: vi.fn(),
-    on: vi.fn(),
+    on: vi.fn()
   },
   BrowserWindow: {
-    fromWebContents: vi.fn(),
-  },
+    fromWebContents: vi.fn()
+  }
 }))
 
 vi.mock('../../src/main/windowService', () => ({
   createWindow: vi.fn(),
   listWindows: vi.fn(),
-  deleteWindow: vi.fn(),
+  deleteWindow: vi.fn()
 }))
 
 vi.mock('../../src/main/terminalService', () => ({
   openTerminal: vi.fn(),
   writeInput: vi.fn(),
   resizeTerminal: vi.fn(),
-  closeTerminal: vi.fn(),
+  closeTerminal: vi.fn()
 }))
 
 import { ipcMain, BrowserWindow } from 'electron'
-import {
-  createWindow,
-  listWindows,
-  deleteWindow,
-} from '../../src/main/windowService'
+import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
 import {
   openTerminal,
   writeInput,
   resizeTerminal,
-  closeTerminal,
+  closeTerminal
 } from '../../src/main/terminalService'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
 
@@ -41,14 +37,14 @@ const mockWin = { webContents: {} } as any
 
 function getHandler(channel: string) {
   const calls = vi.mocked(ipcMain.handle).mock.calls
-  const call = calls.find(c => c[0] === channel)
+  const call = calls.find((c) => c[0] === channel)
   if (!call) throw new Error(`No handler registered for ${channel}`)
   return call[1] as (...args: any[]) => any
 }
 
 function getListener(channel: string) {
   const calls = vi.mocked(ipcMain.on).mock.calls
-  const call = calls.find(c => c[0] === channel)
+  const call = calls.find((c) => c[0] === channel)
   if (!call) throw new Error(`No listener registered for ${channel}`)
   return call[1] as (...args: any[]) => any
 }
@@ -60,7 +56,13 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers window:create handler that calls createWindow', async () => {
-    const record = { id: 1, name: 'test', container_id: 'abc', created_at: '2026-01-01' }
+    const record = {
+      id: 1,
+      name: 'test',
+      container_id: 'abc',
+      created_at: '2026-01-01',
+      status: 'running' as const
+    }
     vi.mocked(createWindow).mockResolvedValue(record)
     const result = await getHandler('window:create')({}, 'test')
     expect(createWindow).toHaveBeenCalledWith('test')
@@ -68,7 +70,9 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers window:list handler that calls listWindows', async () => {
-    const records = [{ id: 1, name: 'w', container_id: 'x', created_at: '2026-01-01' }]
+    const records = [
+      { id: 1, name: 'w', container_id: 'x', created_at: '2026-01-01', status: 'running' as const }
+    ]
     vi.mocked(listWindows).mockReturnValue(records)
     const result = await getHandler('window:list')({})
     expect(listWindows).toHaveBeenCalled()

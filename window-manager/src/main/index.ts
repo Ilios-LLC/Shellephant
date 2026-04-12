@@ -2,6 +2,7 @@ import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { initDb } from './db'
 import { registerIpcHandlers } from './ipcHandlers'
+import { reconcileWindows } from './windowService'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -10,8 +11,8 @@ function createWindow(): BrowserWindow {
     webPreferences: {
       preload: path.join(__dirname, '../preload/index.js'),
       contextIsolation: true,
-      nodeIntegration: false,
-    },
+      nodeIntegration: false
+    }
   })
 
   if (process.env['ELECTRON_RENDERER_URL']) {
@@ -23,9 +24,15 @@ function createWindow(): BrowserWindow {
   return win
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
+
+  try {
+    await reconcileWindows()
+  } catch (err) {
+    console.error('reconcileWindows failed; continuing with unknown statuses', err)
+  }
 
   registerIpcHandlers()
   createWindow()

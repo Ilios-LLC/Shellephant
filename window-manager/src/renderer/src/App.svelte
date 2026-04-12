@@ -1,53 +1,57 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { WindowRecord } from './types'
-  import CreateWindow from './components/CreateWindow.svelte'
-  import WindowCard from './components/WindowCard.svelte'
-  import Terminal from './components/Terminal.svelte'
+  import Sidebar from './components/Sidebar.svelte'
+  import MainPane from './components/MainPane.svelte'
 
   let windows = $state<WindowRecord[]>([])
-  let activeTerminal = $state<WindowRecord | null>(null)
+  let selectedId = $state<number | null>(null)
 
   onMount(async () => {
     windows = await window.api.listWindows()
+    if (windows.length > 0) {
+      selectedId = windows[0].id
+    }
   })
 
-  function handleCreated(record: WindowRecord) {
+  function handleCreated(record: WindowRecord): void {
     windows = [...windows, record]
+    selectedId = record.id
   }
 
-  function handleOpen(win: WindowRecord) {
-    activeTerminal = win
+  function handleSelect(id: number): void {
+    selectedId = id
   }
 
-  async function handleDelete(id: number) {
+  async function handleDelete(id: number): Promise<void> {
     await window.api.deleteWindow(id)
     windows = windows.filter((w) => w.id !== id)
-    if (activeTerminal?.id === id) activeTerminal = null
+    if (selectedId === id) {
+      selectedId = windows[0]?.id ?? null
+    }
   }
 
-  function handleClose() {
-    activeTerminal = null
-  }
+  let selected = $derived(windows.find((w) => w.id === selectedId) ?? null)
 </script>
 
-<main>
-  <header>
-    <h1>Windows</h1>
-    <CreateWindow onCreated={handleCreated} />
-  </header>
+<div class="app">
+  <Sidebar
+    {windows}
+    {selectedId}
+    onSelect={handleSelect}
+    onCreated={handleCreated}
+    onDelete={handleDelete}
+  />
+  <MainPane {selected} />
+</div>
 
-  {#if windows.length === 0}
-    <p class="empty">No windows yet. Create one above.</p>
-  {:else}
-    <div class="window-grid">
-      {#each windows as win (win.id)}
-        <WindowCard {win} onOpen={handleOpen} onDelete={handleDelete} />
-      {/each}
-    </div>
-  {/if}
-
-  {#if activeTerminal}
-    <Terminal win={activeTerminal} onClose={handleClose} />
-  {/if}
-</main>
+<style>
+  .app {
+    display: grid;
+    grid-template-columns: 220px 1fr;
+    height: 100vh;
+    width: 100vw;
+    background: var(--bg-0);
+    color: var(--fg-0);
+  }
+</style>

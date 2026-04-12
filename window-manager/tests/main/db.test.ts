@@ -21,7 +21,7 @@ describe('db', () => {
   it('windows table has all expected columns', () => {
     const db = getDb()
     const cols = db.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
-    const names = cols.map(c => c.name)
+    const names = cols.map((c) => c.name)
     expect(names).toContain('id')
     expect(names).toContain('name')
     expect(names).toContain('container_id')
