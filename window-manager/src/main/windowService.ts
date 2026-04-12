@@ -86,9 +86,10 @@ export async function deleteWindow(id: number): Promise<void> {
     .prepare('SELECT container_id FROM windows WHERE id = ? AND deleted_at IS NULL')
     .get(id) as { container_id: string } | undefined
 
-  if (!row) throw new Error(`Window ${id} not found`)
+  if (!row) return // idempotent: no row to delete
 
   db.prepare("UPDATE windows SET deleted_at = datetime('now') WHERE id = ?").run(id)
+  statusMap.delete(id)
 
   try {
     await getDocker().getContainer(row.container_id).stop({ t: 1 })

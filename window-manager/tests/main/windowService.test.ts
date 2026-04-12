@@ -106,8 +106,34 @@ describe('windowService', () => {
       expect(mockStop).toHaveBeenCalled()
     })
 
-    it('throws when window id does not exist', async () => {
-      await expect(deleteWindow(99999)).rejects.toThrow('Window 99999 not found')
+    it('returns silently when the window id does not exist', async () => {
+      await expect(deleteWindow(99999)).resolves.toBeUndefined()
+    })
+
+    it('does not throw when deleted twice in a row', async () => {
+      await createWindow('twice')
+      const [win] = listWindows()
+      await deleteWindow(win.id)
+      await expect(deleteWindow(win.id)).resolves.toBeUndefined()
+    })
+
+    it('does not throw when container.stop rejects', async () => {
+      await createWindow('already-stopped')
+      const [win] = listWindows()
+      mockStop.mockRejectedValueOnce(new Error('already stopped'))
+      await expect(deleteWindow(win.id)).resolves.toBeUndefined()
+    })
+
+    it('clears the statusMap entry for the deleted window', async () => {
+      await createWindow('vanish')
+      const [win] = listWindows()
+      expect(listWindows()[0].status).toBe('running')
+      await deleteWindow(win.id)
+      getDb()
+        .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
+        .run('probe', 'probe-container')
+      const probe = listWindows().find(r => r.name === 'probe')!
+      expect(probe.status).toBe('unknown')
     })
 
     it('calls closeTerminalSessionFor with the container_id', async () => {
