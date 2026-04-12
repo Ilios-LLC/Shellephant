@@ -15,6 +15,11 @@ export interface WindowRecord {
 let _docker: Dockerode | null = null
 const statusMap = new Map<number, WindowStatus>()
 
+// Test-only: reset in-memory statusMap between tests that re-init the DB.
+export function __resetStatusMapForTests(): void {
+  statusMap.clear()
+}
+
 function getDocker(): Dockerode {
   if (!_docker) _docker = new Dockerode()
   return _docker
@@ -50,20 +55,20 @@ export async function reconcileWindows(): Promise<void> {
   const db = getDb()
   const rows = db
     .prepare('SELECT id, container_id FROM windows WHERE deleted_at IS NULL')
-    .all() as Array<{ id: number; container_id: string }>
+    .all() as { id: number; container_id: string }[]
 
   for (const row of rows) {
     try {
       const inspect = await getDocker().getContainer(row.container_id).inspect()
-      if (inspect.State.Running === true) {
+      if (inspect?.State?.Status === 'running') {
         statusMap.set(row.id, 'running')
       } else {
         db.prepare("UPDATE windows SET deleted_at = datetime('now') WHERE id = ?").run(row.id)
         statusMap.delete(row.id)
       }
     } catch (err) {
-      const errMsg = String(err)
-      if (errMsg.includes('404') || errMsg.includes('not found')) {
+      const code = (err as { statusCode?: number }).statusCode
+      if (code === 404) {
         db.prepare("UPDATE windows SET deleted_at = datetime('now') WHERE id = ?").run(row.id)
         statusMap.delete(row.id)
       } else {

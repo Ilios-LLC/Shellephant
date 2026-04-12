@@ -3,10 +3,12 @@ import { initDb, closeDb, getDb } from '../../src/main/db'
 
 const mockStart = vi.fn().mockResolvedValue(undefined)
 const mockStop = vi.fn().mockResolvedValue(undefined)
+const mockInspect = vi.fn().mockResolvedValue({ State: { Status: 'running' } })
 const mockContainer = {
   id: 'mock-container-abc123',
   start: mockStart,
   stop: mockStop,
+  inspect: mockInspect,
 }
 const mockCreateContainer = vi.fn().mockResolvedValue(mockContainer)
 const mockGetContainer = vi.fn().mockReturnValue(mockContainer)
@@ -28,14 +30,22 @@ vi.mock('../../src/main/terminalService', () => ({
   closeTerminalSessionFor: mockCloseTerminalSessionFor,
 }))
 
-import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
+import {
+  createWindow,
+  listWindows,
+  deleteWindow,
+  reconcileWindows,
+  __resetStatusMapForTests,
+} from '../../src/main/windowService'
 
 describe('windowService', () => {
   beforeEach(() => {
     initDb(':memory:')
+    __resetStatusMapForTests()
     vi.clearAllMocks()
     mockStart.mockResolvedValue(undefined)
     mockStop.mockResolvedValue(undefined)
+    mockInspect.mockResolvedValue({ State: { Status: 'running' } })
     mockCreateContainer.mockResolvedValue(mockContainer)
     mockGetContainer.mockReturnValue(mockContainer)
   })
@@ -141,6 +151,61 @@ describe('windowService', () => {
       const [win] = listWindows()
       await deleteWindow(win.id)
       expect(mockCloseTerminalSessionFor).toHaveBeenCalledWith('mock-container-abc123')
+    })
+  })
+
+  describe('status field', () => {
+    it('createWindow returns status "running"', async () => {
+      const result = await createWindow('with-status')
+      expect(result.status).toBe('running')
+    })
+
+    it('listWindows defaults status to "unknown" when not tracked', async () => {
+      getDb()
+        .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
+        .run('ghost', 'ghost-container')
+      const rows = listWindows()
+      const ghost = rows.find(r => r.name === 'ghost')!
+      expect(ghost.status).toBe('unknown')
+    })
+
+    it('listWindows returns status "running" for windows created through the service', async () => {
+      await createWindow('live')
+      const rows = listWindows()
+      expect(rows[0].status).toBe('running')
+    })
+  })
+
+  describe('reconcileWindows', () => {
+    it('marks running containers as running', async () => {
+      await createWindow('alive')
+      await reconcileWindows()
+      const rows = listWindows()
+      expect(rows[0].status).toBe('running')
+    })
+
+    it('soft-deletes rows whose container is missing (404)', async () => {
+      await createWindow('gone')
+      const notFound = Object.assign(new Error('no such container'), { statusCode: 404 })
+      mockInspect.mockRejectedValueOnce(notFound)
+      await reconcileWindows()
+      expect(listWindows()).toHaveLength(0)
+    })
+
+    it('soft-deletes rows whose container is exited', async () => {
+      await createWindow('stopped')
+      mockInspect.mockResolvedValueOnce({ State: { Status: 'exited' } })
+      await reconcileWindows()
+      expect(listWindows()).toHaveLength(0)
+    })
+
+    it('leaves rows alone and marks status unknown when docker is unreachable', async () => {
+      await createWindow('docker-down')
+      mockInspect.mockRejectedValueOnce(new Error('ECONNREFUSED'))
+      await reconcileWindows()
+      const rows = listWindows()
+      expect(rows).toHaveLength(1)
+      expect(rows[0].status).toBe('unknown')
     })
   })
 })
