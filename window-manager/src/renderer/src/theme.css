@@ -1,0 +1,32 @@
+:root {
+  --bg-0: #09090b;
+  --bg-1: #18181b;
+  --bg-2: #27272a;
+  --bg-3: #3f3f46;
+  --border: #3f3f46;
+  --fg-0: #fafafa;
+  --fg-1: #a1a1aa;
+  --fg-2: #71717a;
+  --accent: #8b5cf6;
+  --accent-hi: #a78bfa;
+  --danger: #ef4444;
+  --ok: #22c55e;
+  --radius: 8px;
+  --font-ui: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg-0);
+  color: var(--fg-0);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
