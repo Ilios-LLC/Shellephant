@@ -30,7 +30,7 @@ export async function createWindow(name: string): Promise<WindowRecord> {
     Image: 'cc',
     Tty: true,
     OpenStdin: true,
-    StdinOnce: false,
+    StdinOnce: false
   })
   await container.start()
 
@@ -47,7 +47,7 @@ export async function createWindow(name: string): Promise<WindowRecord> {
     name,
     container_id: container.id,
     created_at: new Date().toISOString(),
-    status: 'running' as WindowStatus,
+    status: 'running' as WindowStatus
   }
 }
 
@@ -79,10 +79,11 @@ export async function reconcileWindows(): Promise<void> {
 }
 
 export function listWindows(): WindowRecord[] {
-  return (getDb()
-    .prepare('SELECT id, name, container_id, created_at FROM windows WHERE deleted_at IS NULL')
-    .all() as Omit<WindowRecord, 'status'>[])
-    .map(r => ({ ...r, status: statusMap.get(r.id) ?? 'unknown' as WindowStatus }))
+  return (
+    getDb()
+      .prepare('SELECT id, name, container_id, created_at FROM windows WHERE deleted_at IS NULL')
+      .all() as Omit<WindowRecord, 'status'>[]
+  ).map((r) => ({ ...r, status: statusMap.get(r.id) ?? ('unknown' as WindowStatus) }))
 }
 
 export async function deleteWindow(id: number): Promise<void> {

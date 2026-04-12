@@ -9,7 +9,7 @@ const mockRecord: WindowRecord = {
   name: 'My Window',
   container_id: 'abc123',
   created_at: '2026-01-01T00:00:00Z',
-  status: 'running',
+  status: 'running'
 }
 
 describe('CreateWindow', () => {

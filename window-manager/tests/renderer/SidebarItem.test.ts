@@ -8,7 +8,7 @@ const runningWindow: WindowRecord = {
   name: 'alpha',
   container_id: 'abc123def456xyz',
   created_at: '2026-01-01T00:00:00Z',
-  status: 'running',
+  status: 'running'
 }
 
 describe('SidebarItem', () => {
@@ -32,14 +32,24 @@ describe('SidebarItem', () => {
   })
 
   it('renders a status dot with class reflecting status', () => {
-    const { container } = render(SidebarItem, { win: runningWindow, selected: false, onSelect, onDelete })
+    const { container } = render(SidebarItem, {
+      win: runningWindow,
+      selected: false,
+      onSelect,
+      onDelete
+    })
     const dot = container.querySelector('[data-testid="status-dot"]')
     expect(dot).not.toBeNull()
     expect(dot!.classList.contains('status-running')).toBe(true)
   })
 
   it('applies a selected class when selected is true', () => {
-    const { container } = render(SidebarItem, { win: runningWindow, selected: true, onSelect, onDelete })
+    const { container } = render(SidebarItem, {
+      win: runningWindow,
+      selected: true,
+      onSelect,
+      onDelete
+    })
     const row = container.querySelector('[data-testid="sidebar-item"]')
     expect(row!.classList.contains('selected')).toBe(true)
   })

@@ -9,7 +9,7 @@ function makeWin(id: number, name: string): WindowRecord {
     name,
     container_id: `container-${id}-xxxxxxxxxx`,
     created_at: '2026-01-01T00:00:00Z',
-    status: 'running',
+    status: 'running'
   }
 }
 
@@ -53,7 +53,7 @@ describe('Sidebar', () => {
       selectedId: 2,
       onSelect,
       onCreated,
-      onDelete,
+      onDelete
     })
     const items = container.querySelectorAll('[data-testid="sidebar-item"]')
     expect(items[0].classList.contains('selected')).toBe(false)

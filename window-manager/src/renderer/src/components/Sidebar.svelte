@@ -21,16 +21,11 @@
 <aside class="sidebar">
   <header class="sidebar-header">
     <h1>Windows</h1>
-    <CreateWindow onCreated={onCreated} />
+    <CreateWindow {onCreated} />
   </header>
   <nav class="sidebar-list">
     {#each windows as win (win.id)}
-      <SidebarItem
-        {win}
-        selected={win.id === selectedId}
-        onSelect={handleItemSelect}
-        {onDelete}
-      />
+      <SidebarItem {win} selected={win.id === selectedId} onSelect={handleItemSelect} {onDelete} />
     {/each}
   </nav>
   {#if windows.length === 0}

@@ -63,25 +63,15 @@
         class="submit"
         aria-label="create window"
         onclick={handleSubmit}
-        disabled={!name.trim() || loading}
-      >Create</button>
-      <button
-        type="button"
-        class="cancel"
-        aria-label="cancel"
-        onclick={toggle}
-      >×</button>
+        disabled={!name.trim() || loading}>Create</button
+      >
+      <button type="button" class="cancel" aria-label="cancel" onclick={toggle}>×</button>
     </div>
     {#if error}
       <p class="error">{error}</p>
     {/if}
   {:else}
-    <button
-      type="button"
-      class="expand"
-      aria-label="new window"
-      onclick={toggle}
-    >+</button>
+    <button type="button" class="expand" aria-label="new window" onclick={toggle}>+</button>
   {/if}
 </div>
 

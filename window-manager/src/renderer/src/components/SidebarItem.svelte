@@ -76,26 +76,15 @@
   </div>
   {#if confirming}
     <div class="confirm-group">
-      <button
-        type="button"
-        class="confirm-btn"
-        aria-label="confirm delete"
-        onclick={handleConfirm}
-      >Delete?</button>
-      <button
-        type="button"
-        class="cancel-btn"
-        aria-label="cancel"
-        onclick={handleCancel}
-      >×</button>
+      <button type="button" class="confirm-btn" aria-label="confirm delete" onclick={handleConfirm}
+        >Delete?</button
+      >
+      <button type="button" class="cancel-btn" aria-label="cancel" onclick={handleCancel}>×</button>
     </div>
   {:else}
-    <button
-      type="button"
-      class="delete-btn"
-      aria-label="delete"
-      onclick={handleDeleteClick}
-    >Delete</button>
+    <button type="button" class="delete-btn" aria-label="delete" onclick={handleDeleteClick}
+      >Delete</button
+    >
   {/if}
 </div>
 
@@ -108,7 +97,9 @@
     border-left: 2px solid transparent;
     cursor: pointer;
     color: var(--fg-1);
-    transition: background 120ms ease, color 120ms ease;
+    transition:
+      background 120ms ease,
+      color 120ms ease;
   }
 
   .sidebar-item:hover {
@@ -130,9 +121,15 @@
     background: var(--fg-2);
   }
 
-  .status-dot.status-running { background: var(--ok); }
-  .status-dot.status-stopped { background: var(--fg-2); }
-  .status-dot.status-unknown { background: var(--fg-2); }
+  .status-dot.status-running {
+    background: var(--ok);
+  }
+  .status-dot.status-stopped {
+    background: var(--fg-2);
+  }
+  .status-dot.status-unknown {
+    background: var(--fg-2);
+  }
 
   .info {
     display: flex;
@@ -169,7 +166,10 @@
     color: var(--fg-1);
     cursor: pointer;
     opacity: 0;
-    transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+    transition:
+      opacity 120ms ease,
+      background 120ms ease,
+      color 120ms ease;
   }
 
   .sidebar-item:hover .delete-btn,

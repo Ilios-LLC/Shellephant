@@ -1,6 +1,15 @@
 <div class="empty-state">
   <div class="icon" aria-hidden="true">
-    <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+    <svg
+      width="40"
+      height="40"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      stroke-width="1.5"
+      stroke-linecap="round"
+      stroke-linejoin="round"
+    >
       <rect x="3" y="4" width="18" height="16" rx="2" />
       <path d="M3 9h18" />
     </svg>
@@ -17,8 +26,7 @@
     justify-content: center;
     height: 100%;
     gap: 0.75rem;
-    background:
-      radial-gradient(circle at 50% 40%, var(--bg-1), var(--bg-0) 70%);
+    background: radial-gradient(circle at 50% 40%, var(--bg-1), var(--bg-0) 70%);
     color: var(--fg-1);
   }
 

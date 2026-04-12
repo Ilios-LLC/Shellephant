@@ -46,7 +46,7 @@ const mockWindow: WindowRecord = {
   name: 'host-test',
   container_id: 'container123abc',
   created_at: '2026-01-01T00:00:00Z',
-  status: 'running',
+  status: 'running'
 }
 
 describe('TerminalHost', () => {
@@ -66,13 +66,16 @@ describe('TerminalHost', () => {
       resizeTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       onTerminalData: vi.fn(),
-      offTerminalData: vi.fn(),
+      offTerminalData: vi.fn()
     }
     vi.stubGlobal('api', mockApi)
-    vi.stubGlobal('ResizeObserver', class {
-      observe = vi.fn()
-      disconnect = vi.fn()
-    })
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
   })
 
   afterEach(() => {
@@ -92,9 +95,9 @@ describe('TerminalHost', () => {
     await vi.waitFor(() => {
       expect(mockLoadAddon).toHaveBeenCalledTimes(2)
     })
-    const loaded = mockLoadAddon.mock.calls.map(call => call[0])
-    const hasFit = loaded.some(a => typeof (a as { fit?: unknown }).fit === 'function')
-    const hasWebLinks = loaded.some(a => (a as { __kind?: string }).__kind === 'web-links')
+    const loaded = mockLoadAddon.mock.calls.map((call) => call[0])
+    const hasFit = loaded.some((a) => typeof (a as { fit?: unknown }).fit === 'function')
+    const hasWebLinks = loaded.some((a) => (a as { __kind?: string }).__kind === 'web-links')
     expect(hasFit).toBe(true)
     expect(hasWebLinks).toBe(true)
   })
@@ -145,7 +148,10 @@ describe('TerminalHost', () => {
     await vi.waitFor(() => {
       expect(mockOnResize).toHaveBeenCalled()
     })
-    const resizeHandler = mockOnResize.mock.calls[0][0] as (d: { cols: number; rows: number }) => void
+    const resizeHandler = mockOnResize.mock.calls[0][0] as (d: {
+      cols: number
+      rows: number
+    }) => void
     resizeHandler({ cols: 120, rows: 40 })
     expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 120, 40)
   })

@@ -1,17 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { EventEmitter } from 'events'
 
-const { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer } = vi.hoisted(() => {
-  const mockExecStart = vi.fn()
-  const mockExecResize = vi.fn().mockResolvedValue(undefined)
-  const mockExec = {
-    start: mockExecStart,
-    resize: mockExecResize,
+const { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer } = vi.hoisted(
+  () => {
+    const mockExecStart = vi.fn()
+    const mockExecResize = vi.fn().mockResolvedValue(undefined)
+    const mockExec = {
+      start: mockExecStart,
+      resize: mockExecResize
+    }
+    const mockContainerExec = vi.fn().mockResolvedValue(mockExec)
+    const mockGetContainer = vi.fn().mockReturnValue({ exec: mockContainerExec })
+    return { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer }
   }
-  const mockContainerExec = vi.fn().mockResolvedValue(mockExec)
-  const mockGetContainer = vi.fn().mockReturnValue({ exec: mockContainerExec })
-  return { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer }
-})
+)
 
 vi.mock('dockerode', () => ({
   default: vi.fn(function () {
@@ -24,10 +26,13 @@ import {
   writeInput,
   resizeTerminal,
   closeTerminal,
-  closeTerminalSessionFor,
+  closeTerminalSessionFor
 } from '../../src/main/terminalService'
 
-function makeFakeStream(): EventEmitter & { write: ReturnType<typeof vi.fn>; destroy: ReturnType<typeof vi.fn> } {
+function makeFakeStream(): EventEmitter & {
+  write: ReturnType<typeof vi.fn>
+  destroy: ReturnType<typeof vi.fn>
+} {
   const stream = new EventEmitter() as EventEmitter & {
     write: ReturnType<typeof vi.fn>
     destroy: ReturnType<typeof vi.fn>
@@ -40,7 +45,7 @@ function makeFakeStream(): EventEmitter & { write: ReturnType<typeof vi.fn>; des
 function makeFakeWin(isDestroyed = false) {
   return {
     isDestroyed: vi.fn().mockReturnValue(isDestroyed),
-    webContents: { send: vi.fn() },
+    webContents: { send: vi.fn() }
   } as unknown as {
     isDestroyed: ReturnType<typeof vi.fn>
     webContents: { send: ReturnType<typeof vi.fn> }
@@ -69,7 +74,7 @@ describe('terminalService', () => {
           AttachStdout: true,
           AttachStderr: true,
           Tty: true,
-          Env: ['TERM=xterm-256color'],
+          Env: ['TERM=xterm-256color']
         })
       )
       expect(mockExecStart).toHaveBeenCalledWith({ hijack: true, stdin: true })

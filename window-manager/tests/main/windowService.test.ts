@@ -8,7 +8,7 @@ const mockContainer = {
   id: 'mock-container-abc123',
   start: mockStart,
   stop: mockStop,
-  inspect: mockInspect,
+  inspect: mockInspect
 }
 const mockCreateContainer = vi.fn().mockResolvedValue(mockContainer)
 const mockGetContainer = vi.fn().mockReturnValue(mockContainer)
@@ -17,17 +17,17 @@ vi.mock('dockerode', () => ({
   default: vi.fn(function () {
     return {
       createContainer: mockCreateContainer,
-      getContainer: mockGetContainer,
+      getContainer: mockGetContainer
     }
   })
 }))
 
 const { mockCloseTerminalSessionFor } = vi.hoisted(() => ({
-  mockCloseTerminalSessionFor: vi.fn(),
+  mockCloseTerminalSessionFor: vi.fn()
 }))
 
 vi.mock('../../src/main/terminalService', () => ({
-  closeTerminalSessionFor: mockCloseTerminalSessionFor,
+  closeTerminalSessionFor: mockCloseTerminalSessionFor
 }))
 
 import {
@@ -35,7 +35,7 @@ import {
   listWindows,
   deleteWindow,
   reconcileWindows,
-  __resetStatusMapForTests,
+  __resetStatusMapForTests
 } from '../../src/main/windowService'
 
 describe('windowService', () => {
@@ -65,9 +65,7 @@ describe('windowService', () => {
 
     it('creates a Docker container from the cc image', async () => {
       await createWindow('test')
-      expect(mockCreateContainer).toHaveBeenCalledWith(
-        expect.objectContaining({ Image: 'cc' })
-      )
+      expect(mockCreateContainer).toHaveBeenCalledWith(expect.objectContaining({ Image: 'cc' }))
     })
 
     it('starts the container', async () => {
@@ -90,7 +88,7 @@ describe('windowService', () => {
     it('excludes soft-deleted windows', async () => {
       await createWindow('active')
       await createWindow('to-delete')
-      const id = listWindows().find(w => w.name === 'to-delete')!.id
+      const id = listWindows().find((w) => w.name === 'to-delete')!.id
       await deleteWindow(id)
       const result = listWindows()
       expect(result).toHaveLength(1)
@@ -103,9 +101,9 @@ describe('windowService', () => {
       await createWindow('to-delete')
       const [win] = listWindows()
       await deleteWindow(win.id)
-      const row = getDb()
-        .prepare('SELECT deleted_at FROM windows WHERE id = ?')
-        .get(win.id) as { deleted_at: string | null }
+      const row = getDb().prepare('SELECT deleted_at FROM windows WHERE id = ?').get(win.id) as {
+        deleted_at: string | null
+      }
       expect(row.deleted_at).not.toBeNull()
     })
 
@@ -142,7 +140,7 @@ describe('windowService', () => {
       getDb()
         .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
         .run('probe', 'probe-container')
-      const probe = listWindows().find(r => r.name === 'probe')!
+      const probe = listWindows().find((r) => r.name === 'probe')!
       expect(probe.status).toBe('unknown')
     })
 
@@ -165,7 +163,7 @@ describe('windowService', () => {
         .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
         .run('ghost', 'ghost-container')
       const rows = listWindows()
-      const ghost = rows.find(r => r.name === 'ghost')!
+      const ghost = rows.find((r) => r.name === 'ghost')!
       expect(ghost.status).toBe('unknown')
     })
 

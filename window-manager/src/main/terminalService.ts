@@ -25,7 +25,7 @@ export async function openTerminal(containerId: string, win: BrowserWindow): Pro
     AttachStdout: true,
     AttachStderr: true,
     Tty: true,
-    Env: ['TERM=xterm-256color'],
+    Env: ['TERM=xterm-256color']
   })
 
   const stream = (await exec.start({ hijack: true, stdin: true })) as unknown as Duplex
@@ -52,7 +52,7 @@ export function writeInput(containerId: string, data: string): void {
 export async function resizeTerminal(
   containerId: string,
   cols: number,
-  rows: number,
+  rows: number
 ): Promise<void> {
   const session = sessions.get(containerId)
   if (session) await session.exec.resize({ w: cols, h: rows })

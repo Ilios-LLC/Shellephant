@@ -25,13 +25,13 @@
 
   async function handleDelete(id: number): Promise<void> {
     await window.api.deleteWindow(id)
-    windows = windows.filter(w => w.id !== id)
+    windows = windows.filter((w) => w.id !== id)
     if (selectedId === id) {
       selectedId = windows[0]?.id ?? null
     }
   }
 
-  let selected = $derived(windows.find(w => w.id === selectedId) ?? null)
+  let selected = $derived(windows.find((w) => w.id === selectedId) ?? null)
 </script>
 
 <div class="app">

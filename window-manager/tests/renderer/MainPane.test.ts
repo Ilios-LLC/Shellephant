@@ -33,7 +33,7 @@ const winA: WindowRecord = {
   name: 'alpha',
   container_id: 'abc123456789xxx',
   created_at: '2026-01-01T00:00:00Z',
-  status: 'running',
+  status: 'running'
 }
 
 describe('MainPane', () => {
@@ -44,12 +44,15 @@ describe('MainPane', () => {
       resizeTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       onTerminalData: vi.fn(),
-      offTerminalData: vi.fn(),
+      offTerminalData: vi.fn()
     })
-    vi.stubGlobal('ResizeObserver', class {
-      observe = vi.fn()
-      disconnect = vi.fn()
-    })
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
   })
 
   afterEach(() => {

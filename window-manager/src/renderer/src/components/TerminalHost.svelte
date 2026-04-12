@@ -23,9 +23,9 @@
         background: '#09090b',
         foreground: '#fafafa',
         cursor: '#8b5cf6',
-        selectionBackground: '#3f3f46',
+        selectionBackground: '#3f3f46'
       },
-      scrollback: 1000,
+      scrollback: 1000
     })
 
     const fitAddon = new FitAddon()
