@@ -1,0 +1,15 @@
+{
+  "hasCompletedOnboarding": true,
+  "theme": "dark",
+  "customApiKeyResponses": {
+    "approved": [],
+    "rejected": []
+  },
+  "projects": {
+    "/workspace": {
+      "hasTrustDialogAccepted": true,
+      "hasCompletedProjectOnboarding": true,
+      "projectOnboardingSeenCount": 1
+    }
+  }
+}
