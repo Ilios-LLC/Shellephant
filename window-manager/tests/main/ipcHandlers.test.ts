@@ -23,8 +23,15 @@ vi.mock('../../src/main/terminalService', () => ({
   closeTerminal: vi.fn()
 }))
 
+vi.mock('../../src/main/projectService', () => ({
+  createProject: vi.fn(),
+  listProjects: vi.fn(),
+  deleteProject: vi.fn()
+}))
+
 import { ipcMain, BrowserWindow } from 'electron'
 import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
+import { createProject, listProjects, deleteProject } from '../../src/main/projectService'
 import {
   openTerminal,
   writeInput,
@@ -55,17 +62,40 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers()
   })
 
+  it('registers project:create handler that calls createProject', async () => {
+    const record = { id: 1, name: 'test', git_url: 'git@github.com:org/repo.git', created_at: '2026-01-01' }
+    vi.mocked(createProject).mockResolvedValue(record)
+    const result = await getHandler('project:create')({}, 'test', 'git@github.com:org/repo.git')
+    expect(createProject).toHaveBeenCalledWith('test', 'git@github.com:org/repo.git')
+    expect(result).toEqual(record)
+  })
+
+  it('registers project:list handler that calls listProjects', async () => {
+    const records = [{ id: 1, name: 'p', git_url: 'git@github.com:org/repo.git', created_at: '2026-01-01' }]
+    vi.mocked(listProjects).mockReturnValue(records)
+    const result = await getHandler('project:list')({})
+    expect(listProjects).toHaveBeenCalled()
+    expect(result).toEqual(records)
+  })
+
+  it('registers project:delete handler that calls deleteProject', async () => {
+    vi.mocked(deleteProject).mockResolvedValue(undefined)
+    await getHandler('project:delete')({}, 1)
+    expect(deleteProject).toHaveBeenCalledWith(1)
+  })
+
   it('registers window:create handler that calls createWindow', async () => {
     const record = {
       id: 1,
       name: 'test',
+      project_id: 1,
       container_id: 'abc',
       created_at: '2026-01-01',
       status: 'running' as const
     }
     vi.mocked(createWindow).mockResolvedValue(record)
-    const result = await getHandler('window:create')({}, 'test')
-    expect(createWindow).toHaveBeenCalledWith('test')
+    const result = await getHandler('window:create')({}, 'test', 1)
+    expect(createWindow).toHaveBeenCalledWith('test', 1)
     expect(result).toEqual(record)
   })
 

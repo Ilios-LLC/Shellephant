@@ -1,48 +1,78 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { WindowRecord } from './types'
+  import type { ProjectRecord, WindowRecord } from './types'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane from './components/MainPane.svelte'
 
+  let projects = $state<ProjectRecord[]>([])
   let windows = $state<WindowRecord[]>([])
-  let selectedId = $state<number | null>(null)
+  let selectedProjectId = $state<number | null>(null)
+  let selectedWindowId = $state<number | null>(null)
 
   onMount(async () => {
-    windows = await window.api.listWindows()
-    if (windows.length > 0) {
-      selectedId = windows[0].id
+    projects = await window.api.listProjects()
+    if (projects.length > 0) {
+      selectedProjectId = projects[0].id
+      windows = await window.api.listWindows(projects[0].id)
     }
   })
 
-  function handleCreated(record: WindowRecord): void {
-    windows = [...windows, record]
-    selectedId = record.id
+  function handleProjectSelect(project: ProjectRecord): void {
+    selectedProjectId = project.id
+    selectedWindowId = null
+    window.api.listWindows(project.id).then((wins) => {
+      windows = wins
+    })
   }
 
-  function handleSelect(id: number): void {
-    selectedId = id
+  function handleProjectCreated(project: ProjectRecord): void {
+    projects = [...projects, project]
+    selectedProjectId = project.id
+    selectedWindowId = null
+    windows = []
   }
 
-  async function handleDelete(id: number): Promise<void> {
-    await window.api.deleteWindow(id)
-    windows = windows.filter((w) => w.id !== id)
-    if (selectedId === id) {
-      selectedId = windows[0]?.id ?? null
+  async function handleProjectDeleted(id: number): Promise<void> {
+    projects = projects.filter((p) => p.id !== id)
+    if (selectedProjectId === id) {
+      selectedProjectId = projects[0]?.id ?? null
+      selectedWindowId = null
+      if (selectedProjectId) {
+        windows = await window.api.listWindows(selectedProjectId)
+      } else {
+        windows = []
+      }
     }
   }
 
-  let selected = $derived(windows.find((w) => w.id === selectedId) ?? null)
+  function handleWindowSelect(win: WindowRecord): void {
+    selectedWindowId = win.id
+  }
+
+  function handleWindowCreated(win: WindowRecord): void {
+    windows = [...windows, win]
+    selectedWindowId = win.id
+  }
+
+  let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
+  let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
 </script>
 
 <div class="app">
   <Sidebar
-    {windows}
-    {selectedId}
-    onSelect={handleSelect}
-    onCreated={handleCreated}
-    onDelete={handleDelete}
+    {projects}
+    selectedProjectId={selectedProjectId}
+    onProjectSelect={handleProjectSelect}
+    onProjectCreated={handleProjectCreated}
   />
-  <MainPane {selected} />
+  <MainPane
+    project={selectedProject}
+    {windows}
+    selectedWindow={selectedWindow}
+    onWindowSelect={handleWindowSelect}
+    onWindowCreated={handleWindowCreated}
+    onProjectDeleted={handleProjectDeleted}
+  />
 </div>
 
 <style>

@@ -33,4 +33,30 @@ describe('db', () => {
     closeDb()
     expect(() => getDb()).toThrow('Database not initialized')
   })
+
+  it('creates the projects table on init', () => {
+    const db = getDb()
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='projects'")
+      .all()
+    expect(tables).toHaveLength(1)
+  })
+
+  it('projects table has all expected columns', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    const names = cols.map((c) => c.name)
+    expect(names).toContain('id')
+    expect(names).toContain('name')
+    expect(names).toContain('git_url')
+    expect(names).toContain('created_at')
+    expect(names).toContain('deleted_at')
+  })
+
+  it('windows table has project_id column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    const names = cols.map((c) => c.name)
+    expect(names).toContain('project_id')
+  })
 })

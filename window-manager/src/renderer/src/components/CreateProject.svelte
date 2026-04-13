@@ -1,25 +1,28 @@
+<!-- src/renderer/src/components/CreateProject.svelte -->
 <script lang="ts">
-  import type { WindowRecord } from '../types'
+  import type { ProjectRecord } from '../types'
 
   interface Props {
-    onCreated?: (record: WindowRecord) => void
+    onCreated?: (record: ProjectRecord) => void
     startExpanded?: boolean
   }
 
   let { onCreated, startExpanded = false }: Props = $props()
 
   let expanded = $state(startExpanded)
+  let gitUrl = $state('')
   let name = $state('')
   let loading = $state(false)
   let error = $state('')
 
   async function handleSubmit(): Promise<void> {
-    const trimmed = name.trim()
-    if (!trimmed || loading) return
+    const trimmedUrl = gitUrl.trim()
+    if (!trimmedUrl || loading) return
     loading = true
     error = ''
     try {
-      const record = await window.api.createWindow(trimmed)
+      const record = await window.api.createProject(name.trim(), trimmedUrl)
+      gitUrl = ''
       name = ''
       expanded = false
       onCreated?.(record)
@@ -34,6 +37,7 @@
     if (e.key === 'Enter') handleSubmit()
     else if (e.key === 'Escape') {
       expanded = false
+      gitUrl = ''
       name = ''
       error = ''
     }
@@ -42,49 +46,64 @@
   function toggle(): void {
     expanded = !expanded
     if (!expanded) {
+      gitUrl = ''
       name = ''
       error = ''
     }
   }
 </script>
 
-<div class="create-window">
+<div class="create-project">
   {#if expanded}
-    <div class="row">
+    <div class="fields">
       <input
         type="text"
-        placeholder="window name"
+        placeholder="git@github.com:org/repo.git"
+        bind:value={gitUrl}
+        disabled={loading}
+        onkeydown={handleKey}
+      />
+      <input
+        type="text"
+        placeholder="project name (optional)"
         bind:value={name}
         disabled={loading}
         onkeydown={handleKey}
       />
-      <button
-        type="button"
-        class="submit"
-        aria-label="create window"
-        onclick={handleSubmit}
-        disabled={!name.trim() || loading}>Create</button
-      >
-      <button type="button" class="cancel" aria-label="cancel" onclick={toggle}>×</button>
+      <div class="actions">
+        <button
+          type="button"
+          class="submit"
+          aria-label="add project"
+          onclick={handleSubmit}
+          disabled={!gitUrl.trim() || loading}>Add</button
+        >
+        <button type="button" class="cancel" aria-label="cancel" onclick={toggle}>×</button>
+      </div>
     </div>
     {#if error}
       <p class="error">{error}</p>
     {/if}
   {:else}
-    <button type="button" class="expand" aria-label="new window" onclick={toggle}>+</button>
+    <button type="button" class="expand" aria-label="new project" onclick={toggle}>+</button>
   {/if}
 </div>
 
 <style>
-  .create-window {
+  .create-project {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
   }
 
-  .row {
+  .fields {
     display: flex;
-    align-items: center;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .actions {
+    display: flex;
     gap: 0.25rem;
   }
 
