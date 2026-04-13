@@ -1,35 +1,34 @@
 <script lang="ts">
-  import type { WindowRecord } from '../types'
-  import SidebarItem from './SidebarItem.svelte'
-  import CreateWindow from './CreateWindow.svelte'
+  import type { ProjectRecord } from '../types'
+  import ProjectItem from './ProjectItem.svelte'
+  import CreateProject from './CreateProject.svelte'
 
   interface Props {
-    windows: WindowRecord[]
-    selectedId: number | null
-    onSelect: (id: number) => void
-    onCreated: (record: WindowRecord) => void
-    onDelete: (id: number) => void
+    projects: ProjectRecord[]
+    selectedProjectId: number | null
+    onProjectSelect: (project: ProjectRecord) => void
+    onProjectCreated: (project: ProjectRecord) => void
   }
 
-  let { windows, selectedId, onSelect, onCreated, onDelete }: Props = $props()
-
-  function handleItemSelect(win: WindowRecord): void {
-    onSelect(win.id)
-  }
+  let { projects, selectedProjectId, onProjectSelect, onProjectCreated }: Props = $props()
 </script>
 
 <aside class="sidebar">
   <header class="sidebar-header">
-    <h1>Windows</h1>
-    <CreateWindow {onCreated} />
+    <h1>Projects</h1>
+    <CreateProject onCreated={onProjectCreated} />
   </header>
   <nav class="sidebar-list">
-    {#each windows as win (win.id)}
-      <SidebarItem {win} selected={win.id === selectedId} onSelect={handleItemSelect} {onDelete} />
+    {#each projects as project (project.id)}
+      <ProjectItem
+        {project}
+        selected={project.id === selectedProjectId}
+        onSelect={onProjectSelect}
+      />
     {/each}
   </nav>
-  {#if windows.length === 0}
-    <p class="empty-hint">No windows. Click + to create one.</p>
+  {#if projects.length === 0}
+    <p class="empty-hint">No projects. Click + to add one.</p>
   {/if}
 </aside>
 

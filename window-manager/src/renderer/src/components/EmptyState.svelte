@@ -14,8 +14,8 @@
       <path d="M3 9h18" />
     </svg>
   </div>
-  <h2 class="heading">No window selected</h2>
-  <p class="hint">Create or select a window from the sidebar.</p>
+  <h2 class="heading">No project selected</h2>
+  <p class="hint">Add a project from the sidebar to get started.</p>
 </div>
 
 <style>
