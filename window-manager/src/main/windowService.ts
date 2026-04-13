@@ -1,5 +1,6 @@
 import Dockerode from 'dockerode'
 import { getDb } from './db'
+import { extractRepoName } from './gitUrl'
 import { closeTerminalSessionFor } from './terminalService'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
@@ -7,6 +8,7 @@ export type WindowStatus = 'running' | 'stopped' | 'unknown'
 export interface WindowRecord {
   id: number
   name: string
+  project_id: number
   container_id: string
   created_at: string
   status: WindowStatus
@@ -25,7 +27,17 @@ function getDocker(): Dockerode {
   return _docker
 }
 
-export async function createWindow(name: string): Promise<WindowRecord> {
+export async function createWindow(name: string, projectId: number): Promise<WindowRecord> {
+  const db = getDb()
+  const project = db
+    .prepare('SELECT git_url FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .get(projectId) as { git_url: string } | undefined
+
+  if (!project) throw new Error('Project not found')
+
+  const repoName = extractRepoName(project.git_url)
+  const clonePath = `/workspace/${repoName}`
+
   const container = await getDocker().createContainer({
     Image: 'cc',
     Tty: true,
@@ -34,10 +46,17 @@ export async function createWindow(name: string): Promise<WindowRecord> {
   })
   await container.start()
 
-  const db = getDb()
+  // Clone repo inside container
+  const cloneExec = await container.exec({
+    Cmd: ['git', 'clone', project.git_url, clonePath],
+    AttachStdout: true,
+    AttachStderr: true
+  })
+  await cloneExec.start({})
+
   const result = db
-    .prepare('INSERT INTO windows (name, container_id) VALUES (?, ?)')
-    .run(name, container.id)
+    .prepare('INSERT INTO windows (name, project_id, container_id) VALUES (?, ?, ?)')
+    .run(name, projectId, container.id)
 
   const id = result.lastInsertRowid as number
   statusMap.set(id, 'running')
@@ -45,6 +64,7 @@ export async function createWindow(name: string): Promise<WindowRecord> {
   return {
     id,
     name,
+    project_id: projectId,
     container_id: container.id,
     created_at: new Date().toISOString(),
     status: 'running' as WindowStatus
@@ -78,12 +98,20 @@ export async function reconcileWindows(): Promise<void> {
   }
 }
 
-export function listWindows(): WindowRecord[] {
-  return (
-    getDb()
-      .prepare('SELECT id, name, container_id, created_at FROM windows WHERE deleted_at IS NULL')
-      .all() as Omit<WindowRecord, 'status'>[]
-  ).map((r) => ({ ...r, status: statusMap.get(r.id) ?? ('unknown' as WindowStatus) }))
+export function listWindows(projectId?: number): WindowRecord[] {
+  const db = getDb()
+  let query = 'SELECT id, name, project_id, container_id, created_at FROM windows WHERE deleted_at IS NULL'
+  const params: number[] = []
+
+  if (projectId !== undefined) {
+    query += ' AND project_id = ?'
+    params.push(projectId)
+  }
+
+  return (db.prepare(query).all(...params) as Omit<WindowRecord, 'status'>[]).map((r) => ({
+    ...r,
+    status: statusMap.get(r.id) ?? ('unknown' as WindowStatus)
+  }))
 }
 
 export async function deleteWindow(id: number): Promise<void> {
