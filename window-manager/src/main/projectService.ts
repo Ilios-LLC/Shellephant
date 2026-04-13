@@ -1,0 +1,89 @@
+import { execFile } from 'child_process'
+import { getDb } from './db'
+import { isValidSshUrl, extractRepoName, sshUrlToHttps } from './gitUrl'
+import { deleteWindow, listWindows } from './windowService'
+
+export interface ProjectRecord {
+  id: number
+  name: string
+  git_url: string
+  created_at: string
+}
+
+function verifyRemote(httpsUrl: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    execFile(
+      'git',
+      ['ls-remote', '--exit-code', httpsUrl],
+      { timeout: 15_000 },
+      (err) => {
+        if (err) reject(new Error('Repository not accessible'))
+        else resolve()
+      }
+    )
+  })
+}
+
+export async function createProject(
+  name: string,
+  gitUrl: string
+): Promise<ProjectRecord> {
+  if (!isValidSshUrl(gitUrl)) {
+    throw new Error('Invalid SSH URL format. Expected: git@host:org/repo.git')
+  }
+
+  const resolvedName = name.trim() || extractRepoName(gitUrl)
+
+  // Remote verification if PAT available
+  const pat = process.env.GITHUB_PAT
+  if (pat) {
+    const httpsUrl = sshUrlToHttps(gitUrl, pat)
+    await verifyRemote(httpsUrl)
+  }
+
+  const db = getDb()
+  try {
+    const result = db
+      .prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
+      .run(resolvedName, gitUrl)
+
+    return {
+      id: result.lastInsertRowid as number,
+      name: resolvedName,
+      git_url: gitUrl,
+      created_at: new Date().toISOString()
+    }
+  } catch (err) {
+    if ((err as Error).message.includes('UNIQUE constraint failed')) {
+      throw new Error('Project already exists for this git URL')
+    }
+    throw err
+  }
+}
+
+export function listProjects(): ProjectRecord[] {
+  return getDb()
+    .prepare(
+      'SELECT id, name, git_url, created_at FROM projects WHERE deleted_at IS NULL'
+    )
+    .all() as ProjectRecord[]
+}
+
+export async function deleteProject(id: number): Promise<void> {
+  const db = getDb()
+  const project = db
+    .prepare('SELECT id FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .get(id) as { id: number } | undefined
+
+  if (!project) return // idempotent
+
+  // Cascade delete all windows belonging to this project
+  const windows = listWindows(id)
+  for (const win of windows) {
+    await deleteWindow(win.id)
+  }
+
+  db.prepare("UPDATE projects SET deleted_at = datetime('now') WHERE id = ?").run(
+    id
+  )
+}

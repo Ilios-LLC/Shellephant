@@ -1,0 +1,130 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import { initDb, closeDb, getDb } from '../../src/main/db'
+
+// Mock child_process for git ls-remote
+const mockExecFile = vi.fn()
+vi.mock('child_process', () => ({
+  execFile: (...args: any[]) => mockExecFile(...args)
+}))
+
+// Mock windowService to avoid dockerode dependency
+vi.mock('../../src/main/windowService', () => ({
+  listWindows: vi.fn().mockReturnValue([]),
+  deleteWindow: vi.fn().mockResolvedValue(undefined)
+}))
+
+import {
+  createProject,
+  listProjects,
+  deleteProject
+} from '../../src/main/projectService'
+
+describe('projectService', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+    vi.clearAllMocks()
+    // Default: no GITHUB_PAT, skip remote validation
+    delete process.env.GITHUB_PAT
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  describe('createProject', () => {
+    it('creates a project with name and git URL', async () => {
+      const result = await createProject('my-project', 'git@github.com:org/repo.git')
+      expect(result.name).toBe('my-project')
+      expect(result.git_url).toBe('git@github.com:org/repo.git')
+      expect(result.id).toBeTypeOf('number')
+    })
+
+    it('derives name from URL when empty string provided', async () => {
+      const result = await createProject('', 'git@github.com:org/my-repo.git')
+      expect(result.name).toBe('my-repo')
+    })
+
+    it('rejects invalid SSH URLs', async () => {
+      await expect(
+        createProject('bad', 'https://github.com/org/repo.git')
+      ).rejects.toThrow('Invalid SSH URL')
+    })
+
+    it('rejects duplicate git URLs', async () => {
+      await createProject('first', 'git@github.com:org/repo.git')
+      await expect(
+        createProject('second', 'git@github.com:org/repo.git')
+      ).rejects.toThrow('Project already exists')
+    })
+
+    it('runs git ls-remote when GITHUB_PAT is set', async () => {
+      process.env.GITHUB_PAT = 'test-token'
+      mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
+        cb(null, '', '')
+      })
+
+      await createProject('verified', 'git@github.com:org/repo.git')
+
+      expect(mockExecFile).toHaveBeenCalledWith(
+        'git',
+        ['ls-remote', '--exit-code', 'https://test-token@github.com/org/repo.git'],
+        expect.any(Object),
+        expect.any(Function)
+      )
+    })
+
+    it('rejects when git ls-remote fails', async () => {
+      process.env.GITHUB_PAT = 'test-token'
+      mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
+        cb(new Error('repository not found'), '', '')
+      })
+
+      await expect(
+        createProject('bad-remote', 'git@github.com:org/nonexistent.git')
+      ).rejects.toThrow('Repository not accessible')
+    })
+
+    it('skips remote check and succeeds when GITHUB_PAT is missing', async () => {
+      const result = await createProject('no-pat', 'git@github.com:org/repo.git')
+      expect(result.name).toBe('no-pat')
+      expect(mockExecFile).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('listProjects', () => {
+    it('returns empty array when no projects exist', () => {
+      expect(listProjects()).toEqual([])
+    })
+
+    it('returns active projects only', async () => {
+      await createProject('active', 'git@github.com:org/active.git')
+      await createProject('deleted', 'git@github.com:org/deleted.git')
+      const projects = listProjects()
+      const deletedProject = projects.find((p) => p.name === 'deleted')!
+      await deleteProject(deletedProject.id)
+      expect(listProjects()).toHaveLength(1)
+      expect(listProjects()[0].name).toBe('active')
+    })
+  })
+
+  describe('deleteProject', () => {
+    it('soft-deletes the project', async () => {
+      const project = await createProject('to-delete', 'git@github.com:org/repo.git')
+      await deleteProject(project.id)
+      const row = getDb()
+        .prepare('SELECT deleted_at FROM projects WHERE id = ?')
+        .get(project.id) as { deleted_at: string | null }
+      expect(row.deleted_at).not.toBeNull()
+    })
+
+    it('is idempotent — no error when deleting twice', async () => {
+      const project = await createProject('twice', 'git@github.com:org/repo.git')
+      await deleteProject(project.id)
+      await expect(deleteProject(project.id)).resolves.toBeUndefined()
+    })
+
+    it('is idempotent — no error when project id does not exist', async () => {
+      await expect(deleteProject(99999)).resolves.toBeUndefined()
+    })
+  })
+})
