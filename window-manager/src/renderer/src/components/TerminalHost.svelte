@@ -21,6 +21,7 @@
 
   let commitOpen = $state(false)
   let commitBusy = $state(false)
+  let pushBusy = $state(false)
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
@@ -45,6 +46,22 @@
       pushToast({ level: 'error', title: 'Commit error', body: (err as Error).message })
     } finally {
       commitBusy = false
+    }
+  }
+
+  async function runPush(): Promise<void> {
+    pushBusy = true
+    try {
+      const res = await window.api.push(win.id)
+      pushToast({
+        level: res.ok ? 'success' : 'error',
+        title: res.ok ? 'Pushed' : 'Push failed',
+        body: res.stdout || res.stderr || undefined
+      })
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Push error', body: (err as Error).message })
+    } finally {
+      pushBusy = false
     }
   }
 
@@ -105,7 +122,9 @@
     {win}
     {project}
     onCommit={() => (commitOpen = true)}
-    commitDisabled={commitBusy}
+    onPush={runPush}
+    commitDisabled={commitBusy || pushBusy}
+    pushDisabled={commitBusy || pushBusy}
   />
   {#if commitOpen}
     <CommitModal onSubmit={runCommit} onCancel={() => (commitOpen = false)} busy={commitBusy} />

@@ -71,6 +71,7 @@ describe('TerminalHost', () => {
     offTerminalData: ReturnType<typeof vi.fn>
     getCurrentBranch: ReturnType<typeof vi.fn>
     commit: ReturnType<typeof vi.fn>
+    push: ReturnType<typeof vi.fn>
   }
 
   beforeEach(() => {
@@ -82,7 +83,8 @@ describe('TerminalHost', () => {
       onTerminalData: vi.fn(),
       offTerminalData: vi.fn(),
       getCurrentBranch: vi.fn().mockResolvedValue('main'),
-      commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '', stderr: '' })
+      commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '', stderr: '' }),
+      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '', stderr: '' })
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(
