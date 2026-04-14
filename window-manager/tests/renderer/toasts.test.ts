@@ -1,34 +1,45 @@
-import { describe, it, expect, beforeEach } from 'vitest'
-import { get } from 'svelte/store'
-import { toasts, pushToast, dismissToast } from '../../src/renderer/src/lib/toasts'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-describe('toasts store', () => {
+const { fire } = vi.hoisted(() => ({ fire: vi.fn() }))
+
+vi.mock('sweetalert2', () => ({
+  default: {
+    mixin: () => ({ fire }),
+    stopTimer: vi.fn(),
+    resumeTimer: vi.fn()
+  }
+}))
+
+import { pushToast } from '../../src/renderer/src/lib/toasts'
+
+describe('pushToast', () => {
   beforeEach(() => {
-    for (const t of get(toasts)) dismissToast(t.id)
+    fire.mockReset()
   })
 
-  it('pushes a toast with level, title, and optional body', () => {
-    const id = pushToast({ level: 'success', title: 'OK', body: 'all good' })
-    const current = get(toasts)
-    expect(current).toHaveLength(1)
-    expect(current[0]).toMatchObject({ id, level: 'success', title: 'OK', body: 'all good' })
+  it('fires a success toast with the given title', () => {
+    pushToast({ level: 'success', title: 'OK' })
+    expect(fire).toHaveBeenCalledWith(
+      expect.objectContaining({ icon: 'success', title: 'OK' })
+    )
   })
 
-  it('dismisses a toast by id', () => {
-    const id = pushToast({ level: 'error', title: 'nope' })
-    dismissToast(id)
-    expect(get(toasts)).toEqual([])
+  it('fires an error toast with the given title', () => {
+    pushToast({ level: 'error', title: 'nope' })
+    expect(fire).toHaveBeenCalledWith(
+      expect.objectContaining({ icon: 'error', title: 'nope' })
+    )
   })
 
-  it('assigns unique ids across pushes', () => {
-    const a = pushToast({ level: 'success', title: 'a' })
-    const b = pushToast({ level: 'success', title: 'b' })
-    expect(a).not.toBe(b)
+  it('renders the body into an escaped <pre> block when provided', () => {
+    pushToast({ level: 'error', title: 'boom', body: '<script>alert(1)</script>' })
+    const arg = fire.mock.calls[0][0]
+    expect(arg.html).toContain('&lt;script&gt;')
+    expect(arg.html).not.toContain('<script>')
   })
 
-  it('omits body when not provided', () => {
-    pushToast({ level: 'success', title: 'no body' })
-    const [t] = get(toasts)
-    expect(t.body).toBeUndefined()
+  it('omits html when body is absent', () => {
+    pushToast({ level: 'success', title: 'clean' })
+    expect(fire.mock.calls[0][0].html).toBeUndefined()
   })
 })
