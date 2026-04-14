@@ -10,9 +10,10 @@ export interface ToastInput {
 
 const Toast = Swal.mixin({
   toast: true,
-  position: 'bottom-end',
+  position: 'top-end',
   showConfirmButton: false,
-  timer: 5000,
+  showCloseButton: true,
+  timer: 3333,
   timerProgressBar: true,
   didOpen: (el) => {
     el.addEventListener('mouseenter', Swal.stopTimer)

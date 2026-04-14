@@ -31,7 +31,8 @@
         body: v.body || undefined
       })
       if (res.ok) {
-        pushToast({ level: 'success', title: 'Committed', body: res.stdout })
+        const subjectLine = res.stdout.split('\n').find((l) => /^\[.+\]/.test(l))
+        pushToast({ level: 'success', title: 'Committed', body: subjectLine })
       } else {
         const nothing = /nothing to commit/i.test(res.stdout)
         pushToast({
