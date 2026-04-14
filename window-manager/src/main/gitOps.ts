@@ -120,3 +120,33 @@ export async function getCurrentBranch(container: Container, clonePath: string):
   ])
   return result.stdout.trim()
 }
+
+export interface CommitInput {
+  subject: string
+  body?: string
+  name: string
+  email: string
+}
+
+export async function stageAndCommit(
+  container: Container,
+  clonePath: string,
+  input: CommitInput
+): Promise<GitResult> {
+  const addResult = await execInContainer(container, [
+    'git', '-C', clonePath, 'add', '--all'
+  ])
+  if (!addResult.ok) return addResult
+
+  const commitArgs = [
+    'git', '-C', clonePath,
+    '-c', `user.name=${input.name}`,
+    '-c', `user.email=${input.email}`,
+    'commit',
+    '-m', input.subject
+  ]
+  if (input.body && input.body.trim().length > 0) {
+    commitArgs.push('-m', input.body)
+  }
+  return execInContainer(container, commitArgs)
+}

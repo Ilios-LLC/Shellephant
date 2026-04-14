@@ -196,3 +196,108 @@ describe('getCurrentBranch', () => {
     ])
   })
 })
+
+describe('stageAndCommit', () => {
+  it('runs git add --all then git commit with -c user.name/email and -m <subject>', async () => {
+    const container = makeContainer()
+    const { stageAndCommit } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await stageAndCommit(container, '/workspace/r', {
+      subject: 'Fix bug', body: '', name: 'Octo', email: 'o@x'
+    })
+
+    const cmds = container.exec.mock.calls.map((c) => c[0].Cmd)
+    expect(cmds[0]).toEqual(['git', '-C', '/workspace/r', 'add', '--all'])
+    expect(cmds[1]).toEqual([
+      'git', '-C', '/workspace/r',
+      '-c', 'user.name=Octo',
+      '-c', 'user.email=o@x',
+      'commit', '-m', 'Fix bug'
+    ])
+  })
+
+  it('includes a second -m flag when body is non-empty', async () => {
+    const container = makeContainer()
+    const { stageAndCommit } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await stageAndCommit(container, '/workspace/r', {
+      subject: 'subj', body: 'more details', name: 'n', email: 'e'
+    })
+    const commitCmd = container.exec.mock.calls[1][0].Cmd
+    expect(commitCmd).toContain('-m')
+    expect(commitCmd[commitCmd.length - 2]).toBe('-m')
+    expect(commitCmd[commitCmd.length - 1]).toBe('more details')
+  })
+
+  it('omits the body flag when body is whitespace-only', async () => {
+    const container = makeContainer()
+    const { stageAndCommit } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await stageAndCommit(container, '/workspace/r', {
+      subject: 's', body: '   ', name: 'n', email: 'e'
+    })
+    const commitCmd = container.exec.mock.calls[1][0].Cmd
+    // Count -m occurrences: should be exactly 1 (for subject).
+    const dashMCount = commitCmd.filter((a: string) => a === '-m').length
+    expect(dashMCount).toBe(1)
+  })
+
+  it('short-circuits with the add result when git add fails', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn()
+        .mockResolvedValueOnce({
+          start: async () => ({
+            on(event: string, cb: (d?: Buffer) => void) {
+              if (event === 'data') setImmediate(() => cb(Buffer.from('add failed')))
+              if (event === 'end') setImmediate(() => cb())
+              return this
+            }
+          }),
+          inspect: async () => ({ ExitCode: 128 })
+        })
+    }
+    const { stageAndCommit } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const res = await stageAndCommit(container, '/workspace/r', {
+      subject: 's', body: '', name: 'n', email: 'e'
+    })
+    expect(res.ok).toBe(false)
+    expect(res.code).toBe(128)
+    expect(container.exec).toHaveBeenCalledTimes(1)  // commit was NOT attempted
+  })
+
+  it('returns the non-zero commit result when "nothing to commit"', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn()
+        .mockResolvedValueOnce({
+          start: async () => ({
+            on(event: string, cb: (d?: Buffer) => void) {
+              if (event === 'end') setImmediate(() => cb())
+              return this
+            }
+          }),
+          inspect: async () => ({ ExitCode: 0 })
+        })
+        .mockResolvedValueOnce({
+          start: async () => ({
+            on(event: string, cb: (d?: Buffer) => void) {
+              if (event === 'data') setImmediate(() => cb(Buffer.from('nothing to commit, working tree clean')))
+              if (event === 'end') setImmediate(() => cb())
+              return this
+            }
+          }),
+          inspect: async () => ({ ExitCode: 1 })
+        })
+    }
+    const { stageAndCommit } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const res = await stageAndCommit(container, '/workspace/r', {
+      subject: 's', body: '', name: 'n', email: 'e'
+    })
+    expect(res.ok).toBe(false)
+    expect(res.code).toBe(1)
+    expect(res.stdout).toMatch(/nothing to commit/i)
+  })
+})
