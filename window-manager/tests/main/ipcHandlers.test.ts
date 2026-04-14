@@ -31,7 +31,8 @@ vi.mock('../../src/main/projectService', () => ({
 
 vi.mock('../../src/main/gitOps', () => ({
   getCurrentBranch: vi.fn(),
-  stageAndCommit: vi.fn()
+  stageAndCommit: vi.fn(),
+  push: vi.fn()
 }))
 
 vi.mock('../../src/main/settingsService', () => ({
@@ -70,7 +71,7 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
-import { getCurrentBranch, stageAndCommit } from '../../src/main/gitOps'
+import { getCurrentBranch, stageAndCommit, push } from '../../src/main/gitOps'
 import { getGitHubPat } from '../../src/main/settingsService'
 import { getIdentity } from '../../src/main/githubIdentity'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
@@ -257,5 +258,82 @@ describe('registerIpcHandlers', () => {
     expect(result.ok).toBe(false)
     expect(result.code).toBe(1)
     expect(result.stdout).toMatch(/nothing to commit/i)
+  })
+
+  it('registers git:push handler that calls push with the resolved branch + gitUrl', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
+    vi.mocked(getCurrentBranch).mockResolvedValue('my-feature')
+    vi.mocked(push).mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: '',
+      stderr: ''
+    })
+
+    const result = await getHandler('git:push')({}, 7)
+
+    expect(getCurrentBranch).toHaveBeenCalledWith(mockContainer, '/workspace/my-repo')
+    expect(push).toHaveBeenCalledWith(
+      mockContainer,
+      '/workspace/my-repo',
+      'my-feature',
+      'git@github.com:org/my-repo.git',
+      'my-pat'
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('git:push throws when PAT is not configured', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue(null)
+    await expect(getHandler('git:push')({}, 7)).rejects.toThrow(/pat not configured/i)
+  })
+
+  it('git:push throws when the window is not found', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue(undefined)
+    await expect(getHandler('git:push')({}, 9999)).rejects.toThrow(/window not found/i)
+  })
+
+  it('git:push throws on detached HEAD', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
+    vi.mocked(getCurrentBranch).mockResolvedValue('HEAD')
+    await expect(getHandler('git:push')({}, 7)).rejects.toThrow(/detached HEAD|branch unknown/i)
+  })
+
+  it('git:push throws when the branch is empty', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
+    vi.mocked(getCurrentBranch).mockResolvedValue('')
+    await expect(getHandler('git:push')({}, 7)).rejects.toThrow(/detached HEAD|branch unknown/i)
+  })
+
+  it('git:push passes push failures through (ok=false)', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
+    vi.mocked(getCurrentBranch).mockResolvedValue('my-feature')
+    vi.mocked(push).mockResolvedValue({
+      ok: false,
+      code: 1,
+      stdout: '! [rejected] non-fast-forward',
+      stderr: ''
+    })
+    const result = await getHandler('git:push')({}, 7)
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toMatch(/non-fast-forward/)
   })
 })

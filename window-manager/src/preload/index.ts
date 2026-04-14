@@ -20,6 +20,7 @@ contextBridge.exposeInMainWorld('api', {
   getCurrentBranch: (windowId: number) => ipcRenderer.invoke('git:current-branch', windowId),
   commit: (windowId: number, payload: { subject: string; body?: string }) =>
     ipcRenderer.invoke('git:commit', windowId, payload),
+  push: (windowId: number) => ipcRenderer.invoke('git:push', windowId),
 
   // Settings API
   getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),

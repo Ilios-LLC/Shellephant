@@ -14,7 +14,7 @@ import {
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 
@@ -79,6 +79,17 @@ export function registerIpcHandlers(): void {
       }
     }
   )
+
+  ipcMain.handle('git:push', async (_, windowId: number) => {
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    const ctx = resolveWindowGitContext(windowId)
+    const branch = await getCurrentBranch(ctx.container, ctx.clonePath)
+    if (!branch || branch === 'HEAD') {
+      throw new Error('Cannot push: detached HEAD or branch unknown')
+    }
+    return gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+  })
 
   // Settings handlers
   ipcMain.handle('settings:get-github-pat-status', () => getGitHubPatStatus())
