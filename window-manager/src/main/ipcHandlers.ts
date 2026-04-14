@@ -42,17 +42,13 @@ function resolveWindowGitContext(windowId: number): WindowGitContext {
 
 export function registerIpcHandlers(): void {
   // Project handlers
-  ipcMain.handle('project:create', (_, name: string, gitUrl: string) =>
-    createProject(name, gitUrl)
-  )
+  ipcMain.handle('project:create', (_, name: string, gitUrl: string) => createProject(name, gitUrl))
   ipcMain.handle('project:list', () => listProjects())
   ipcMain.handle('project:delete', (_, id: number) => deleteProject(id))
 
   // Window handlers
   ipcMain.handle('window:create', (event, name: string, projectId: number) =>
-    createWindow(name, projectId, (step) =>
-      event.sender.send('window:create-progress', step)
-    )
+    createWindow(name, projectId, (step) => event.sender.send('window:create-progress', step))
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
@@ -105,14 +101,11 @@ export function registerIpcHandlers(): void {
   })
 
   // Terminal handlers
-  ipcMain.handle(
-    'terminal:open',
-    (event, containerId: string, cols: number, rows: number) => {
-      const win = BrowserWindow.fromWebContents(event.sender)
-      if (!win) throw new Error('No window found for terminal:open')
-      return openTerminal(containerId, win, cols, rows)
-    }
-  )
+  ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win) throw new Error('No window found for terminal:open')
+    return openTerminal(containerId, win, cols, rows)
+  })
   ipcMain.on('terminal:input', (_, containerId: string, data: string) =>
     writeInput(containerId, data)
   )

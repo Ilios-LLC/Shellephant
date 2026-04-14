@@ -108,11 +108,7 @@
     commitDisabled={commitBusy}
   />
   {#if commitOpen}
-    <CommitModal
-      onSubmit={runCommit}
-      onCancel={() => (commitOpen = false)}
-      busy={commitBusy}
-    />
+    <CommitModal onSubmit={runCommit} onCancel={() => (commitOpen = false)} busy={commitBusy} />
   {/if}
 </section>
 

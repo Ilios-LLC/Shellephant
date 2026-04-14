@@ -39,9 +39,15 @@
     font-size: 0.82rem;
     color: var(--fg-0);
   }
-  .toast.success { border-left-color: var(--success, #4ade80); }
-  .toast.error { border-left-color: var(--danger, #f87171); }
-  .title { font-weight: 600; }
+  .toast.success {
+    border-left-color: var(--success, #4ade80);
+  }
+  .toast.error {
+    border-left-color: var(--danger, #f87171);
+  }
+  .title {
+    font-weight: 600;
+  }
   .body {
     font-family: var(--font-mono);
     font-size: 0.75rem;

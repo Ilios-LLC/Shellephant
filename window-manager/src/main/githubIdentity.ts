@@ -24,9 +24,7 @@ export async function getIdentity(pat: string): Promise<GitHubIdentity> {
     }
   })
   if (!res.ok) {
-    throw new Error(
-      `GitHub /user returned ${res.status} ${res.statusText ?? ''}`.trim()
-    )
+    throw new Error(`GitHub /user returned ${res.status} ${res.statusText ?? ''}`.trim())
   }
   const body = (await res.json()) as {
     id: number
