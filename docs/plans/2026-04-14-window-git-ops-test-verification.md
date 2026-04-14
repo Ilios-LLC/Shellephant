@@ -32,3 +32,29 @@
 **Result:** Pending manual UI smoke.
 
 ---
+
+## Phase 2: Bottom detail pane + branch polling
+
+**Verification performed:** 2026-04-14
+**Commits covered:** `5955e4f` (git:current-branch IPC + docker.ts extract) → `150c2ac` (prettier autofix)
+
+**Automated checks (controller-run):**
+
+- `npm run test` — all passing.
+  - `test:main`: 11 files, 138 tests (added 2 for `git:current-branch` handler: happy path + window-not-found).
+  - `test:renderer`: 11 files, 66 tests (added 8 for `WindowDetailPane`: labels, initial poll, interval tick, error tolerance, button defaults, onCommit + onPush callbacks, disabled pass-through).
+- `npm run typecheck` — clean.
+- Phase 2 files pass `eslint --max-warnings=0` after prettier autofix (`150c2ac`).
+
+**Manual UI smoke checklist (user to complete):**
+
+- [ ] `npm run rebuild && npm run dev` (native binding flip).
+- [ ] Open a window. Bottom pane appears under the terminal showing: window name, project name, current branch (the slug), status `running`.
+- [ ] Commit + Push buttons visible and **disabled** (default for Phase 2).
+- [ ] In the terminal: `cd /workspace/<repo> && git checkout -b scratch`. Within ~5 s, the pane branch field updates to `scratch`.
+- [ ] Stop the container externally (`docker stop <id>`). Branch polling errors are swallowed — the pane keeps the last-known branch rather than flickering to `…`.
+- [ ] Select a different window and return. Pane re-mounts cleanly (no ghost intervals in DevTools, no console errors).
+
+**Result:** Pending manual UI smoke.
+
+---
