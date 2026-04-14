@@ -5,6 +5,8 @@
   import { WebLinksAddon } from '@xterm/addon-web-links'
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
+  import CommitModal from './CommitModal.svelte'
+  import { pushToast } from '../lib/toasts'
 
   interface Props {
     win: WindowRecord
@@ -16,6 +18,35 @@
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
   let resizeObserver: ResizeObserver | undefined
+
+  let commitOpen = $state(false)
+  let commitBusy = $state(false)
+
+  async function runCommit(v: { subject: string; body: string }): Promise<void> {
+    commitBusy = true
+    try {
+      const res = await window.api.commit(win.id, {
+        subject: v.subject,
+        body: v.body || undefined
+      })
+      if (res.ok) {
+        pushToast({ level: 'success', title: 'Committed', body: res.stdout })
+      } else {
+        const output = `${res.stdout}\n${res.stderr}`.trim()
+        const nothing = /nothing to commit/i.test(output)
+        pushToast({
+          level: nothing ? 'success' : 'error',
+          title: nothing ? 'Nothing to commit' : 'Commit failed',
+          body: nothing ? undefined : output
+        })
+      }
+      commitOpen = false
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Commit error', body: (err as Error).message })
+    } finally {
+      commitBusy = false
+    }
+  }
 
   onMount(() => {
     term = new XTerm({
@@ -70,7 +101,19 @@
 
 <section class="terminal-host">
   <div class="terminal-body" bind:this={terminalEl}></div>
-  <WindowDetailPane {win} {project} />
+  <WindowDetailPane
+    {win}
+    {project}
+    onCommit={() => (commitOpen = true)}
+    commitDisabled={commitBusy}
+  />
+  {#if commitOpen}
+    <CommitModal
+      onSubmit={runCommit}
+      onCancel={() => (commitOpen = false)}
+      busy={commitBusy}
+    />
+  {/if}
 </section>
 
 <style>
