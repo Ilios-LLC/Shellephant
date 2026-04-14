@@ -5,6 +5,7 @@ import type { WindowRecord } from '../../src/renderer/src/types'
 const mockOpen = vi.fn()
 const mockWrite = vi.fn()
 const mockDispose = vi.fn()
+const mockReset = vi.fn()
 const mockOnData = vi.fn()
 const mockOnResize = vi.fn()
 const mockLoadAddon = vi.fn()
@@ -15,9 +16,12 @@ vi.mock('@xterm/xterm', () => {
     open = mockOpen
     write = mockWrite
     dispose = mockDispose
+    reset = mockReset
     onData = mockOnData
     onResize = mockOnResize
     loadAddon = mockLoadAddon
+    cols = 120
+    rows = 40
   }
   return { Terminal }
 })
@@ -102,10 +106,14 @@ describe('TerminalHost', () => {
     expect(hasWebLinks).toBe(true)
   })
 
-  it('calls api.openTerminal with container_id on mount', async () => {
+  it('calls api.openTerminal with container_id and measured size on mount', async () => {
     render(TerminalHost, { win: mockWindow })
     await vi.waitFor(() => {
-      expect(mockApi.openTerminal).toHaveBeenCalledWith('container123abc')
+      expect(mockApi.openTerminal).toHaveBeenCalledWith(
+        'container123abc',
+        expect.any(Number),
+        expect.any(Number)
+      )
     })
   })
 

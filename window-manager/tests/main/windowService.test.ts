@@ -26,8 +26,23 @@ vi.mock('dockerode', () => ({
   })
 }))
 
+const mockExecFile = vi.fn((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+  cb(null, '', '')
+)
 vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', ''))
+  execFile: (...args: any[]) => mockExecFile(...(args as [string, string[], object, Function]))
+}))
+
+const mockRm = vi.fn().mockResolvedValue(undefined)
+vi.mock('fs/promises', () => ({
+  rm: (...args: any[]) => mockRm(...args)
+}))
+
+const mockGetGitHubPat = vi.fn<[], string | null>()
+const mockGetClaudeToken = vi.fn<[], string | null>()
+vi.mock('../../src/main/settingsService', () => ({
+  getGitHubPat: () => mockGetGitHubPat(),
+  getClaudeToken: () => mockGetClaudeToken()
 }))
 
 const { mockCloseTerminalSessionFor } = vi.hoisted(() => ({
@@ -45,13 +60,25 @@ import {
   reconcileWindows,
   __resetStatusMapForTests
 } from '../../src/main/windowService'
-import { createProject } from '../../src/main/projectService'
+
+function seedProject(gitUrl: string, name = 'test'): number {
+  const result = getDb()
+    .prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
+    .run(name, gitUrl)
+  return result.lastInsertRowid as number
+}
 
 describe('windowService', () => {
   beforeEach(() => {
     initDb(':memory:')
     __resetStatusMapForTests()
     vi.clearAllMocks()
+    mockGetGitHubPat.mockReturnValue('test-token')
+    mockGetClaudeToken.mockReturnValue('claude-oauth-token')
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', '')
+    )
+    mockRm.mockResolvedValue(undefined)
     mockStart.mockResolvedValue(undefined)
     mockStop.mockResolvedValue(undefined)
     mockInspect.mockResolvedValue({ State: { Status: 'running' } })
@@ -67,46 +94,151 @@ describe('windowService', () => {
 
   describe('createWindow', () => {
     it('returns a record with project_id and container_id', async () => {
-      const project = await createProject('test', 'git@github.com:org/repo.git')
-      const result = await createWindow('my-window', project.id)
+      const projectId = seedProject('git@github.com:org/repo.git')
+      const result = await createWindow('my-window', projectId)
       expect(result.name).toBe('my-window')
-      expect(result.project_id).toBe(project.id)
+      expect(result.project_id).toBe(projectId)
       expect(result.container_id).toBe('mock-container-abc123')
       expect(result.id).toBeTypeOf('number')
       expect(result.created_at).toBeTypeOf('string')
     })
 
     it('creates a Docker container from the cc image', async () => {
-      const project = await createProject('test', 'git@github.com:org/repo.git')
-      await createWindow('test', project.id)
+      const projectId = seedProject('git@github.com:org/repo.git')
+      await createWindow('test', projectId)
       expect(mockCreateContainer).toHaveBeenCalledWith(expect.objectContaining({ Image: 'cc' }))
     })
 
+    it('passes the Claude token to the container as CLAUDE_CODE_OAUTH_TOKEN', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      await createWindow('test', projectId)
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({ Env: ['CLAUDE_CODE_OAUTH_TOKEN=claude-oauth-token'] })
+      )
+    })
+
     it('starts the container', async () => {
-      const project = await createProject('test', 'git@github.com:org/repo.git')
-      await createWindow('test', project.id)
+      const projectId = seedProject('git@github.com:org/repo.git')
+      await createWindow('test', projectId)
       expect(mockStart).toHaveBeenCalled()
     })
 
-    it('execs git clone inside the container', async () => {
-      const project = await createProject('test', 'git@github.com:org/my-repo.git')
-      await createWindow('test', project.id)
-      expect(mockContainerExec).toHaveBeenCalledWith(
-        expect.objectContaining({
-          Cmd: ['git', 'clone', 'git@github.com:org/my-repo.git', '/workspace/my-repo']
-        })
+    it('clones on the host with the PAT over HTTPS', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test', projectId)
+
+      const cloneCall = mockExecFile.mock.calls.find(
+        (c) => c[0] === 'git' && Array.isArray(c[1]) && c[1][0] === 'clone'
+      )
+      expect(cloneCall).toBeDefined()
+      expect(cloneCall![1][1]).toBe('https://test-token@github.com/org/my-repo.git')
+      // tempDir is git's last positional arg
+      expect(cloneCall![1][2]).toMatch(/cw-clone-/)
+    })
+
+    it('rewrites origin to the SSH URL after clone (no PAT in .git/config)', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test', projectId)
+
+      const setUrl = mockExecFile.mock.calls.find(
+        (c) =>
+          c[0] === 'git' &&
+          Array.isArray(c[1]) &&
+          c[1].includes('remote') &&
+          c[1].includes('set-url')
+      )
+      expect(setUrl).toBeDefined()
+      expect(setUrl![1]).toContain('origin')
+      expect(setUrl![1]).toContain('git@github.com:org/my-repo.git')
+    })
+
+    it('copies the working tree into the container via docker cp', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test', projectId)
+
+      const cpCall = mockExecFile.mock.calls.find(
+        (c) => c[0] === 'docker' && Array.isArray(c[1]) && c[1][0] === 'cp'
+      )
+      expect(cpCall).toBeDefined()
+      const [, args] = cpCall!
+      expect(args[1]).toMatch(/cw-clone-.*\/\.$/)
+      expect(args[2]).toBe('mock-container-abc123:/workspace/my-repo')
+    })
+
+    it('execs mkdir -p inside the container but never git clone', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test', projectId)
+
+      const mkdirExec = mockContainerExec.mock.calls.find(
+        (c) => Array.isArray(c[0].Cmd) && c[0].Cmd[0] === 'mkdir'
+      )
+      expect(mkdirExec).toBeDefined()
+      expect(mkdirExec![0].Cmd).toEqual(['mkdir', '-p', '/workspace/my-repo'])
+
+      const cloneExec = mockContainerExec.mock.calls.find(
+        (c) => Array.isArray(c[0].Cmd) && c[0].Cmd[0] === 'git' && c[0].Cmd[1] === 'clone'
+      )
+      expect(cloneExec).toBeUndefined()
+    })
+
+    it('never passes the PAT to any container.exec call', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test', projectId)
+
+      for (const call of mockContainerExec.mock.calls) {
+        const serialized = JSON.stringify(call[0])
+        expect(serialized).not.toContain('test-token')
+      }
+    })
+
+    it('cleans up the host temp dir even on failure', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      mockCreateContainer.mockRejectedValueOnce(new Error('docker down'))
+
+      await expect(createWindow('failing', projectId)).rejects.toThrow('docker down')
+      expect(mockRm).toHaveBeenCalledWith(
+        expect.stringMatching(/cw-clone-/),
+        expect.objectContaining({ recursive: true, force: true })
       )
     })
 
     it('persists the window to SQLite', async () => {
-      const project = await createProject('test', 'git@github.com:org/repo.git')
-      await createWindow('persisted', project.id)
+      const projectId = seedProject('git@github.com:org/repo.git')
+      await createWindow('persisted', projectId)
       expect(listWindows()).toHaveLength(1)
       expect(listWindows()[0].name).toBe('persisted')
     })
 
     it('throws if project does not exist', async () => {
       await expect(createWindow('test', 99999)).rejects.toThrow('Project not found')
+    })
+
+    it('throws when no PAT is configured', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      mockGetGitHubPat.mockReturnValue(null)
+      await expect(createWindow('no-pat', projectId)).rejects.toThrow(/PAT not configured/i)
+      expect(mockCreateContainer).not.toHaveBeenCalled()
+    })
+
+    it('throws when no Claude token is configured', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      mockGetClaudeToken.mockReturnValue(null)
+      await expect(createWindow('no-claude', projectId)).rejects.toThrow(
+        /Claude token not configured/i
+      )
+      expect(mockCreateContainer).not.toHaveBeenCalled()
+    })
+
+    it('reports progress steps in order', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      const steps: string[] = []
+      await createWindow('progress', projectId, (s) => steps.push(s))
+      expect(steps).toEqual([
+        expect.stringMatching(/clon/i),
+        expect.stringMatching(/starting/i),
+        expect.stringMatching(/copy/i),
+        expect.stringMatching(/finaliz/i)
+      ])
     })
   })
 
@@ -116,9 +248,9 @@ describe('windowService', () => {
     })
 
     it('excludes soft-deleted windows', async () => {
-      const project = await createProject('test', 'git@github.com:org/list-repo.git')
-      await createWindow('active', project.id)
-      await createWindow('to-delete', project.id)
+      const projectId = seedProject('git@github.com:org/list-repo.git')
+      await createWindow('active', projectId)
+      await createWindow('to-delete', projectId)
       const id = listWindows().find((w) => w.name === 'to-delete')!.id
       await deleteWindow(id)
       const result = listWindows()
@@ -127,11 +259,11 @@ describe('windowService', () => {
     })
 
     it('filters by projectId when provided', async () => {
-      const p1 = await createProject('proj1', 'git@github.com:org/filter-a.git')
-      const p2 = await createProject('proj2', 'git@github.com:org/filter-b.git')
-      await createWindow('win-a', p1.id)
-      await createWindow('win-b', p2.id)
-      const filtered = listWindows(p1.id)
+      const p1 = seedProject('git@github.com:org/filter-a.git', 'proj1')
+      const p2 = seedProject('git@github.com:org/filter-b.git', 'proj2')
+      await createWindow('win-a', p1)
+      await createWindow('win-b', p2)
+      const filtered = listWindows(p1)
       expect(filtered).toHaveLength(1)
       expect(filtered[0].name).toBe('win-a')
     })
@@ -139,9 +271,8 @@ describe('windowService', () => {
 
   describe('deleteWindow', () => {
     let projectId: number
-    beforeEach(async () => {
-      const project = await createProject('del-test', 'git@github.com:org/del-repo.git')
-      projectId = project.id
+    beforeEach(() => {
+      projectId = seedProject('git@github.com:org/del-repo.git', 'del-test')
     })
 
     it('sets deleted_at in the database', async () => {
@@ -201,9 +332,8 @@ describe('windowService', () => {
 
   describe('status field', () => {
     let projectId: number
-    beforeEach(async () => {
-      const project = await createProject('status-test', 'git@github.com:org/status-repo.git')
-      projectId = project.id
+    beforeEach(() => {
+      projectId = seedProject('git@github.com:org/status-repo.git', 'status-test')
     })
 
     it('createWindow returns status "running"', async () => {
@@ -229,9 +359,8 @@ describe('windowService', () => {
 
   describe('reconcileWindows', () => {
     let projectId: number
-    beforeEach(async () => {
-      const project = await createProject('recon-test', 'git@github.com:org/recon-repo.git')
-      projectId = project.id
+    beforeEach(() => {
+      projectId = seedProject('git@github.com:org/recon-repo.git', 'recon-test')
     })
 
     it('marks running containers as running', async () => {

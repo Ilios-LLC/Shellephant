@@ -94,9 +94,19 @@ describe('registerIpcHandlers', () => {
       status: 'running' as const
     }
     vi.mocked(createWindow).mockResolvedValue(record)
-    const result = await getHandler('window:create')({}, 'test', 1)
-    expect(createWindow).toHaveBeenCalledWith('test', 1)
+    const fakeSender = { send: vi.fn() }
+    const result = await getHandler('window:create')(
+      { sender: fakeSender },
+      'test',
+      1
+    )
+    expect(createWindow).toHaveBeenCalledWith('test', 1, expect.any(Function))
     expect(result).toEqual(record)
+
+    // The progress callback should route to the event's sender.
+    const progressCb = vi.mocked(createWindow).mock.calls[0][2] as (s: string) => void
+    progressCb('Cloning…')
+    expect(fakeSender.send).toHaveBeenCalledWith('window:create-progress', 'Cloning…')
   })
 
   it('registers window:list handler that calls listWindows', async () => {
@@ -118,8 +128,8 @@ describe('registerIpcHandlers', () => {
   it('registers terminal:open handler that calls openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
-    await getHandler('terminal:open')({ sender: {} }, 'container-abc')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin)
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40)
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40)
   })
 
   it('registers terminal:input listener that calls writeInput', () => {

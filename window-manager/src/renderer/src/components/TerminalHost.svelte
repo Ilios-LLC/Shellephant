@@ -34,11 +34,14 @@
 
     term.open(terminalEl)
     fitAddon.fit()
+    // Clear any mode/charset state from xterm's own boot sequence so the
+    // first thing the remote shell paints starts from a known blank slate.
+    term.reset()
 
     resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(terminalEl)
 
-    window.api.openTerminal(win.container_id)
+    window.api.openTerminal(win.container_id, term.cols, term.rows)
 
     window.api.onTerminalData((containerId: string, data: string) => {
       if (containerId === win.container_id) {

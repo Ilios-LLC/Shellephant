@@ -1,4 +1,4 @@
-FROM node:20
+FROM node:24
 
 ARG TZ
 ENV TZ="$TZ"
@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   jq \
   nano \
   vim \
+  tmux \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install Go
@@ -99,6 +100,9 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
 COPY CLAUDE.md /home/node/.claude/
+
+# tmux config: no status bar, truecolor, mouse on
+COPY --chown=node:node tmux.conf /home/node/.tmux.conf
 
 # Pre-seed Claude Code config so first run skips onboarding and has plugins pre-enabled.
 COPY --chown=node:node claude-settings.json /home/node/.claude/settings.json

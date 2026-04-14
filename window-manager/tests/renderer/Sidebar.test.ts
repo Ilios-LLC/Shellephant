@@ -14,30 +14,46 @@ function makeProject(id: number, name: string): ProjectRecord {
 
 describe('Sidebar', () => {
   let onProjectSelect: ReturnType<typeof vi.fn>
-  let onProjectCreated: ReturnType<typeof vi.fn>
+  let onRequestNewProject: ReturnType<typeof vi.fn>
+  let onRequestSettings: ReturnType<typeof vi.fn>
+  let onRequestAssetTesting: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     onProjectSelect = vi.fn()
-    onProjectCreated = vi.fn()
+    onRequestNewProject = vi.fn()
+    onRequestSettings = vi.fn()
+    onRequestAssetTesting = vi.fn()
   })
 
   afterEach(() => cleanup())
 
+  function baseProps(overrides: Record<string, unknown> = {}) {
+    return {
+      projects: [] as ProjectRecord[],
+      selectedProjectId: null as number | null,
+      onProjectSelect,
+      onRequestNewProject,
+      onRequestSettings,
+      onRequestAssetTesting,
+      assetTestingActive: false,
+      ...overrides
+    }
+  }
+
   it('renders an item per project', () => {
-    const projects = [makeProject(1, 'alpha'), makeProject(2, 'beta')]
-    render(Sidebar, { projects, selectedProjectId: null, onProjectSelect, onProjectCreated })
+    render(Sidebar, baseProps({ projects: [makeProject(1, 'alpha'), makeProject(2, 'beta')] }))
     expect(screen.getByText('alpha')).toBeDefined()
     expect(screen.getByText('beta')).toBeDefined()
   })
 
   it('shows empty hint when projects is empty', () => {
-    render(Sidebar, { projects: [], selectedProjectId: null, onProjectSelect, onProjectCreated })
+    render(Sidebar, baseProps())
     expect(screen.getByText(/no projects/i)).toBeDefined()
   })
 
   it('clicking a project forwards to onProjectSelect', async () => {
     const p = makeProject(3, 'gamma')
-    render(Sidebar, { projects: [p], selectedProjectId: null, onProjectSelect, onProjectCreated })
+    render(Sidebar, baseProps({ projects: [p] }))
     await fireEvent.click(screen.getByText('gamma'))
     expect(onProjectSelect).toHaveBeenCalledWith(p)
   })
@@ -45,14 +61,33 @@ describe('Sidebar', () => {
   it('passes selected state to the correct item', () => {
     const a = makeProject(1, 'a')
     const b = makeProject(2, 'b')
-    const { container } = render(Sidebar, {
-      projects: [a, b],
-      selectedProjectId: 2,
-      onProjectSelect,
-      onProjectCreated
-    })
+    const { container } = render(Sidebar, baseProps({ projects: [a, b], selectedProjectId: 2 }))
     const items = container.querySelectorAll('[data-testid="project-item"]')
     expect(items[0].classList.contains('selected')).toBe(false)
     expect(items[1].classList.contains('selected')).toBe(true)
+  })
+
+  it('clicking the new-project button calls onRequestNewProject', async () => {
+    render(Sidebar, baseProps())
+    await fireEvent.click(screen.getByRole('button', { name: /new project/i }))
+    expect(onRequestNewProject).toHaveBeenCalled()
+  })
+
+  it('clicking the settings button calls onRequestSettings', async () => {
+    render(Sidebar, baseProps())
+    await fireEvent.click(screen.getByRole('button', { name: /settings/i }))
+    expect(onRequestSettings).toHaveBeenCalled()
+  })
+
+  it('clicking the asset testing tab calls onRequestAssetTesting', async () => {
+    render(Sidebar, baseProps())
+    await fireEvent.click(screen.getByRole('button', { name: /asset testing/i }))
+    expect(onRequestAssetTesting).toHaveBeenCalled()
+  })
+
+  it('marks the asset testing tab active when assetTestingActive=true', () => {
+    render(Sidebar, baseProps({ assetTestingActive: true }))
+    const btn = screen.getByRole('button', { name: /asset testing/i })
+    expect(btn.classList.contains('active')).toBe(true)
   })
 })

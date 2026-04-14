@@ -6,37 +6,26 @@
     project: ProjectRecord
     windows: WindowRecord[]
     onWindowSelect: (win: WindowRecord) => void
-    onWindowCreated: (win: WindowRecord) => void
+    onRequestNewWindow: () => void
     onProjectDeleted: (id: number) => void
+    onWindowDeleted: (id: number) => void
   }
 
-  let { project, windows, onWindowSelect, onWindowCreated, onProjectDeleted }: Props = $props()
+  let {
+    project,
+    windows,
+    onWindowSelect,
+    onRequestNewWindow,
+    onProjectDeleted,
+    onWindowDeleted
+  }: Props = $props()
 
-  let windowName = $state('')
-  let creating = $state(false)
-  let createError = $state('')
   let confirmingDelete = $state(false)
   let deleteTimeout: ReturnType<typeof setTimeout> | null = null
 
-  async function handleCreateWindow(): Promise<void> {
-    const trimmed = windowName.trim()
-    if (!trimmed || creating) return
-    creating = true
-    createError = ''
-    try {
-      const record = await window.api.createWindow(trimmed, project.id)
-      windowName = ''
-      onWindowCreated(record)
-    } catch (err) {
-      createError = err instanceof Error ? err.message : String(err)
-    } finally {
-      creating = false
-    }
-  }
-
-  function handleKey(e: KeyboardEvent): void {
-    if (e.key === 'Enter') handleCreateWindow()
-  }
+  let confirmingWindowId = $state<number | null>(null)
+  let winDeleteTimeout: ReturnType<typeof setTimeout> | null = null
+  let deletingWindowId = $state<number | null>(null)
 
   function handleDeleteClick(): void {
     confirmingDelete = true
@@ -58,6 +47,32 @@
     if (deleteTimeout) clearTimeout(deleteTimeout)
     confirmingDelete = false
   }
+
+  function armWindowDelete(id: number): void {
+    confirmingWindowId = id
+    if (winDeleteTimeout) clearTimeout(winDeleteTimeout)
+    winDeleteTimeout = setTimeout(() => {
+      confirmingWindowId = null
+      winDeleteTimeout = null
+    }, 3000)
+  }
+
+  async function handleWindowDelete(id: number): Promise<void> {
+    if (deletingWindowId !== null) return
+    if (confirmingWindowId !== id) {
+      armWindowDelete(id)
+      return
+    }
+    if (winDeleteTimeout) clearTimeout(winDeleteTimeout)
+    confirmingWindowId = null
+    deletingWindowId = id
+    try {
+      await window.api.deleteWindow(id)
+      onWindowDeleted(id)
+    } finally {
+      deletingWindowId = null
+    }
+  }
 </script>
 
 <div class="project-view">
@@ -77,42 +92,55 @@
   </header>
 
   <section class="windows-section">
-    <h3 class="section-title">Windows</h3>
-
-    <div class="create-window-row">
-      <input
-        type="text"
-        placeholder="window name"
-        bind:value={windowName}
-        disabled={creating}
-        onkeydown={handleKey}
-      />
+    <div class="section-header">
+      <h3 class="section-title">Windows</h3>
       <button
         type="button"
-        class="create-btn"
-        aria-label="create window"
-        onclick={handleCreateWindow}
-        disabled={!windowName.trim() || creating}>Create</button
+        class="new-window-btn"
+        aria-label="new window"
+        onclick={onRequestNewWindow}>+ New Window</button
       >
     </div>
-    {#if createError}
-      <p class="error">{createError}</p>
-    {/if}
 
     {#if windows.length === 0}
-      <p class="empty-hint">No windows yet. Create one above.</p>
+      <div class="empty-windows">
+        <p class="empty-hint">No windows yet.</p>
+        <button type="button" class="empty-cta" onclick={onRequestNewWindow}
+          >Create your first window</button
+        >
+      </div>
     {:else}
       <div class="window-list">
         {#each windows as win (win.id)}
-          <button
-            type="button"
-            class="window-item"
-            onclick={() => onWindowSelect(win)}
-          >
-            <span class="status-dot status-{win.status}"></span>
-            <span class="window-name">{win.name}</span>
-            <span class="container-id">{win.container_id.slice(0, 12)}</span>
-          </button>
+          <div class="window-row">
+            <button
+              type="button"
+              class="window-item"
+              onclick={() => onWindowSelect(win)}
+              disabled={deletingWindowId === win.id}
+            >
+              <span class="status-dot status-{win.status}"></span>
+              <span class="window-name">{win.name}</span>
+              <span class="container-id">{win.container_id.slice(0, 12)}</span>
+            </button>
+            <button
+              type="button"
+              class="window-delete"
+              class:confirming={confirmingWindowId === win.id}
+              aria-label={confirmingWindowId === win.id ? `confirm delete ${win.name}` : `delete ${win.name}`}
+              title={confirmingWindowId === win.id ? 'Click again to confirm' : 'Delete window'}
+              onclick={() => handleWindowDelete(win.id)}
+              disabled={deletingWindowId === win.id}
+            >
+              {#if deletingWindowId === win.id}
+                …
+              {:else if confirmingWindowId === win.id}
+                Delete?
+              {:else}
+                ×
+              {/if}
+            </button>
+          </div>
         {/each}
       </div>
     {/if}
@@ -189,42 +217,26 @@
     padding: 1rem 1.25rem;
   }
 
+  .section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 0.75rem;
+  }
+
   .section-title {
     font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg-2);
-    margin: 0 0 0.75rem;
+    margin: 0;
   }
 
-  .create-window-row {
-    display: flex;
-    gap: 0.35rem;
-    margin-bottom: 0.75rem;
-  }
-
-  input {
-    flex: 1;
-    min-width: 0;
-    padding: 0.4rem 0.55rem;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--fg-0);
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-    outline: none;
-  }
-
-  input:focus {
-    border-color: var(--accent);
-  }
-
-  .create-btn {
+  .new-window-btn {
     font-family: var(--font-ui);
     font-size: 0.8rem;
-    padding: 0.35rem 0.65rem;
+    padding: 0.35rem 0.7rem;
     border: 1px solid var(--border);
     background: transparent;
     color: var(--fg-1);
@@ -232,30 +244,50 @@
     cursor: pointer;
   }
 
-  .create-btn:hover:not(:disabled) {
+  .new-window-btn:hover {
     color: var(--accent-hi);
     border-color: var(--accent);
   }
 
-  .create-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .error {
-    font-size: 0.72rem;
-    color: var(--danger);
-    margin: 0 0 0.5rem;
+  .empty-windows {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+    padding: 1rem 0;
   }
 
   .empty-hint {
     font-size: 0.85rem;
     color: var(--fg-2);
+    margin: 0;
+  }
+
+  .empty-cta {
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    padding: 0.45rem 0.9rem;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: white;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .empty-cta:hover {
+    background: var(--accent-hi);
+    border-color: var(--accent-hi);
   }
 
   .window-list {
     display: flex;
     flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .window-row {
+    display: flex;
+    align-items: stretch;
     gap: 0.25rem;
   }
 
@@ -272,13 +304,47 @@
     font-family: var(--font-ui);
     font-size: 0.85rem;
     text-align: left;
-    width: 100%;
+    flex: 1;
+    min-width: 0;
     transition: background 120ms ease;
   }
 
-  .window-item:hover {
+  .window-item:hover:not(:disabled) {
     background: var(--bg-2);
     color: var(--fg-0);
+  }
+
+  .window-item:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .window-delete {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    padding: 0 0.65rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg-2);
+    border-radius: 4px;
+    cursor: pointer;
+    min-width: 2rem;
+  }
+
+  .window-delete:hover:not(:disabled) {
+    color: var(--danger);
+    border-color: var(--danger);
+  }
+
+  .window-delete.confirming {
+    background: var(--danger);
+    border-color: var(--danger);
+    color: white;
+  }
+
+  .window-delete:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .status-dot {

@@ -13,6 +13,13 @@ export function initDb(dbPath: string): void {
       deleted_at DATETIME DEFAULT NULL
     )
   `)
+  // Pre-project windows tables lack project_id. Drop so the CREATE below
+  // applies the current schema. Containers are ephemeral so data loss is fine.
+  const winCols = _db.pragma('table_info(windows)') as { name: string }[]
+  if (winCols.length > 0 && !winCols.some((c) => c.name === 'project_id')) {
+    _db.exec('DROP TABLE windows')
+  }
+
   _db.exec(`
     CREATE TABLE IF NOT EXISTS windows (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,6 +28,13 @@ export function initDb(dbPath: string): void {
       container_id TEXT NOT NULL,
       created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at   DATETIME DEFAULT NULL
+    )
+  `)
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS settings (
+      key        TEXT PRIMARY KEY,
+      value      BLOB NOT NULL,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
 }

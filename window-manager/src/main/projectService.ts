@@ -2,6 +2,7 @@ import { execFile } from 'child_process'
 import { getDb } from './db'
 import { isValidSshUrl, extractRepoName, sshUrlToHttps } from './gitUrl'
 import { deleteWindow, listWindows } from './windowService'
+import { getGitHubPat, getClaudeToken } from './settingsService'
 
 export interface ProjectRecord {
   id: number
@@ -34,12 +35,14 @@ export async function createProject(
 
   const resolvedName = name.trim() || extractRepoName(gitUrl)
 
-  // Remote verification if PAT available
-  const pat = process.env.GITHUB_PAT
-  if (pat) {
-    const httpsUrl = sshUrlToHttps(gitUrl, pat)
-    await verifyRemote(httpsUrl)
+  const pat = getGitHubPat()
+  if (!pat) {
+    throw new Error('GitHub PAT not configured. Open Settings to add one.')
   }
+  if (!getClaudeToken()) {
+    throw new Error('Claude token not configured. Open Settings to add one.')
+  }
+  await verifyRemote(sshUrlToHttps(gitUrl, pat))
 
   const db = getDb()
   try {

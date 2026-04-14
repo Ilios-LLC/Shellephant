@@ -1,24 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { EventEmitter } from 'events'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 
-const { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer } = vi.hoisted(
-  () => {
-    const mockExecStart = vi.fn()
-    const mockExecResize = vi.fn().mockResolvedValue(undefined)
-    const mockExec = {
-      start: mockExecStart,
-      resize: mockExecResize
-    }
-    const mockContainerExec = vi.fn().mockResolvedValue(mockExec)
-    const mockGetContainer = vi.fn().mockReturnValue({ exec: mockContainerExec })
-    return { mockExecStart, mockExecResize, mockExec, mockContainerExec, mockGetContainer }
+const { mockSpawn, mockWrite, mockResize, mockKill, mockOnData, mockOnExit } = vi.hoisted(() => {
+  return {
+    mockSpawn: vi.fn(),
+    mockWrite: vi.fn(),
+    mockResize: vi.fn(),
+    mockKill: vi.fn(),
+    mockOnData: vi.fn(),
+    mockOnExit: vi.fn()
   }
-)
+})
 
-vi.mock('dockerode', () => ({
-  default: vi.fn(function () {
-    return { getContainer: mockGetContainer }
-  })
+vi.mock('node-pty', () => ({
+  spawn: (...args: unknown[]) => mockSpawn(...args)
 }))
 
 import {
@@ -29,17 +23,28 @@ import {
   closeTerminalSessionFor
 } from '../../src/main/terminalService'
 
-function makeFakeStream(): EventEmitter & {
-  write: ReturnType<typeof vi.fn>
-  destroy: ReturnType<typeof vi.fn>
-} {
-  const stream = new EventEmitter() as EventEmitter & {
-    write: ReturnType<typeof vi.fn>
-    destroy: ReturnType<typeof vi.fn>
+type DataHandler = (data: string) => void
+type ExitHandler = () => void
+
+function makeFakePty() {
+  let dataHandler: DataHandler | null = null
+  let exitHandler: ExitHandler | null = null
+  const pty = {
+    write: mockWrite,
+    resize: mockResize,
+    kill: mockKill,
+    onData: (cb: DataHandler) => {
+      dataHandler = cb
+      mockOnData(cb)
+    },
+    onExit: (cb: ExitHandler) => {
+      exitHandler = cb
+      mockOnExit(cb)
+    },
+    emitData: (s: string) => dataHandler?.(s),
+    emitExit: () => exitHandler?.()
   }
-  stream.write = vi.fn()
-  stream.destroy = vi.fn()
-  return stream
+  return pty
 }
 
 function makeFakeWin(isDestroyed = false) {
@@ -55,129 +60,234 @@ function makeFakeWin(isDestroyed = false) {
 describe('terminalService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockExecResize.mockResolvedValue(undefined)
+    vi.useFakeTimers()
   })
 
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  async function openAndSettle(
+    containerId: string,
+    win: ReturnType<typeof makeFakeWin>,
+    cols: number,
+    rows: number
+  ): Promise<void> {
+    await openTerminal(containerId, win as any, cols, rows)
+    await vi.advanceTimersByTimeAsync(400)
+  }
+
   describe('openTerminal', () => {
-    it('calls container.exec with tmux new-session -A -s cw and TERM=xterm-256color', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
+    it('spawns docker exec -it under a node-pty with the given cols/rows', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
-      await openTerminal('container-1', win as any)
+      await openTerminal('container-1', win as any, 120, 40)
 
-      expect(mockGetContainer).toHaveBeenCalledWith('container-1')
-      expect(mockContainerExec).toHaveBeenCalledWith(
-        expect.objectContaining({
-          Cmd: ['tmux', 'new-session', '-A', '-s', 'cw'],
-          AttachStdin: true,
-          AttachStdout: true,
-          AttachStderr: true,
-          Tty: true,
-          Env: ['TERM=xterm-256color']
-        })
-      )
-      expect(mockExecStart).toHaveBeenCalledWith({ hijack: true, stdin: true })
+      expect(mockSpawn).toHaveBeenCalledTimes(1)
+      const [program, args, opts] = mockSpawn.mock.calls[0] as [
+        string,
+        string[],
+        { cols: number; rows: number; name: string }
+      ]
+      expect(program).toBe('docker')
+      expect(args).toContain('exec')
+      expect(args).toContain('-i')
+      expect(args).toContain('-t')
+      // env flags: TERM, LANG, LC_ALL
+      expect(args).toContain('TERM=xterm-256color')
+      expect(args).toContain('LANG=C.UTF-8')
+      expect(args).toContain('LC_ALL=C.UTF-8')
+      // container id as a bare arg
+      expect(args).toContain('container-1')
+      // shell + tmux boot
+      expect(args).toContain('sh')
+      expect(args).toContain('-c')
+      expect(args.join(' ')).toMatch(/tmux -u new-session -A -s cw/)
+      // PTY size
+      expect(opts.cols).toBe(120)
+      expect(opts.rows).toBe(40)
+      expect(opts.name).toBe('xterm-256color')
     })
 
-    it('forwards stream data to win.webContents.send on terminal:data channel', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
+    it('clamps non-positive cols/rows to 1', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
-      await openTerminal('container-2', win as any)
-      stream.emit('data', Buffer.from('hello'))
+      await openTerminal('container-clamp', win as any, 0, -5)
+
+      const opts = mockSpawn.mock.calls[0][2] as { cols: number; rows: number }
+      expect(opts.cols).toBe(1)
+      expect(opts.rows).toBe(1)
+    })
+
+    it('drops pty data during the boot settle window', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openTerminal('container-boot', win as any, 80, 24)
+      // Emit gibberish during the settle — must not reach the renderer.
+      ptyInstance.emitData('jjjjjrrrr#######')
+      expect(win.webContents.send).not.toHaveBeenCalled()
+    })
+
+    it('forwards pty data after the settle window opens passthrough', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openAndSettle('container-2', win, 80, 24)
+      ptyInstance.emitData('hello')
 
       expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-2', 'hello')
     })
 
-    it('does not call webContents.send when win.isDestroyed() is true', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
+    it('kicks tmux with a size-bump SIGWINCH when the settle elapses', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openAndSettle('container-kick', win, 80, 24)
+
+      // Size-bump pattern: rows-1 then rows, same cols.
+      expect(mockResize).toHaveBeenCalledWith(80, 23)
+      expect(mockResize).toHaveBeenCalledWith(80, 24)
+    })
+
+    it('does not forward data when the window is destroyed', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin(true)
 
-      await openTerminal('container-3', win as any)
-      stream.emit('data', Buffer.from('ignored'))
+      await openAndSettle('container-destroyed', win, 80, 24)
+      ptyInstance.emitData('ignored')
 
       expect(win.webContents.send).not.toHaveBeenCalled()
     })
 
-    it('is idempotent: a second open for the same container closes the previous session first', async () => {
-      const stream1 = makeFakeStream()
-      const stream2 = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream1).mockResolvedValueOnce(stream2)
+    it('emits [detached] on pty exit and clears the session', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
-      await openTerminal('container-4', win as any)
-      await openTerminal('container-4', win as any)
+      await openAndSettle('container-exit', win, 80, 24)
+      ptyInstance.emitExit()
 
-      expect(stream1.destroy).toHaveBeenCalled()
-      expect(mockContainerExec).toHaveBeenCalledTimes(2)
+      expect(win.webContents.send).toHaveBeenCalledWith(
+        'terminal:data',
+        'container-exit',
+        '\r\n[detached]\r\n'
+      )
+
+      // After exit, writeInput is a no-op (session gone).
+      writeInput('container-exit', 'x')
+      expect(mockWrite).not.toHaveBeenCalled()
     })
 
-    it('cleans up the session when the stream ends', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
+    it('is idempotent: a second open kills the previous pty first', async () => {
+      const p1 = makeFakePty()
+      const p2 = makeFakePty()
+      mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
       const win = makeFakeWin()
 
-      await openTerminal('container-5', win as any)
-      stream.emit('end')
+      await openAndSettle('container-idem', win, 80, 24)
+      await openAndSettle('container-idem', win, 80, 24)
 
-      // Re-opening should now create a fresh exec (not close a prior session since it's gone).
-      const stream2 = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream2)
-      await openTerminal('container-5', win as any)
-      expect(mockContainerExec).toHaveBeenCalledTimes(2)
-      // The original stream should not have had destroy called twice
-      expect(stream.destroy).not.toHaveBeenCalled()
+      expect(mockKill).toHaveBeenCalledTimes(1)
+      expect(mockSpawn).toHaveBeenCalledTimes(2)
     })
   })
 
   describe('writeInput', () => {
-    it('writes input to the right session stream', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
-      await openTerminal('container-write', makeFakeWin() as any)
-      writeInput('container-write', 'ls\n')
-      expect(stream.write).toHaveBeenCalledWith('ls\n')
+    it('writes to the right session pty', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-w', makeFakeWin(), 80, 24)
+      writeInput('container-w', 'ls\n')
+      expect(mockWrite).toHaveBeenCalledWith('ls\n')
     })
 
     it('is a no-op when no session exists', () => {
       expect(() => writeInput('missing', 'x')).not.toThrow()
+      expect(mockWrite).not.toHaveBeenCalled()
     })
   })
 
   describe('resizeTerminal', () => {
-    it('calls exec.resize with cols and rows mapped to w/h', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
-      await openTerminal('container-resize', makeFakeWin() as any)
-      await resizeTerminal('container-resize', 80, 24)
-      expect(mockExecResize).toHaveBeenCalledWith({ w: 80, h: 24 })
+    it('debounces rapid resizes into a single pty.resize with the last size', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-r', makeFakeWin(), 80, 24)
+      mockResize.mockClear() // drop the boot-settle size-bump calls
+
+      resizeTerminal('container-r', 100, 30)
+      resizeTerminal('container-r', 110, 35)
+      resizeTerminal('container-r', 132, 43)
+
+      expect(mockResize).not.toHaveBeenCalled()
+      await vi.advanceTimersByTimeAsync(200)
+
+      expect(mockResize).toHaveBeenCalledTimes(1)
+      expect(mockResize).toHaveBeenCalledWith(132, 43)
+    })
+
+    it('clamps non-positive resize args to 1', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-clamp2', makeFakeWin(), 80, 24)
+      mockResize.mockClear()
+
+      resizeTerminal('container-clamp2', 0, -5)
+      await vi.advanceTimersByTimeAsync(200)
+
+      expect(mockResize).toHaveBeenCalledWith(1, 1)
+    })
+
+    it('is a no-op when no session exists', async () => {
+      resizeTerminal('missing', 80, 24)
+      await vi.advanceTimersByTimeAsync(200)
+      expect(mockResize).not.toHaveBeenCalled()
     })
   })
 
   describe('closeTerminal', () => {
-    it('destroys the stream and clears the session', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
-      await openTerminal('container-close', makeFakeWin() as any)
-      closeTerminal('container-close')
-      expect(stream.destroy).toHaveBeenCalled()
+    it('kills the pty and clears the session', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-c', makeFakeWin(), 80, 24)
+      closeTerminal('container-c')
+
+      expect(mockKill).toHaveBeenCalled()
+      writeInput('container-c', 'x')
+      expect(mockWrite).not.toHaveBeenCalled()
+    })
+
+    it('is a no-op when no session exists', () => {
+      expect(() => closeTerminal('ghost')).not.toThrow()
+      expect(mockKill).not.toHaveBeenCalled()
+    })
+
+    it('does not throw when pty.kill rejects', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-throwy', makeFakeWin(), 80, 24)
+      mockKill.mockImplementationOnce(() => {
+        throw new Error('already dead')
+      })
+      expect(() => closeTerminal('container-throwy')).not.toThrow()
     })
   })
 
   describe('closeTerminalSessionFor', () => {
     it('behaves identically to closeTerminal', async () => {
-      const stream = makeFakeStream()
-      mockExecStart.mockResolvedValueOnce(stream)
-      await openTerminal('container-csf', makeFakeWin() as any)
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      await openAndSettle('container-csf', makeFakeWin(), 80, 24)
       closeTerminalSessionFor('container-csf')
-      expect(stream.destroy).toHaveBeenCalled()
-    })
-
-    it('is a no-op when no session exists', () => {
-      expect(() => closeTerminalSessionFor('ghost')).not.toThrow()
+      expect(mockKill).toHaveBeenCalled()
     })
   })
 })

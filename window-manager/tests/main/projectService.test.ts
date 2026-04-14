@@ -13,6 +13,14 @@ vi.mock('../../src/main/windowService', () => ({
   deleteWindow: vi.fn().mockResolvedValue(undefined)
 }))
 
+// Mock settingsService so we can control token presence without electron.
+const mockGetGitHubPat = vi.fn<[], string | null>()
+const mockGetClaudeToken = vi.fn<[], string | null>()
+vi.mock('../../src/main/settingsService', () => ({
+  getGitHubPat: () => mockGetGitHubPat(),
+  getClaudeToken: () => mockGetClaudeToken()
+}))
+
 import {
   createProject,
   listProjects,
@@ -23,8 +31,12 @@ describe('projectService', () => {
   beforeEach(() => {
     initDb(':memory:')
     vi.clearAllMocks()
-    // Default: no GITHUB_PAT, skip remote validation
-    delete process.env.GITHUB_PAT
+    mockGetGitHubPat.mockReturnValue('test-token')
+    mockGetClaudeToken.mockReturnValue('claude-token')
+    // Default: git ls-remote succeeds.
+    mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
+      cb(null, '', '')
+    })
   })
 
   afterEach(() => {
@@ -57,14 +69,8 @@ describe('projectService', () => {
       ).rejects.toThrow('Project already exists')
     })
 
-    it('runs git ls-remote when GITHUB_PAT is set', async () => {
-      process.env.GITHUB_PAT = 'test-token'
-      mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
-        cb(null, '', '')
-      })
-
+    it('runs git ls-remote with an https URL built from the stored PAT', async () => {
       await createProject('verified', 'git@github.com:org/repo.git')
-
       expect(mockExecFile).toHaveBeenCalledWith(
         'git',
         ['ls-remote', '--exit-code', 'https://test-token@github.com/org/repo.git'],
@@ -74,8 +80,7 @@ describe('projectService', () => {
     })
 
     it('rejects when git ls-remote fails', async () => {
-      process.env.GITHUB_PAT = 'test-token'
-      mockExecFile.mockImplementation((_cmd: any, _args: any, _opts: any, cb: any) => {
+      mockExecFile.mockImplementationOnce((_cmd: any, _args: any, _opts: any, cb: any) => {
         cb(new Error('repository not found'), '', '')
       })
 
@@ -84,10 +89,29 @@ describe('projectService', () => {
       ).rejects.toThrow('Repository not accessible')
     })
 
-    it('skips remote check and succeeds when GITHUB_PAT is missing', async () => {
-      const result = await createProject('no-pat', 'git@github.com:org/repo.git')
-      expect(result.name).toBe('no-pat')
+    it('throws when no PAT is configured', async () => {
+      mockGetGitHubPat.mockReturnValue(null)
+      await expect(
+        createProject('no-pat', 'git@github.com:org/repo.git')
+      ).rejects.toThrow(/PAT not configured/i)
       expect(mockExecFile).not.toHaveBeenCalled()
+    })
+
+    it('does not insert a project row when PAT is missing', async () => {
+      mockGetGitHubPat.mockReturnValue(null)
+      await expect(
+        createProject('no-pat', 'git@github.com:org/repo.git')
+      ).rejects.toThrow()
+      expect(listProjects()).toHaveLength(0)
+    })
+
+    it('throws when no Claude token is configured', async () => {
+      mockGetClaudeToken.mockReturnValue(null)
+      await expect(
+        createProject('no-claude', 'git@github.com:org/repo.git')
+      ).rejects.toThrow(/Claude token not configured/i)
+      expect(mockExecFile).not.toHaveBeenCalled()
+      expect(listProjects()).toHaveLength(0)
     })
   })
 

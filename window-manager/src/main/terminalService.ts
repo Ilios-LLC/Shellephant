@@ -1,69 +1,142 @@
-import Dockerode from 'dockerode'
-import type { Duplex } from 'stream'
+import * as pty from 'node-pty'
+import type { IPty } from 'node-pty'
 import type { BrowserWindow } from 'electron'
 
-const docker = new Dockerode()
-
 interface TerminalSession {
-  stream: Duplex
-  exec: Dockerode.Exec
+  pty: IPty
+  resizeTimer: ReturnType<typeof setTimeout> | null
+  pendingResize: { cols: number; rows: number } | null
+  passthrough: boolean
 }
+
+// Collapse bursts of resize events into a single pty.resize call. During
+// initial layout / window drags ResizeObserver can fire many times; without
+// debounce each fire triggers SIGWINCH in the remote shell.
+const RESIZE_DEBOUNCE_MS = 80
+
+// Drop all output for this window after attach to swallow tmux/docker-cli
+// boot gibberish. After the settle elapses we bump the PTY size by one row
+// and back so tmux receives SIGWINCH and repaints the pane state fresh —
+// preserving the persistent-session prompt the user expects to see.
+const BOOT_SETTLE_MS = 250
 
 const sessions = new Map<string, TerminalSession>()
 
-export async function openTerminal(containerId: string, win: BrowserWindow): Promise<void> {
+export function openTerminal(
+  containerId: string,
+  win: BrowserWindow,
+  cols: number,
+  rows: number
+): Promise<void> {
   // Idempotent: tear down any existing session for this container first.
   if (sessions.has(containerId)) {
     closeTerminal(containerId)
   }
 
-  const container = docker.getContainer(containerId)
+  const safeCols = Math.max(1, Math.floor(cols))
+  const safeRows = Math.max(1, Math.floor(rows))
 
-  const exec = await container.exec({
-    Cmd: ['tmux', 'new-session', '-A', '-s', 'cw'],
-    AttachStdin: true,
-    AttachStdout: true,
-    AttachStderr: true,
-    Tty: true,
-    Env: ['TERM=xterm-256color']
+  // Spawn `docker exec -it <id> sh -c 'exec tmux -u new-session -A -s cw'`
+  // as a child under a locally-allocated PTY. node-pty creates the PTY at the
+  // exact size we specify; the docker CLI's -t inherits that geometry and
+  // forwards it to the container exec. TIOCSWINSZ propagation is correct from
+  // byte 1, so tmux/zsh paint at the right size with no race.
+  const args = [
+    'exec',
+    '-i',
+    '-t',
+    '-e',
+    'TERM=xterm-256color',
+    '-e',
+    'LANG=C.UTF-8',
+    '-e',
+    'LC_ALL=C.UTF-8',
+    containerId,
+    'sh',
+    '-c',
+    'exec tmux -u new-session -A -s cw'
+  ]
+
+  const child = pty.spawn('docker', args, {
+    name: 'xterm-256color',
+    cols: safeCols,
+    rows: safeRows,
+    cwd: process.env.HOME,
+    env: process.env as { [key: string]: string }
   })
 
-  const stream = (await exec.start({ hijack: true, stdin: true })) as unknown as Duplex
+  const session: TerminalSession = {
+    pty: child,
+    resizeTimer: null,
+    pendingResize: null,
+    passthrough: false
+  }
+  sessions.set(containerId, session)
 
-  sessions.set(containerId, { stream, exec })
-
-  stream.on('data', (chunk: Buffer) => {
+  child.onData((data: string) => {
+    if (!session.passthrough) return
     if (win.isDestroyed()) return
-    win.webContents.send('terminal:data', containerId, chunk.toString())
+    win.webContents.send('terminal:data', containerId, data)
   })
 
-  stream.on('end', () => {
+  child.onExit(() => {
     sessions.delete(containerId)
     if (!win.isDestroyed()) {
       win.webContents.send('terminal:data', containerId, '\r\n[detached]\r\n')
     }
   })
+
+  // Swallow the boot gibberish, then kick tmux with a SIGWINCH so it repaints
+  // the pane state we actually care about.
+  setTimeout(() => {
+    if (!sessions.has(containerId)) return
+    session.passthrough = true
+    try {
+      child.resize(safeCols, Math.max(1, safeRows - 1))
+      child.resize(safeCols, safeRows)
+    } catch {
+      // Session may have exited; ignore.
+    }
+  }, BOOT_SETTLE_MS)
+
+  return Promise.resolve()
 }
 
 export function writeInput(containerId: string, data: string): void {
-  sessions.get(containerId)?.stream.write(data)
+  sessions.get(containerId)?.pty.write(data)
 }
 
-export async function resizeTerminal(
-  containerId: string,
-  cols: number,
-  rows: number
-): Promise<void> {
+export function resizeTerminal(containerId: string, cols: number, rows: number): void {
   const session = sessions.get(containerId)
-  if (session) await session.exec.resize({ w: cols, h: rows })
+  if (!session) return
+  session.pendingResize = {
+    cols: Math.max(1, Math.floor(cols)),
+    rows: Math.max(1, Math.floor(rows))
+  }
+  if (session.resizeTimer) return
+  session.resizeTimer = setTimeout(() => {
+    session.resizeTimer = null
+    const pending = session.pendingResize
+    session.pendingResize = null
+    if (!pending) return
+    try {
+      session.pty.resize(pending.cols, pending.rows)
+    } catch {
+      // Session may have exited between schedule and fire; ignore.
+    }
+  }, RESIZE_DEBOUNCE_MS)
 }
 
 export function closeTerminal(containerId: string): void {
   const session = sessions.get(containerId)
-  if (session) {
-    session.stream.destroy()
-    sessions.delete(containerId)
+  if (!session) return
+  if (session.resizeTimer) clearTimeout(session.resizeTimer)
+  try {
+    session.pty.kill()
+  } catch {
+    // Already dead; ignore.
   }
+  sessions.delete(containerId)
 }
 
 export function closeTerminalSessionFor(containerId: string): void {

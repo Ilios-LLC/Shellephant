@@ -16,6 +16,11 @@ export interface WindowRecord {
   status: WindowStatus
 }
 
+export interface TokenStatus {
+  configured: boolean
+  hint: string | null
+}
+
 export interface Api {
   // Projects
   createProject: (name: string, gitUrl: string) => Promise<ProjectRecord>
@@ -26,9 +31,19 @@ export interface Api {
   createWindow: (name: string, projectId: number) => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
+  onWindowCreateProgress: (callback: (step: string) => void) => void
+  offWindowCreateProgress: () => void
+
+  // Settings
+  getGitHubPatStatus: () => Promise<TokenStatus>
+  setGitHubPat: (pat: string) => Promise<TokenStatus>
+  clearGitHubPat: () => Promise<TokenStatus>
+  getClaudeTokenStatus: () => Promise<TokenStatus>
+  setClaudeToken: (token: string) => Promise<TokenStatus>
+  clearClaudeToken: () => Promise<TokenStatus>
 
   // Terminal
-  openTerminal: (containerId: string) => Promise<void>
+  openTerminal: (containerId: string, cols: number, rows: number) => Promise<void>
   sendTerminalInput: (containerId: string, data: string) => void
   resizeTerminal: (containerId: string, cols: number, rows: number) => void
   closeTerminal: (containerId: string) => void

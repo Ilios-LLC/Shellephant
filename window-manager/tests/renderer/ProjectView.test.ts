@@ -21,15 +21,15 @@ const mockWindow: WindowRecord = {
 }
 
 describe('ProjectView', () => {
-  let mockCreateWindow: ReturnType<typeof vi.fn>
   let mockDeleteProject: ReturnType<typeof vi.fn>
+  let mockDeleteWindow: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
-    mockCreateWindow = vi.fn().mockResolvedValue(mockWindow)
     mockDeleteProject = vi.fn().mockResolvedValue(undefined)
+    mockDeleteWindow = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('api', {
-      createWindow: mockCreateWindow,
-      deleteProject: mockDeleteProject
+      deleteProject: mockDeleteProject,
+      deleteWindow: mockDeleteWindow
     })
   })
 
@@ -43,8 +43,9 @@ describe('ProjectView', () => {
       project,
       windows: [],
       onWindowSelect: vi.fn(),
-      onWindowCreated: vi.fn(),
-      onProjectDeleted: vi.fn()
+      onRequestNewWindow: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onWindowDeleted: vi.fn()
     })
     expect(screen.getByText('my-project')).toBeDefined()
     expect(screen.getByText('git@github.com:org/my-project.git')).toBeDefined()
@@ -55,8 +56,9 @@ describe('ProjectView', () => {
       project,
       windows: [mockWindow],
       onWindowSelect: vi.fn(),
-      onWindowCreated: vi.fn(),
-      onProjectDeleted: vi.fn()
+      onRequestNewWindow: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onWindowDeleted: vi.fn()
     })
     expect(screen.getByText('dev-window')).toBeDefined()
   })
@@ -66,30 +68,37 @@ describe('ProjectView', () => {
       project,
       windows: [],
       onWindowSelect: vi.fn(),
-      onWindowCreated: vi.fn(),
-      onProjectDeleted: vi.fn()
+      onRequestNewWindow: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onWindowDeleted: vi.fn()
     })
     expect(screen.getByText(/no windows/i)).toBeDefined()
   })
 
-  it('creates window with project id on form submit', async () => {
+  it('clicking the new-window button calls onRequestNewWindow', async () => {
+    const onRequestNewWindow = vi.fn()
+    render(ProjectView, {
+      project,
+      windows: [mockWindow],
+      onWindowSelect: vi.fn(),
+      onRequestNewWindow,
+      onProjectDeleted: vi.fn()
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /new window/i }))
+    expect(onRequestNewWindow).toHaveBeenCalled()
+  })
+
+  it('clicking the empty-state CTA calls onRequestNewWindow', async () => {
+    const onRequestNewWindow = vi.fn()
     render(ProjectView, {
       project,
       windows: [],
       onWindowSelect: vi.fn(),
-      onWindowCreated: vi.fn(),
+      onRequestNewWindow,
       onProjectDeleted: vi.fn()
     })
-
-    const input = screen.getByPlaceholderText('window name')
-    const button = screen.getByRole('button', { name: /create window/i })
-
-    await fireEvent.input(input, { target: { value: 'new-win' } })
-    await fireEvent.click(button)
-
-    await waitFor(() => {
-      expect(mockCreateWindow).toHaveBeenCalledWith('new-win', 1)
-    })
+    await fireEvent.click(screen.getByRole('button', { name: /create your first window/i }))
+    expect(onRequestNewWindow).toHaveBeenCalled()
   })
 
   it('calls onWindowSelect when a window is clicked', async () => {
@@ -98,10 +107,34 @@ describe('ProjectView', () => {
       project,
       windows: [mockWindow],
       onWindowSelect,
-      onWindowCreated: vi.fn(),
-      onProjectDeleted: vi.fn()
+      onRequestNewWindow: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onWindowDeleted: vi.fn()
     })
     await fireEvent.click(screen.getByText('dev-window'))
     expect(onWindowSelect).toHaveBeenCalledWith(mockWindow)
+  })
+
+  it('two-click delete: first click arms, second click calls api.deleteWindow and onWindowDeleted', async () => {
+    const onWindowDeleted = vi.fn()
+    render(ProjectView, {
+      project,
+      windows: [mockWindow],
+      onWindowSelect: vi.fn(),
+      onRequestNewWindow: vi.fn(),
+      onProjectDeleted: vi.fn(),
+      onWindowDeleted
+    })
+
+    const deleteBtn = screen.getByRole('button', { name: /delete dev-window/i })
+    await fireEvent.click(deleteBtn)
+    expect(mockDeleteWindow).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /confirm delete dev-window/i })).toBeDefined()
+
+    await fireEvent.click(screen.getByRole('button', { name: /confirm delete dev-window/i }))
+    await waitFor(() => {
+      expect(mockDeleteWindow).toHaveBeenCalledWith(mockWindow.id)
+      expect(onWindowDeleted).toHaveBeenCalledWith(mockWindow.id)
+    })
   })
 })

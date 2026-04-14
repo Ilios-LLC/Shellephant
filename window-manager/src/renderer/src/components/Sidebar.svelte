@@ -1,22 +1,64 @@
 <script lang="ts">
   import type { ProjectRecord } from '../types'
   import ProjectItem from './ProjectItem.svelte'
-  import CreateProject from './CreateProject.svelte'
 
   interface Props {
     projects: ProjectRecord[]
     selectedProjectId: number | null
     onProjectSelect: (project: ProjectRecord) => void
-    onProjectCreated: (project: ProjectRecord) => void
+    onRequestNewProject: () => void
+    onRequestSettings: () => void
+    onRequestAssetTesting: () => void
+    assetTestingActive: boolean
   }
 
-  let { projects, selectedProjectId, onProjectSelect, onProjectCreated }: Props = $props()
+  let {
+    projects,
+    selectedProjectId,
+    onProjectSelect,
+    onRequestNewProject,
+    onRequestSettings,
+    onRequestAssetTesting,
+    assetTestingActive
+  }: Props = $props()
 </script>
 
 <aside class="sidebar">
   <header class="sidebar-header">
     <h1>Projects</h1>
-    <CreateProject onCreated={onProjectCreated} />
+    <div class="header-actions">
+      <button
+        type="button"
+        class="icon-btn"
+        aria-label="settings"
+        title="Settings"
+        onclick={onRequestSettings}
+      >
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+        >
+          <circle cx="12" cy="12" r="3" />
+          <path
+            d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33h0a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51h0a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"
+          />
+        </svg>
+      </button>
+      <button
+        type="button"
+        class="icon-btn"
+        aria-label="new project"
+        title="New project"
+        onclick={onRequestNewProject}>+</button
+      >
+    </div>
   </header>
   <nav class="sidebar-list">
     {#each projects as project (project.id)}
@@ -28,8 +70,18 @@
     {/each}
   </nav>
   {#if projects.length === 0}
-    <p class="empty-hint">No projects. Click + to add one.</p>
+    <p class="empty-hint">No projects yet.</p>
   {/if}
+  <footer class="sidebar-footer">
+    <button
+      type="button"
+      class="tab-link"
+      class:active={assetTestingActive}
+      onclick={onRequestAssetTesting}
+    >
+      Asset Testing
+    </button>
+  </footer>
 </aside>
 
 <style>
@@ -60,6 +112,33 @@
     margin: 0;
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  .icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-ui);
+    font-size: 1rem;
+    line-height: 1;
+    padding: 0.2rem 0.45rem;
+    min-width: 1.6rem;
+    border: 1px solid var(--border);
+    background: transparent;
+    color: var(--fg-1);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .icon-btn:hover {
+    color: var(--accent-hi);
+    border-color: var(--accent);
+  }
+
   .sidebar-list {
     display: flex;
     flex-direction: column;
@@ -71,5 +150,37 @@
     padding: 1rem 0.85rem;
     font-size: 0.78rem;
     color: var(--fg-2);
+  }
+
+  .sidebar-footer {
+    margin-top: auto;
+    padding: 0.5rem 0.65rem;
+    border-top: 1px solid var(--border);
+  }
+
+  .tab-link {
+    width: 100%;
+    text-align: left;
+    padding: 0.45rem 0.55rem;
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: var(--fg-2);
+    cursor: pointer;
+  }
+
+  .tab-link:hover {
+    color: var(--fg-0);
+    border-color: var(--border);
+  }
+
+  .tab-link.active {
+    color: var(--accent-hi);
+    border-color: var(--accent);
+    background: rgba(139, 92, 246, 0.08);
   }
 </style>

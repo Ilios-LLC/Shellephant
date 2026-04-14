@@ -1,7 +1,16 @@
 import Dockerode from 'dockerode'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { randomUUID } from 'crypto'
+import { rm } from 'fs/promises'
+import os from 'os'
+import path from 'path'
 import { getDb } from './db'
-import { extractRepoName } from './gitUrl'
+import { extractRepoName, sshUrlToHttps } from './gitUrl'
+import { getGitHubPat, getClaudeToken } from './settingsService'
 import { closeTerminalSessionFor } from './terminalService'
+
+const execFileP = promisify(execFile)
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -27,7 +36,24 @@ function getDocker(): Dockerode {
   return _docker
 }
 
-export async function createWindow(name: string, projectId: number): Promise<WindowRecord> {
+async function cloneOnHost(sshUrl: string, pat: string): Promise<string> {
+  const dir = path.join(os.tmpdir(), `cw-clone-${randomUUID()}`)
+  const httpsUrl = sshUrlToHttps(sshUrl, pat)
+  await execFileP('git', ['clone', httpsUrl, dir], { timeout: 60_000 })
+  // Strip PAT from remote URL so it isn't embedded in .git/config.
+  await execFileP('git', ['-C', dir, 'remote', 'set-url', 'origin', sshUrl], {
+    timeout: 15_000
+  })
+  return dir
+}
+
+export type ProgressReporter = (step: string) => void
+
+export async function createWindow(
+  name: string,
+  projectId: number,
+  onProgress: ProgressReporter = () => {}
+): Promise<WindowRecord> {
   const db = getDb()
   const project = db
     .prepare('SELECT git_url FROM projects WHERE id = ? AND deleted_at IS NULL')
@@ -35,39 +61,63 @@ export async function createWindow(name: string, projectId: number): Promise<Win
 
   if (!project) throw new Error('Project not found')
 
+  const pat = getGitHubPat()
+  if (!pat) throw new Error('GitHub PAT not configured. Open Settings to add one.')
+  const claudeToken = getClaudeToken()
+  if (!claudeToken) {
+    throw new Error('Claude token not configured. Open Settings to add one.')
+  }
+
   const repoName = extractRepoName(project.git_url)
   const clonePath = `/workspace/${repoName}`
 
-  const container = await getDocker().createContainer({
-    Image: 'cc',
-    Tty: true,
-    OpenStdin: true,
-    StdinOnce: false
-  })
-  await container.start()
+  let tempDir: string | null = null
+  try {
+    onProgress('Cloning repository on host…')
+    tempDir = await cloneOnHost(project.git_url, pat)
 
-  // Clone repo inside container
-  const cloneExec = await container.exec({
-    Cmd: ['git', 'clone', project.git_url, clonePath],
-    AttachStdout: true,
-    AttachStderr: true
-  })
-  await cloneExec.start({})
+    onProgress('Starting dev container…')
+    const container = await getDocker().createContainer({
+      Image: 'cc',
+      Tty: true,
+      OpenStdin: true,
+      StdinOnce: false,
+      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
+    })
+    await container.start()
 
-  const result = db
-    .prepare('INSERT INTO windows (name, project_id, container_id) VALUES (?, ?, ?)')
-    .run(name, projectId, container.id)
+    onProgress('Copying files into container…')
+    const mkdirExec = await container.exec({
+      Cmd: ['mkdir', '-p', clonePath],
+      AttachStdout: true,
+      AttachStderr: true
+    })
+    await mkdirExec.start({})
 
-  const id = result.lastInsertRowid as number
-  statusMap.set(id, 'running')
+    await execFileP('docker', ['cp', `${tempDir}/.`, `${container.id}:${clonePath}`], {
+      timeout: 60_000
+    })
 
-  return {
-    id,
-    name,
-    project_id: projectId,
-    container_id: container.id,
-    created_at: new Date().toISOString(),
-    status: 'running' as WindowStatus
+    onProgress('Finalizing…')
+    const result = db
+      .prepare('INSERT INTO windows (name, project_id, container_id) VALUES (?, ?, ?)')
+      .run(name, projectId, container.id)
+
+    const id = result.lastInsertRowid as number
+    statusMap.set(id, 'running')
+
+    return {
+      id,
+      name,
+      project_id: projectId,
+      container_id: container.id,
+      created_at: new Date().toISOString(),
+      status: 'running' as WindowStatus
+    }
+  } finally {
+    if (tempDir) {
+      await rm(tempDir, { recursive: true, force: true }).catch(() => {})
+    }
   }
 }
 

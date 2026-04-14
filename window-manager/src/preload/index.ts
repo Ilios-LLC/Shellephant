@@ -12,9 +12,21 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('window:create', name, projectId),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
+  onWindowCreateProgress: (callback: (step: string) => void) =>
+    ipcRenderer.on('window:create-progress', (_, step: string) => callback(step)),
+  offWindowCreateProgress: () => ipcRenderer.removeAllListeners('window:create-progress'),
+
+  // Settings API
+  getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),
+  setGitHubPat: (pat: string) => ipcRenderer.invoke('settings:set-github-pat', pat),
+  clearGitHubPat: () => ipcRenderer.invoke('settings:clear-github-pat'),
+  getClaudeTokenStatus: () => ipcRenderer.invoke('settings:get-claude-token-status'),
+  setClaudeToken: (token: string) => ipcRenderer.invoke('settings:set-claude-token', token),
+  clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
 
   // Terminal API
-  openTerminal: (containerId: string) => ipcRenderer.invoke('terminal:open', containerId),
+  openTerminal: (containerId: string, cols: number, rows: number) =>
+    ipcRenderer.invoke('terminal:open', containerId, cols, rows),
   sendTerminalInput: (containerId: string, data: string) =>
     ipcRenderer.send('terminal:input', containerId, data),
   resizeTerminal: (containerId: string, cols: number, rows: number) =>
