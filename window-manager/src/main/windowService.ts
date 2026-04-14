@@ -1,16 +1,15 @@
 import Dockerode from 'dockerode'
-import { execFile } from 'child_process'
-import { promisify } from 'util'
-import { randomUUID } from 'crypto'
-import { rm } from 'fs/promises'
-import os from 'os'
-import path from 'path'
 import { getDb } from './db'
-import { extractRepoName, sshUrlToHttps } from './gitUrl'
+import { extractRepoName } from './gitUrl'
 import { getGitHubPat, getClaudeToken } from './settingsService'
 import { closeTerminalSessionFor } from './terminalService'
-
-const execFileP = promisify(execFile)
+import { toSlug } from './slug'
+import {
+  remoteBranchExists,
+  execInContainer,
+  cloneInContainer,
+  checkoutSlug
+} from './gitOps'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -36,17 +35,6 @@ function getDocker(): Dockerode {
   return _docker
 }
 
-async function cloneOnHost(sshUrl: string, pat: string): Promise<string> {
-  const dir = path.join(os.tmpdir(), `cw-clone-${randomUUID()}`)
-  const httpsUrl = sshUrlToHttps(sshUrl, pat)
-  await execFileP('git', ['clone', httpsUrl, dir], { timeout: 60_000 })
-  // Strip PAT from remote URL so it isn't embedded in .git/config.
-  await execFileP('git', ['-C', dir, 'remote', 'set-url', 'origin', sshUrl], {
-    timeout: 15_000
-  })
-  return dir
-}
-
 export type ProgressReporter = (step: string) => void
 
 export async function createWindow(
@@ -58,7 +46,6 @@ export async function createWindow(
   const project = db
     .prepare('SELECT git_url FROM projects WHERE id = ? AND deleted_at IS NULL')
     .get(projectId) as { git_url: string } | undefined
-
   if (!project) throw new Error('Project not found')
 
   const pat = getGitHubPat()
@@ -68,35 +55,33 @@ export async function createWindow(
     throw new Error('Claude token not configured. Open Settings to add one.')
   }
 
+  const slug = toSlug(name)
   const repoName = extractRepoName(project.git_url)
   const clonePath = `/workspace/${repoName}`
 
-  let tempDir: string | null = null
+  onProgress('Probing remote for branch…')
+  const remoteHasSlug = await remoteBranchExists(project.git_url, slug, pat)
+
+  onProgress('Starting dev container…')
+  const container = await getDocker().createContainer({
+    Image: 'cc',
+    Tty: true,
+    OpenStdin: true,
+    StdinOnce: false,
+    Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
+  })
+  await container.start()
+
   try {
-    onProgress('Cloning repository on host…')
-    tempDir = await cloneOnHost(project.git_url, pat)
+    onProgress('Preparing workspace…')
+    const mkdir = await execInContainer(container, ['mkdir', '-p', clonePath])
+    if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
 
-    onProgress('Starting dev container…')
-    const container = await getDocker().createContainer({
-      Image: 'cc',
-      Tty: true,
-      OpenStdin: true,
-      StdinOnce: false,
-      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
-    })
-    await container.start()
+    onProgress('Cloning repository in container…')
+    await cloneInContainer(container, project.git_url, pat, clonePath)
 
-    onProgress('Copying files into container…')
-    const mkdirExec = await container.exec({
-      Cmd: ['mkdir', '-p', clonePath],
-      AttachStdout: true,
-      AttachStderr: true
-    })
-    await mkdirExec.start({})
-
-    await execFileP('docker', ['cp', `${tempDir}/.`, `${container.id}:${clonePath}`], {
-      timeout: 60_000
-    })
+    onProgress('Checking out branch…')
+    await checkoutSlug(container, clonePath, slug, remoteHasSlug)
 
     onProgress('Finalizing…')
     const result = db
@@ -114,10 +99,9 @@ export async function createWindow(
       created_at: new Date().toISOString(),
       status: 'running' as WindowStatus
     }
-  } finally {
-    if (tempDir) {
-      await rm(tempDir, { recursive: true, force: true }).catch(() => {})
-    }
+  } catch (err) {
+    await container.stop({ t: 1 }).catch(() => {})
+    throw err
   }
 }
 

@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initDb, closeDb, getDb } from '../../src/main/db'
 
-const mockExecStart = vi.fn().mockResolvedValue({ on: vi.fn() })
-const mockExecInstance = { start: mockExecStart }
+const mockExecStart = vi.fn().mockResolvedValue({
+  on(event: string, cb: (data?: Buffer) => void) {
+    if (event === 'end') setImmediate(() => cb())
+    return this
+  }
+})
+const mockExecInspect = vi.fn().mockResolvedValue({ ExitCode: 0 })
+const mockExecInstance = { start: mockExecStart, inspect: mockExecInspect }
 const mockContainerExec = vi.fn().mockResolvedValue(mockExecInstance)
 const mockStart = vi.fn().mockResolvedValue(undefined)
 const mockStop = vi.fn().mockResolvedValue(undefined)
@@ -85,7 +91,13 @@ describe('windowService', () => {
     mockCreateContainer.mockResolvedValue(mockContainer)
     mockGetContainer.mockReturnValue(mockContainer)
     mockContainerExec.mockResolvedValue(mockExecInstance)
-    mockExecStart.mockResolvedValue({ on: vi.fn() })
+    mockExecStart.mockResolvedValue({
+      on(event: string, cb: (data?: Buffer) => void) {
+        if (event === 'end') setImmediate(() => cb())
+        return this
+      }
+    })
+    mockExecInspect.mockResolvedValue({ ExitCode: 0 })
   })
 
   afterEach(() => {
@@ -123,49 +135,22 @@ describe('windowService', () => {
       expect(mockStart).toHaveBeenCalled()
     })
 
-    it('clones on the host with the PAT over HTTPS', async () => {
-      const projectId = seedProject('git@github.com:org/my-repo.git')
-      await createWindow('test', projectId)
-
-      const cloneCall = mockExecFile.mock.calls.find(
-        (c) => c[0] === 'git' && Array.isArray(c[1]) && c[1][0] === 'clone'
-      )
-      expect(cloneCall).toBeDefined()
-      expect(cloneCall![1][1]).toBe('https://test-token@github.com/org/my-repo.git')
-      // tempDir is git's last positional arg
-      expect(cloneCall![1][2]).toMatch(/cw-clone-/)
-    })
-
     it('rewrites origin to the SSH URL after clone (no PAT in .git/config)', async () => {
       const projectId = seedProject('git@github.com:org/my-repo.git')
       await createWindow('test', projectId)
 
-      const setUrl = mockExecFile.mock.calls.find(
+      const setUrl = mockContainerExec.mock.calls.find(
         (c) =>
-          c[0] === 'git' &&
-          Array.isArray(c[1]) &&
-          c[1].includes('remote') &&
-          c[1].includes('set-url')
+          Array.isArray(c[0].Cmd) &&
+          c[0].Cmd.includes('remote') &&
+          c[0].Cmd.includes('set-url')
       )
       expect(setUrl).toBeDefined()
-      expect(setUrl![1]).toContain('origin')
-      expect(setUrl![1]).toContain('git@github.com:org/my-repo.git')
+      expect(setUrl![0].Cmd).toContain('origin')
+      expect(setUrl![0].Cmd).toContain('git@github.com:org/my-repo.git')
     })
 
-    it('copies the working tree into the container via docker cp', async () => {
-      const projectId = seedProject('git@github.com:org/my-repo.git')
-      await createWindow('test', projectId)
-
-      const cpCall = mockExecFile.mock.calls.find(
-        (c) => c[0] === 'docker' && Array.isArray(c[1]) && c[1][0] === 'cp'
-      )
-      expect(cpCall).toBeDefined()
-      const [, args] = cpCall!
-      expect(args[1]).toMatch(/cw-clone-.*\/\.$/)
-      expect(args[2]).toBe('mock-container-abc123:/workspace/my-repo')
-    })
-
-    it('execs mkdir -p inside the container but never git clone', async () => {
+    it('execs mkdir -p inside the container and then git clone', async () => {
       const projectId = seedProject('git@github.com:org/my-repo.git')
       await createWindow('test', projectId)
 
@@ -178,28 +163,111 @@ describe('windowService', () => {
       const cloneExec = mockContainerExec.mock.calls.find(
         (c) => Array.isArray(c[0].Cmd) && c[0].Cmd[0] === 'git' && c[0].Cmd[1] === 'clone'
       )
-      expect(cloneExec).toBeUndefined()
+      expect(cloneExec).toBeDefined()
     })
 
-    it('never passes the PAT to any container.exec call', async () => {
+    it('creates the clone path and clones the repo inside the container', async () => {
       const projectId = seedProject('git@github.com:org/my-repo.git')
-      await createWindow('test', projectId)
+      await createWindow('test window', projectId)
 
-      for (const call of mockContainerExec.mock.calls) {
-        const serialized = JSON.stringify(call[0])
-        expect(serialized).not.toContain('test-token')
-      }
-    })
-
-    it('cleans up the host temp dir even on failure', async () => {
-      const projectId = seedProject('git@github.com:org/my-repo.git')
-      mockCreateContainer.mockRejectedValueOnce(new Error('docker down'))
-
-      await expect(createWindow('failing', projectId)).rejects.toThrow('docker down')
-      expect(mockRm).toHaveBeenCalledWith(
-        expect.stringMatching(/cw-clone-/),
-        expect.objectContaining({ recursive: true, force: true })
+      const cloneExec = mockContainerExec.mock.calls.find(
+        (c) => Array.isArray(c[0].Cmd) && c[0].Cmd[0] === 'git' && c[0].Cmd[1] === 'clone'
       )
+      expect(cloneExec).toBeDefined()
+      expect(cloneExec![0].Cmd).toEqual([
+        'git',
+        'clone',
+        'https://test-token@github.com/org/my-repo.git',
+        '/workspace/my-repo'
+      ])
+    })
+
+    it('rewrites origin back to the SSH URL after the in-container clone', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('test window', projectId)
+
+      const setUrl = mockContainerExec.mock.calls.find(
+        (c) =>
+          Array.isArray(c[0].Cmd) &&
+          c[0].Cmd.includes('remote') &&
+          c[0].Cmd.includes('set-url')
+      )
+      expect(setUrl).toBeDefined()
+      expect(setUrl![0].Cmd).toContain('git@github.com:org/my-repo.git')
+    })
+
+    it('probes the remote for the slug branch before cloning', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      await createWindow('My Feature', projectId)
+
+      const lsRemote = mockExecFile.mock.calls.find(
+        (c) => c[0] === 'git' && Array.isArray(c[1]) && c[1][0] === 'ls-remote'
+      )
+      expect(lsRemote).toBeDefined()
+      expect(lsRemote![1]).toEqual([
+        'ls-remote',
+        '--heads',
+        'https://test-token@github.com/org/my-repo.git',
+        'my-feature'
+      ])
+    })
+
+    it('uses `checkout -b` when remote has no matching branch', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      // Default mockExecFile returns empty stdout → remoteBranchExists → false
+      await createWindow('My Feature', projectId)
+
+      const checkout = mockContainerExec.mock.calls.find(
+        (c) => Array.isArray(c[0].Cmd) && c[0].Cmd.includes('checkout')
+      )
+      expect(checkout).toBeDefined()
+      expect(checkout![0].Cmd).toEqual([
+        'git', '-C', '/workspace/my-repo', 'checkout', '-b', 'my-feature'
+      ])
+    })
+
+    it('uses plain `checkout <slug>` when remote has the branch', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      mockExecFile.mockImplementation(
+        (cmd: string, args: string[], _opts: object, cb: Function) => {
+          if (cmd === 'git' && args[0] === 'ls-remote') {
+            return cb(null, 'deadbeef\trefs/heads/my-feature\n', '')
+          }
+          return cb(null, '', '')
+        }
+      )
+      await createWindow('My Feature', projectId)
+
+      const checkout = mockContainerExec.mock.calls.find(
+        (c) => Array.isArray(c[0].Cmd) && c[0].Cmd.includes('checkout')
+      )
+      expect(checkout).toBeDefined()
+      expect(checkout![0].Cmd).toEqual([
+        'git', '-C', '/workspace/my-repo', 'checkout', 'my-feature'
+      ])
+    })
+
+    it('stops the container if the clone fails', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      // First mkdir exec succeeds, then clone exec exits non-zero.
+      let call = 0
+      mockContainerExec.mockImplementation(async () => {
+        call++
+        return {
+          start: async () => ({
+            on(event: string, cb: (d?: Buffer) => void) {
+              if (event === 'data' && call === 2) {
+                setImmediate(() => cb(Buffer.from('fatal: auth')))
+              }
+              if (event === 'end') setImmediate(() => cb())
+              return this
+            }
+          }),
+          inspect: async () => ({ ExitCode: call === 2 ? 128 : 0 })
+        }
+      })
+      await expect(createWindow('test', projectId)).rejects.toThrow()
+      expect(mockStop).toHaveBeenCalled()
     })
 
     it('persists the window to SQLite', async () => {
@@ -234,9 +302,11 @@ describe('windowService', () => {
       const steps: string[] = []
       await createWindow('progress', projectId, (s) => steps.push(s))
       expect(steps).toEqual([
-        expect.stringMatching(/clon/i),
+        expect.stringMatching(/probing/i),
         expect.stringMatching(/starting/i),
-        expect.stringMatching(/copy/i),
+        expect.stringMatching(/preparing/i),
+        expect.stringMatching(/cloning/i),
+        expect.stringMatching(/checking out/i),
         expect.stringMatching(/finaliz/i)
       ])
     })
