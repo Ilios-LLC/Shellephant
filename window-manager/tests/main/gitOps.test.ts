@@ -65,6 +65,24 @@ describe('remoteBranchExists', () => {
       'feat/x'
     ])
   })
+
+  it('scrubs the PAT from errors on ls-remote failure', async () => {
+    mockExecFile.mockImplementation(
+      (_cmd: string, _args: string[], _opts: object, cb: Function) => {
+        const err: Error & { stderr?: string } = new Error(
+          "fatal: unable to access 'https://PAT@github.com/org/repo.git/': 403"
+        )
+        err.stderr = 'remote: https://PAT@github.com/org/repo.git/'
+        cb(err)
+      }
+    )
+    await expect(
+      remoteBranchExists('git@github.com:org/repo.git', 'slug', 'PAT')
+    ).rejects.toThrow(/\*\*\*/)
+    await expect(
+      remoteBranchExists('git@github.com:org/repo.git', 'slug', 'PAT')
+    ).rejects.not.toThrow(/PAT/)
+  })
 })
 
 describe('execInContainer', () => {
@@ -110,6 +128,32 @@ describe('cloneInContainer', () => {
       'origin',
       'git@github.com:org/my-repo.git'
     ])
+  })
+
+  it('scrubs the PAT from the error message when clone fails', async () => {
+    const stdoutPayload =
+      "fatal: unable to access 'https://PAT@github.com/org/my-repo.git/': 403"
+    const container = {
+      id: 'c1',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (data?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from(stdoutPayload)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 128 })
+      })
+    }
+    await expect(
+      // @ts-expect-error mock
+      cloneInContainer(container, 'git@github.com:org/my-repo.git', 'PAT', '/workspace/my-repo')
+    ).rejects.toThrow(/\*\*\*/)
+    await expect(
+      // @ts-expect-error mock
+      cloneInContainer(container, 'git@github.com:org/my-repo.git', 'PAT', '/workspace/my-repo')
+    ).rejects.not.toThrow(/PAT/)
   })
 })
 

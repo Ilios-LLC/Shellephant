@@ -1,6 +1,7 @@
 import { execFile } from 'child_process'
 import type Dockerode from 'dockerode'
 import { sshUrlToHttps } from './gitUrl'
+import { scrubPat } from './scrub'
 
 export interface GitResult {
   ok: boolean
@@ -51,8 +52,20 @@ export async function remoteBranchExists(
       ['ls-remote', '--heads', httpsUrl, slug],
       { timeout: 15_000 },
       (err, out) => {
-        if (err) reject(err)
-        else resolve(String(out ?? ''))
+        if (err) {
+          const scrubbed = new Error(scrubPat(err.message, pat))
+          const origCode = (err as NodeJS.ErrnoException).code
+          if (origCode !== undefined) {
+            ;(scrubbed as NodeJS.ErrnoException).code = origCode
+          }
+          const origStderr = (err as Error & { stderr?: string }).stderr
+          if (origStderr !== undefined) {
+            ;(scrubbed as Error & { stderr?: string }).stderr = scrubPat(origStderr, pat)
+          }
+          reject(scrubbed)
+        } else {
+          resolve(String(out ?? ''))
+        }
       }
     )
   })
@@ -69,25 +82,32 @@ export async function cloneInContainer(
   const cloneResult = await execInContainer(container, [
     'git', 'clone', httpsUrl, clonePath
   ])
-  if (!cloneResult.ok) throw new Error(`git clone failed: ${cloneResult.stdout}`)
+  if (!cloneResult.ok) {
+    throw new Error(`git clone failed: ${scrubPat(cloneResult.stdout, pat)}`)
+  }
 
   const setUrl = await execInContainer(container, [
     'git', '-C', clonePath, 'remote', 'set-url', 'origin', sshUrl
   ])
-  if (!setUrl.ok) throw new Error(`git remote set-url failed: ${setUrl.stdout}`)
+  if (!setUrl.ok) {
+    throw new Error(`git remote set-url failed: ${scrubPat(setUrl.stdout, pat)}`)
+  }
 }
 
 export async function checkoutSlug(
   container: Container,
   clonePath: string,
   slug: string,
-  remoteHasSlug: boolean
+  remoteHasSlug: boolean,
+  pat?: string
 ): Promise<void> {
   const args = remoteHasSlug
     ? ['git', '-C', clonePath, 'checkout', slug]
     : ['git', '-C', clonePath, 'checkout', '-b', slug]
   const result = await execInContainer(container, args)
-  if (!result.ok) throw new Error(`git checkout failed: ${result.stdout}`)
+  if (!result.ok) {
+    throw new Error(`git checkout failed: ${scrubPat(result.stdout, pat)}`)
+  }
 }
 
 export async function getCurrentBranch(
