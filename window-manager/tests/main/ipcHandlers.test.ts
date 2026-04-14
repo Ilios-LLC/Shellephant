@@ -238,4 +238,24 @@ describe('registerIpcHandlers', () => {
       getHandler('git:commit')({}, 9999, { subject: 's' })
     ).rejects.toThrow(/window not found/i)
   })
+
+  it('git:commit returns ok=false unchanged when stageAndCommit fails', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
+    vi.mocked(getIdentity).mockResolvedValue({ name: 'Octo', email: 'o@x' })
+    vi.mocked(stageAndCommit).mockResolvedValue({
+      ok: false,
+      code: 1,
+      stdout: 'nothing to commit, working tree clean',
+      stderr: ''
+    })
+
+    const result = await getHandler('git:commit')({}, 7, { subject: 's' })
+    expect(result.ok).toBe(false)
+    expect(result.code).toBe(1)
+    expect(result.stdout).toMatch(/nothing to commit/i)
+  })
 })

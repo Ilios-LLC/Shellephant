@@ -18,6 +18,28 @@ import { getCurrentBranch, stageAndCommit } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 
+interface WindowGitContext {
+  container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
+  clonePath: string
+  gitUrl: string
+}
+
+function resolveWindowGitContext(windowId: number): WindowGitContext {
+  const row = getDb()
+    .prepare(
+      `SELECT w.container_id AS containerId, p.git_url AS gitUrl
+       FROM windows w JOIN projects p ON p.id = w.project_id
+       WHERE w.id = ? AND w.deleted_at IS NULL`
+    )
+    .get(windowId) as { containerId: string; gitUrl: string } | undefined
+  if (!row) throw new Error('Window not found')
+  return {
+    container: getDocker().getContainer(row.containerId),
+    clonePath: `/workspace/${extractRepoName(row.gitUrl)}`,
+    gitUrl: row.gitUrl
+  }
+}
+
 export function registerIpcHandlers(): void {
   // Project handlers
   ipcMain.handle('project:create', (_, name: string, gitUrl: string) =>
@@ -37,17 +59,8 @@ export function registerIpcHandlers(): void {
 
   // Git handlers
   ipcMain.handle('git:current-branch', async (_, windowId: number) => {
-    const row = getDb()
-      .prepare(
-        `SELECT w.container_id AS containerId, p.git_url AS gitUrl
-         FROM windows w JOIN projects p ON p.id = w.project_id
-         WHERE w.id = ? AND w.deleted_at IS NULL`
-      )
-      .get(windowId) as { containerId: string; gitUrl: string } | undefined
-    if (!row) throw new Error('Window not found')
-    const clonePath = `/workspace/${extractRepoName(row.gitUrl)}`
-    const container = getDocker().getContainer(row.containerId)
-    return getCurrentBranch(container, clonePath)
+    const ctx = resolveWindowGitContext(windowId)
+    return getCurrentBranch(ctx.container, ctx.clonePath)
   })
 
   ipcMain.handle(
@@ -55,19 +68,9 @@ export function registerIpcHandlers(): void {
     async (_, windowId: number, payload: { subject: string; body?: string }) => {
       const pat = getGitHubPat()
       if (!pat) throw new Error('GitHub PAT not configured.')
-      const row = getDb()
-        .prepare(
-          `SELECT w.container_id AS containerId, p.git_url AS gitUrl
-           FROM windows w JOIN projects p ON p.id = w.project_id
-           WHERE w.id = ? AND w.deleted_at IS NULL`
-        )
-        .get(windowId) as { containerId: string; gitUrl: string } | undefined
-      if (!row) throw new Error('Window not found')
-
+      const ctx = resolveWindowGitContext(windowId)
       const identity = await getIdentity(pat)
-      const clonePath = `/workspace/${extractRepoName(row.gitUrl)}`
-      const container = getDocker().getContainer(row.containerId)
-      const result = await stageAndCommit(container, clonePath, {
+      const result = await stageAndCommit(ctx.container, ctx.clonePath, {
         subject: payload.subject,
         body: payload.body,
         name: identity.name,
