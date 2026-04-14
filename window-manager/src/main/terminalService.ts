@@ -1,12 +1,12 @@
 import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
 import type { BrowserWindow } from 'electron'
+import { getClaudeToken } from './settingsService'
 
 interface TerminalSession {
   pty: IPty
   resizeTimer: ReturnType<typeof setTimeout> | null
   pendingResize: { cols: number; rows: number } | null
-  passthrough: boolean
 }
 
 // Collapse bursts of resize events into a single pty.resize call. During
@@ -14,11 +14,10 @@ interface TerminalSession {
 // debounce each fire triggers SIGWINCH in the remote shell.
 const RESIZE_DEBOUNCE_MS = 80
 
-// Drop all output for this window after attach to swallow tmux/docker-cli
-// boot gibberish. After the settle elapses we bump the PTY size by one row
-// and back so tmux receives SIGWINCH and repaints the pane state fresh —
-// preserving the persistent-session prompt the user expects to see.
-const BOOT_SETTLE_MS = 250
+// After the client attaches to tmux we bump the PTY size by one row and back
+// so tmux receives SIGWINCH and repaints the pane state fresh — preserving
+// the persistent-session prompt the user expects to see on re-open.
+const REFRESH_KICK_MS = 120
 
 const sessions = new Map<string, TerminalSession>()
 
@@ -50,12 +49,13 @@ export function openTerminal(
     '-e',
     'LANG=C.UTF-8',
     '-e',
-    'LC_ALL=C.UTF-8',
-    containerId,
-    'sh',
-    '-c',
-    'exec tmux -u new-session -A -s cw'
+    'LC_ALL=C.UTF-8'
   ]
+  const claudeToken = getClaudeToken()
+  if (claudeToken) {
+    args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`)
+  }
+  args.push(containerId, 'sh', '-c', 'exec tmux -u new-session -A -s cw')
 
   const child = pty.spawn('docker', args, {
     name: 'xterm-256color',
@@ -68,13 +68,11 @@ export function openTerminal(
   const session: TerminalSession = {
     pty: child,
     resizeTimer: null,
-    pendingResize: null,
-    passthrough: false
+    pendingResize: null
   }
   sessions.set(containerId, session)
 
   child.onData((data: string) => {
-    if (!session.passthrough) return
     if (win.isDestroyed()) return
     win.webContents.send('terminal:data', containerId, data)
   })
@@ -86,18 +84,17 @@ export function openTerminal(
     }
   })
 
-  // Swallow the boot gibberish, then kick tmux with a SIGWINCH so it repaints
-  // the pane state we actually care about.
+  // Kick tmux with a real SIGWINCH so it repaints the pane state whether we
+  // are creating the session or re-attaching to an existing one.
   setTimeout(() => {
     if (!sessions.has(containerId)) return
-    session.passthrough = true
     try {
       child.resize(safeCols, Math.max(1, safeRows - 1))
       child.resize(safeCols, safeRows)
     } catch {
       // Session may have exited; ignore.
     }
-  }, BOOT_SETTLE_MS)
+  }, REFRESH_KICK_MS)
 
   return Promise.resolve()
 }

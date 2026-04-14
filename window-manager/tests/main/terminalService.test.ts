@@ -15,6 +15,11 @@ vi.mock('node-pty', () => ({
   spawn: (...args: unknown[]) => mockSpawn(...args)
 }))
 
+const { mockGetClaudeToken } = vi.hoisted(() => ({ mockGetClaudeToken: vi.fn() }))
+vi.mock('../../src/main/settingsService', () => ({
+  getClaudeToken: () => mockGetClaudeToken()
+}))
+
 import {
   openTerminal,
   writeInput,
@@ -61,6 +66,7 @@ describe('terminalService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    mockGetClaudeToken.mockReturnValue(null)
   })
 
   afterEach(() => {
@@ -123,15 +129,18 @@ describe('terminalService', () => {
       expect(opts.rows).toBe(1)
     })
 
-    it('drops pty data during the boot settle window', async () => {
+    it('forwards pty data immediately (no boot-settle swallow)', async () => {
       const ptyInstance = makeFakePty()
       mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
       await openTerminal('container-boot', win as any, 80, 24)
-      // Emit gibberish during the settle — must not reach the renderer.
-      ptyInstance.emitData('jjjjjrrrr#######')
-      expect(win.webContents.send).not.toHaveBeenCalled()
+      ptyInstance.emitData('hello')
+      expect(win.webContents.send).toHaveBeenCalledWith(
+        'terminal:data',
+        'container-boot',
+        'hello'
+      )
     })
 
     it('forwards pty data after the settle window opens passthrough', async () => {
