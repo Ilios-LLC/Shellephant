@@ -20,16 +20,18 @@
     pushDisabled = true
   }: Props = $props()
 
-  let branch = $state<string>('…')
+  let branch = $state('…')
   let timer: ReturnType<typeof setInterval> | undefined
+  let alive = true
 
   async function refreshBranch(): Promise<void> {
+    let next: string | null = null
     try {
-      const next = await window.api.getCurrentBranch(win.id)
-      if (next) branch = next
+      next = await window.api.getCurrentBranch(win.id)
     } catch {
       // keep last-known branch on error; do not toast
     }
+    if (alive && next) branch = next
   }
 
   onMount(() => {
@@ -37,6 +39,7 @@
     timer = setInterval(refreshBranch, 5000)
   })
   onDestroy(() => {
+    alive = false
     if (timer) clearInterval(timer)
   })
 </script>
