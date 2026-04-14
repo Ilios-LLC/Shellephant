@@ -58,3 +58,34 @@
 **Result:** Pending manual UI smoke.
 
 ---
+
+## Phase 3: Commit flow
+
+**Verification performed:** 2026-04-14
+**Commits covered:** `ba02c0b6` (toasts) → `7c49d10` (prettier autofix)
+
+**Automated checks (controller-run):**
+
+- `npm run test` — all passing.
+  - `test:main`: 12 files, 157 tests (added: 7 for `githubIdentity`, 3 for `settingsService` invalidation, 5 for `stageAndCommit`, 4 for `git:commit` IPC handler incl. PAT scrub + ok=false propagation).
+  - `test:renderer`: 13 files, 77 tests (added: 4 for `toasts` store, 7 for `CommitModal`).
+- `npm run typecheck` — clean (tsc + svelte-check, 224 files).
+- Phase 3 files pass `eslint --max-warnings=0` after prettier autofix (`7c49d10`).
+- Refactor in `57d69a2` extracts `resolveWindowGitContext` shared by current-branch + commit (and push in Phase 4).
+
+**Manual UI smoke checklist (user to complete):**
+
+Prereqs: Docker running, `cc` image, valid PAT + Claude token, a project you can push to.
+
+- [ ] Open Commit modal with **empty subject** — Submit disabled.
+- [ ] Make a change (`echo hi >> /workspace/<repo>/a.txt`), commit with subject only → success toast "Committed". `git log -1 --format='%an <%ae>'` matches your GitHub identity (PAT-owner).
+- [ ] Commit with subject + body. `git log -1 --format='%B'` shows both.
+- [ ] Commit with clean tree → "Nothing to commit" toast (success-colored, no raw output body).
+- [ ] While commit is in-flight, pane's Commit button AND the modal Submit + inputs are disabled.
+- [ ] Clear PAT in Settings → next Commit attempt error-toasts "GitHub PAT not configured."; re-fetches identity on the next successful attempt after PAT restore (invalidation wired).
+- [ ] Toast body contains no PAT substring (copy/paste first 6 chars of your PAT and search).
+- [ ] DevTools console: no unhandled rejections or Svelte warnings during commit flow.
+
+**Result:** Pending manual UI smoke.
+
+---
