@@ -5,9 +5,7 @@ describe('scrubPat', () => {
   it('replaces the PAT with *** everywhere it appears', () => {
     const pat = 'ghp_deadbeef'
     const input = `remote: https://${pat}@github.com/foo/bar.git\nerror token ${pat}`
-    expect(scrubPat(input, pat)).toBe(
-      'remote: https://***@github.com/foo/bar.git\nerror token ***'
-    )
+    expect(scrubPat(input, pat)).toBe('remote: https://***@github.com/foo/bar.git\nerror token ***')
   })
 
   it('returns the input unchanged if the PAT is absent', () => {

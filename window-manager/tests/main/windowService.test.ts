@@ -78,8 +78,8 @@ describe('windowService', () => {
     vi.clearAllMocks()
     mockGetGitHubPat.mockReturnValue('test-token')
     mockGetClaudeToken.mockReturnValue('claude-oauth-token')
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', '')
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, '', '')
     )
     mockStart.mockResolvedValue(undefined)
     mockStop.mockResolvedValue(undefined)
@@ -138,9 +138,7 @@ describe('windowService', () => {
 
       const setUrl = mockContainerExec.mock.calls.find(
         (c) =>
-          Array.isArray(c[0].Cmd) &&
-          c[0].Cmd.includes('remote') &&
-          c[0].Cmd.includes('set-url')
+          Array.isArray(c[0].Cmd) && c[0].Cmd.includes('remote') && c[0].Cmd.includes('set-url')
       )
       expect(setUrl).toBeDefined()
       expect(setUrl![0].Cmd).toContain('origin')
@@ -185,9 +183,7 @@ describe('windowService', () => {
 
       const setUrl = mockContainerExec.mock.calls.find(
         (c) =>
-          Array.isArray(c[0].Cmd) &&
-          c[0].Cmd.includes('remote') &&
-          c[0].Cmd.includes('set-url')
+          Array.isArray(c[0].Cmd) && c[0].Cmd.includes('remote') && c[0].Cmd.includes('set-url')
       )
       expect(setUrl).toBeDefined()
       expect(setUrl![0].Cmd).toContain('git@github.com:org/my-repo.git')
@@ -219,7 +215,12 @@ describe('windowService', () => {
       )
       expect(checkout).toBeDefined()
       expect(checkout![0].Cmd).toEqual([
-        'git', '-C', '/workspace/my-repo', 'checkout', '-b', 'my-feature'
+        'git',
+        '-C',
+        '/workspace/my-repo',
+        'checkout',
+        '-b',
+        'my-feature'
       ])
     })
 
@@ -240,7 +241,11 @@ describe('windowService', () => {
       )
       expect(checkout).toBeDefined()
       expect(checkout![0].Cmd).toEqual([
-        'git', '-C', '/workspace/my-repo', 'checkout', 'my-feature'
+        'git',
+        '-C',
+        '/workspace/my-repo',
+        'checkout',
+        'my-feature'
       ])
     })
 

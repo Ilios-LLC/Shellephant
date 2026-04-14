@@ -2,8 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const mockExecFile = vi.fn()
 vi.mock('child_process', () => ({
-  execFile: (...args: unknown[]) =>
-    mockExecFile(...(args as [string, string[], object, Function]))
+  execFile: (...args: unknown[]) => mockExecFile(...(args as [string, string[], object, Function]))
 }))
 
 import {
@@ -34,26 +33,23 @@ describe('remoteBranchExists', () => {
   })
 
   it('returns true when ls-remote prints at least one ref line', async () => {
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: object, cb: Function) =>
-        cb(null, 'deadbeef refs/heads/my-slug\n', '')
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, 'deadbeef refs/heads/my-slug\n', '')
     )
     const ok = await remoteBranchExists('git@github.com:org/repo.git', 'my-slug', 'PAT')
     expect(ok).toBe(true)
   })
 
   it('returns false when ls-remote prints nothing', async () => {
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', '')
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, '', '')
     )
-    expect(
-      await remoteBranchExists('git@github.com:org/repo.git', 'missing', 'PAT')
-    ).toBe(false)
+    expect(await remoteBranchExists('git@github.com:org/repo.git', 'missing', 'PAT')).toBe(false)
   })
 
   it('uses an HTTPS URL with the PAT and matches the specific slug', async () => {
-    mockExecFile.mockImplementation(
-      (_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', '')
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, '', '')
     )
     await remoteBranchExists('git@github.com:org/repo.git', 'feat/x', 'PAT')
     const call = mockExecFile.mock.calls[0]
@@ -76,9 +72,9 @@ describe('remoteBranchExists', () => {
         cb(err)
       }
     )
-    await expect(
-      remoteBranchExists('git@github.com:org/repo.git', 'slug', 'PAT')
-    ).rejects.toThrow(/\*\*\*/)
+    await expect(remoteBranchExists('git@github.com:org/repo.git', 'slug', 'PAT')).rejects.toThrow(
+      /\*\*\*/
+    )
     await expect(
       remoteBranchExists('git@github.com:org/repo.git', 'slug', 'PAT')
     ).rejects.not.toThrow(/PAT/)
@@ -131,8 +127,7 @@ describe('cloneInContainer', () => {
   })
 
   it('scrubs the PAT from the error message when clone fails', async () => {
-    const stdoutPayload =
-      "fatal: unable to access 'https://PAT@github.com/org/my-repo.git/': 403"
+    const stdoutPayload = "fatal: unable to access 'https://PAT@github.com/org/my-repo.git/': 403"
     const container = {
       id: 'c1',
       exec: vi.fn().mockResolvedValue({
@@ -163,7 +158,11 @@ describe('checkoutSlug', () => {
     // @ts-expect-error mock
     await checkoutSlug(container, '/workspace/r', 'slug', true)
     expect(container.exec.mock.calls[0][0].Cmd).toEqual([
-      'git', '-C', '/workspace/r', 'checkout', 'slug'
+      'git',
+      '-C',
+      '/workspace/r',
+      'checkout',
+      'slug'
     ])
   })
 
@@ -172,7 +171,12 @@ describe('checkoutSlug', () => {
     // @ts-expect-error mock
     await checkoutSlug(container, '/workspace/r', 'slug', false)
     expect(container.exec.mock.calls[0][0].Cmd).toEqual([
-      'git', '-C', '/workspace/r', 'checkout', '-b', 'slug'
+      'git',
+      '-C',
+      '/workspace/r',
+      'checkout',
+      '-b',
+      'slug'
     ])
   })
 })
@@ -183,7 +187,12 @@ describe('getCurrentBranch', () => {
     // @ts-expect-error mock
     await getCurrentBranch(container, '/workspace/r')
     expect(container.exec.mock.calls[0][0].Cmd).toEqual([
-      'git', '-C', '/workspace/r', 'rev-parse', '--abbrev-ref', 'HEAD'
+      'git',
+      '-C',
+      '/workspace/r',
+      'rev-parse',
+      '--abbrev-ref',
+      'HEAD'
     ])
   })
 })

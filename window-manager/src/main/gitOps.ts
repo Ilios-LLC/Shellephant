@@ -47,27 +47,22 @@ export async function remoteBranchExists(
 ): Promise<boolean> {
   const httpsUrl = sshUrlToHttps(sshUrl, pat)
   const stdout = await new Promise<string>((resolve, reject) => {
-    execFile(
-      'git',
-      ['ls-remote', '--heads', httpsUrl, slug],
-      { timeout: 15_000 },
-      (err, out) => {
-        if (err) {
-          const scrubbed = new Error(scrubPat(err.message, pat))
-          const origCode = (err as NodeJS.ErrnoException).code
-          if (origCode !== undefined) {
-            ;(scrubbed as NodeJS.ErrnoException).code = origCode
-          }
-          const origStderr = (err as Error & { stderr?: string }).stderr
-          if (origStderr !== undefined) {
-            ;(scrubbed as Error & { stderr?: string }).stderr = scrubPat(origStderr, pat)
-          }
-          reject(scrubbed)
-        } else {
-          resolve(String(out ?? ''))
+    execFile('git', ['ls-remote', '--heads', httpsUrl, slug], { timeout: 15_000 }, (err, out) => {
+      if (err) {
+        const scrubbed = new Error(scrubPat(err.message, pat))
+        const origCode = (err as NodeJS.ErrnoException).code
+        if (origCode !== undefined) {
+          ;(scrubbed as NodeJS.ErrnoException).code = origCode
         }
+        const origStderr = (err as Error & { stderr?: string }).stderr
+        if (origStderr !== undefined) {
+          ;(scrubbed as Error & { stderr?: string }).stderr = scrubPat(origStderr, pat)
+        }
+        reject(scrubbed)
+      } else {
+        resolve(String(out ?? ''))
       }
-    )
+    })
   })
   return stdout.trim().length > 0
 }
@@ -79,15 +74,19 @@ export async function cloneInContainer(
   clonePath: string
 ): Promise<void> {
   const httpsUrl = sshUrlToHttps(sshUrl, pat)
-  const cloneResult = await execInContainer(container, [
-    'git', 'clone', httpsUrl, clonePath
-  ])
+  const cloneResult = await execInContainer(container, ['git', 'clone', httpsUrl, clonePath])
   if (!cloneResult.ok) {
     throw new Error(`git clone failed: ${scrubPat(cloneResult.stdout, pat)}`)
   }
 
   const setUrl = await execInContainer(container, [
-    'git', '-C', clonePath, 'remote', 'set-url', 'origin', sshUrl
+    'git',
+    '-C',
+    clonePath,
+    'remote',
+    'set-url',
+    'origin',
+    sshUrl
   ])
   if (!setUrl.ok) {
     throw new Error(`git remote set-url failed: ${scrubPat(setUrl.stdout, pat)}`)
@@ -110,12 +109,14 @@ export async function checkoutSlug(
   }
 }
 
-export async function getCurrentBranch(
-  container: Container,
-  clonePath: string
-): Promise<string> {
+export async function getCurrentBranch(container: Container, clonePath: string): Promise<string> {
   const result = await execInContainer(container, [
-    'git', '-C', clonePath, 'rev-parse', '--abbrev-ref', 'HEAD'
+    'git',
+    '-C',
+    clonePath,
+    'rev-parse',
+    '--abbrev-ref',
+    'HEAD'
   ])
   return result.stdout.trim()
 }

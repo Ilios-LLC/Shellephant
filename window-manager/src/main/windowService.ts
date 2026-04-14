@@ -4,12 +4,7 @@ import { extractRepoName } from './gitUrl'
 import { getGitHubPat, getClaudeToken } from './settingsService'
 import { closeTerminalSessionFor } from './terminalService'
 import { toSlug } from './slug'
-import {
-  remoteBranchExists,
-  execInContainer,
-  cloneInContainer,
-  checkoutSlug
-} from './gitOps'
+import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug } from './gitOps'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -138,7 +133,8 @@ export async function reconcileWindows(): Promise<void> {
 
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
-  let query = 'SELECT id, name, project_id, container_id, created_at FROM windows WHERE deleted_at IS NULL'
+  let query =
+    'SELECT id, name, project_id, container_id, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {
