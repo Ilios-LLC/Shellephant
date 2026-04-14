@@ -89,3 +89,45 @@ Prereqs: Docker running, `cc` image, valid PAT + Claude token, a project you can
 **Result:** Pending manual UI smoke.
 
 ---
+
+## Phase 4: Push flow — feature complete
+
+**Verification performed:** 2026-04-14
+**Commits covered:** `79acaf4c` (gitOps.push) → `78b982a` (prettier autofix)
+
+**Automated checks (controller-run):**
+
+- `npm run test` — all passing.
+  - `test:main`: 12 files, 165 tests (added: 2 for `gitOps.push`, 6 for `git:push` IPC handler incl. detached-HEAD + empty-branch guards + ok=false pass-through).
+  - `test:renderer`: 13 files, 77 tests (Push-button click + disabled coverage already in place from Phase 2; only api stub extended for `push`).
+- `npm run typecheck` — clean.
+- `npm run build` — renderer built (`out/renderer/index.html` + js/css bundles). Main process typechecked.
+- Phase 4 files pass `eslint --max-warnings=0` after prettier autofix (`78b982a`). Pre-existing `@typescript-eslint/no-explicit-any` / `no-unsafe-function-type` errors in test files are inherited patterns unchanged across this phase.
+
+**Manual UI smoke checklist (user to complete):**
+
+Prereqs: Docker running, `cc` image, valid PAT, a test repo you can push to and overwrite branches on.
+
+- [ ] Create window named `Push Test`. Inside the terminal, branch is `push-test`.
+- [ ] Commit a change via the Commit button — success toast.
+- [ ] Click Push — success toast "Pushed"; remote now has `push-test`.
+- [ ] Click Push again with no new commits → success toast (body "Everything up-to-date", or empty).
+- [ ] From a separate clone push a commit to the same branch so remote diverges. Commit locally, then click Push — **error toast** with `! [rejected]` / `non-fast-forward` body.
+- [ ] Toast body does NOT contain the PAT (grep the first 6 chars of your PAT through the visible toast content).
+- [ ] Inside the terminal: `grep -R "<first-6-of-PAT>" /workspace/<repo> /root 2>/dev/null` → no hits. `cat /workspace/<repo>/.git/config` → remote URL is SSH form.
+- [ ] While Push is in-flight, both Commit and Push buttons are disabled (pane reflects `commitBusy || pushBusy`).
+- [ ] Clear PAT in Settings → click Push → error toast "GitHub PAT not configured." (no hang).
+- [ ] Restore PAT. Create a second window whose slug matches an existing remote branch. Commit + Push — remote shows the new commit on top of the existing branch history.
+- [ ] Close and reopen the window via the sidebar. Pane still renders; branch polling updates within ~5 s after an in-terminal `git checkout`.
+- [ ] DevTools console: no unhandled rejections or Svelte warnings during the full commit + push loop.
+
+**Result:** Pending manual UI smoke.
+
+---
+
+## Final Checklist (post manual verification)
+
+- [ ] All four phases' manual checklists complete.
+- [ ] No regressions in existing window create / terminal / settings flows.
+- [ ] `git log` on the branch shows the expected series of feature commits.
+
