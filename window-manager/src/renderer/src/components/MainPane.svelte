@@ -74,7 +74,7 @@
     <NewWindowWizard {project} onCreated={onWindowCreated} onCancel={onWizardCancel} />
   {:else if selectedWindow}
     {#key selectedWindow.id}
-      <TerminalHost win={selectedWindow} />
+      <TerminalHost win={selectedWindow} project={project!} />
     {/key}
   {:else if project}
     <ProjectView

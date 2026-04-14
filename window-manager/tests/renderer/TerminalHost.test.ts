@@ -1,6 +1,6 @@
-import { render, screen, cleanup } from '@testing-library/svelte'
+import { render, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WindowRecord } from '../../src/renderer/src/types'
+import type { ProjectRecord, WindowRecord } from '../../src/renderer/src/types'
 
 const mockOpen = vi.fn()
 const mockWrite = vi.fn()
@@ -48,9 +48,17 @@ import TerminalHost from '../../src/renderer/src/components/TerminalHost.svelte'
 const mockWindow: WindowRecord = {
   id: 1,
   name: 'host-test',
+  project_id: 7,
   container_id: 'container123abc',
   created_at: '2026-01-01T00:00:00Z',
   status: 'running'
+}
+
+const mockProject: ProjectRecord = {
+  id: 7,
+  name: 'host-project',
+  git_url: 'git@github.com:org/host-test.git',
+  created_at: '2026-01-01T00:00:00Z'
 }
 
 describe('TerminalHost', () => {
@@ -61,6 +69,7 @@ describe('TerminalHost', () => {
     closeTerminal: ReturnType<typeof vi.fn>
     onTerminalData: ReturnType<typeof vi.fn>
     offTerminalData: ReturnType<typeof vi.fn>
+    getCurrentBranch: ReturnType<typeof vi.fn>
   }
 
   beforeEach(() => {
@@ -70,7 +79,8 @@ describe('TerminalHost', () => {
       resizeTerminal: vi.fn(),
       closeTerminal: vi.fn(),
       onTerminalData: vi.fn(),
-      offTerminalData: vi.fn()
+      offTerminalData: vi.fn(),
+      getCurrentBranch: vi.fn().mockResolvedValue('main')
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(
@@ -88,14 +98,8 @@ describe('TerminalHost', () => {
     vi.clearAllMocks()
   })
 
-  it('renders window name and first 12 chars of container_id in the header', () => {
-    render(TerminalHost, { win: mockWindow })
-    expect(screen.getByText('host-test')).toBeDefined()
-    expect(screen.getByText('container123')).toBeDefined()
-  })
-
   it('loads fit and web-links addons on mount', async () => {
-    render(TerminalHost, { win: mockWindow })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockLoadAddon).toHaveBeenCalledTimes(2)
     })
@@ -107,7 +111,7 @@ describe('TerminalHost', () => {
   })
 
   it('calls api.openTerminal with container_id and measured size on mount', async () => {
-    render(TerminalHost, { win: mockWindow })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockApi.openTerminal).toHaveBeenCalledWith(
         'container123abc',
@@ -118,7 +122,7 @@ describe('TerminalHost', () => {
   })
 
   it('subscribes to onTerminalData and writes only matching-container chunks', async () => {
-    render(TerminalHost, { win: mockWindow })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockApi.onTerminalData).toHaveBeenCalled()
     })
@@ -131,7 +135,7 @@ describe('TerminalHost', () => {
   })
 
   it('calls api.offTerminalData and api.closeTerminal on unmount', async () => {
-    const { unmount } = render(TerminalHost, { win: mockWindow })
+    const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockApi.openTerminal).toHaveBeenCalled()
     })
@@ -142,7 +146,7 @@ describe('TerminalHost', () => {
   })
 
   it('forwards term.onData to sendTerminalInput', async () => {
-    render(TerminalHost, { win: mockWindow })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockOnData).toHaveBeenCalled()
     })
@@ -152,7 +156,7 @@ describe('TerminalHost', () => {
   })
 
   it('forwards term.onResize to resizeTerminal', async () => {
-    render(TerminalHost, { win: mockWindow })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockOnResize).toHaveBeenCalled()
     })

@@ -3,13 +3,15 @@
   import { Terminal as XTerm } from '@xterm/xterm'
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
-  import type { WindowRecord } from '../types'
+  import type { ProjectRecord, WindowRecord } from '../types'
+  import WindowDetailPane from './WindowDetailPane.svelte'
 
   interface Props {
     win: WindowRecord
+    project: ProjectRecord
   }
 
-  let { win }: Props = $props()
+  let { win, project }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
@@ -67,11 +69,8 @@
 </script>
 
 <section class="terminal-host">
-  <header class="terminal-host-header">
-    <span class="name">{win.name}</span>
-    <span class="container-id">{win.container_id.slice(0, 12)}</span>
-  </header>
   <div class="terminal-body" bind:this={terminalEl}></div>
+  <WindowDetailPane {win} {project} />
 </section>
 
 <style>
@@ -80,28 +79,6 @@
     flex-direction: column;
     height: 100%;
     background: var(--bg-0);
-  }
-
-  .terminal-host-header {
-    display: flex;
-    align-items: baseline;
-    gap: 0.75rem;
-    padding: 0.5rem 0.9rem;
-    background: var(--bg-1);
-    border-bottom: 1px solid var(--border);
-  }
-
-  .name {
-    font-family: var(--font-ui);
-    font-weight: 600;
-    color: var(--fg-0);
-    font-size: 0.88rem;
-  }
-
-  .container-id {
-    font-family: var(--font-mono);
-    font-size: 0.72rem;
-    color: var(--fg-2);
   }
 
   .terminal-body {
