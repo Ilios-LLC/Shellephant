@@ -1,5 +1,6 @@
 import { safeStorage } from 'electron'
 import { getDb } from './db'
+import { invalidateIdentity } from './githubIdentity'
 
 const PAT_KEY = 'github_pat'
 const CLAUDE_KEY = 'claude_oauth_token'
@@ -64,10 +65,12 @@ export function getGitHubPatStatus(): TokenStatus {
 
 export function setGitHubPat(pat: string): void {
   setSecret(PAT_KEY, pat)
+  invalidateIdentity()
 }
 
 export function clearGitHubPat(): void {
   deleteRow(PAT_KEY)
+  invalidateIdentity()
 }
 
 export function getClaudeToken(): string | null {

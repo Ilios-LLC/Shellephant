@@ -13,6 +13,11 @@ vi.mock('electron', () => ({
   }
 }))
 
+const mockInvalidateIdentity = vi.fn()
+vi.mock('../../src/main/githubIdentity', () => ({
+  invalidateIdentity: () => mockInvalidateIdentity()
+}))
+
 import {
   getGitHubPat,
   getGitHubPatStatus,
@@ -98,6 +103,18 @@ describe('settingsService', () => {
       expect(() => clearGitHubPat()).not.toThrow()
       expect(() => clearGitHubPat()).not.toThrow()
     })
+
+    it('invalidates the cached GitHub identity on setGitHubPat', () => {
+      setGitHubPat('ghp_abcdefgh')
+      expect(mockInvalidateIdentity).toHaveBeenCalledTimes(1)
+    })
+
+    it('invalidates the cached GitHub identity on clearGitHubPat', () => {
+      setGitHubPat('ghp_abcdefgh')
+      mockInvalidateIdentity.mockClear()
+      clearGitHubPat()
+      expect(mockInvalidateIdentity).toHaveBeenCalledTimes(1)
+    })
   })
 
   describe('Claude token', () => {
@@ -127,6 +144,12 @@ describe('settingsService', () => {
       setClaudeToken('sk-ant-01234567')
       clearClaudeToken()
       expect(getClaudeTokenStatus()).toEqual({ configured: false, hint: null })
+    })
+
+    it('does NOT invalidate the GitHub identity on Claude-token ops', () => {
+      setClaudeToken('sk-ant-01234567')
+      clearClaudeToken()
+      expect(mockInvalidateIdentity).not.toHaveBeenCalled()
     })
   })
 
