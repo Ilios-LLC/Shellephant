@@ -150,3 +150,24 @@ export async function stageAndCommit(
   }
   return execInContainer(container, commitArgs)
 }
+
+export async function push(
+  container: Container,
+  clonePath: string,
+  branch: string,
+  sshUrl: string,
+  pat: string
+): Promise<GitResult> {
+  const httpsUrl = sshUrlToHttps(sshUrl, pat)
+  const result = await execInContainer(container, [
+    'git', '-C', clonePath,
+    'push', '-u',
+    httpsUrl,
+    branch
+  ])
+  return {
+    ...result,
+    stdout: scrubPat(result.stdout, pat),
+    stderr: scrubPat(result.stderr, pat)
+  }
+}

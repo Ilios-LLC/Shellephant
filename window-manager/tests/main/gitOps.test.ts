@@ -301,3 +301,61 @@ describe('stageAndCommit', () => {
     expect(res.stdout).toMatch(/nothing to commit/i)
   })
 })
+
+describe('push', () => {
+  it('pushes to an explicit https URL with -u, branch, scrubbing PAT from stdout', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: async () => ({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data')
+              setImmediate(() => cb(Buffer.from('pushing to https://PAT@github.com/org/r')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: async () => ({ ExitCode: 0 })
+      })
+    }
+    const { push } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const res = await push(container, '/workspace/r', 'my-feature', 'git@github.com:org/r.git', 'PAT')
+
+    const cmd = container.exec.mock.calls[0][0].Cmd
+    expect(cmd).toEqual([
+      'git', '-C', '/workspace/r',
+      'push', '-u',
+      'https://PAT@github.com/org/r.git',
+      'my-feature'
+    ])
+    expect(res.ok).toBe(true)
+    expect(res.stdout).not.toContain('PAT')
+    expect(res.stdout).toContain('***')
+  })
+
+  it('returns ok=false when the exec exits non-zero and scrubs PAT from output', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: async () => ({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data')
+              setImmediate(() => cb(Buffer.from('! [rejected] non-fast-forward https://PAT@github.com/o/r.git')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: async () => ({ ExitCode: 1 })
+      })
+    }
+    const { push } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const res = await push(container, '/workspace/r', 'br', 'git@github.com:o/r.git', 'PAT')
+
+    expect(res.ok).toBe(false)
+    expect(res.code).toBe(1)
+    expect(res.stdout).toMatch(/non-fast-forward/)
+    expect(res.stdout).not.toContain('PAT')
+  })
+})
