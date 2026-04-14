@@ -20,9 +20,11 @@ export async function execInContainer(
     Cmd: cmd,
     AttachStdout: true,
     AttachStderr: true,
+    Tty: true,
+    Env: ['TERM=dumb', 'GIT_TERMINAL_PROMPT=0'],
     WorkingDir: opts.workingDir
   })
-  const stream = await execInstance.start({})
+  const stream = await execInstance.start({ Tty: true })
 
   let stdout = ''
   await new Promise<void>((resolve, reject) => {
