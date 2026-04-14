@@ -3,6 +3,7 @@
   import { Terminal as XTerm } from '@xterm/xterm'
   import { FitAddon } from '@xterm/addon-fit'
   import { WebLinksAddon } from '@xterm/addon-web-links'
+  import '@xterm/xterm/css/xterm.css'
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
   import CommitModal from './CommitModal.svelte'
