@@ -62,17 +62,18 @@ export async function createWindow(
   onProgress('Probing remote for branch…')
   const remoteHasSlug = await remoteBranchExists(project.git_url, slug, pat)
 
-  onProgress('Starting dev container…')
-  const container = await getDocker().createContainer({
-    Image: 'cc',
-    Tty: true,
-    OpenStdin: true,
-    StdinOnce: false,
-    Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
-  })
-  await container.start()
-
+  let container: Dockerode.Container | null = null
   try {
+    onProgress('Starting dev container…')
+    container = await getDocker().createContainer({
+      Image: 'cc',
+      Tty: true,
+      OpenStdin: true,
+      StdinOnce: false,
+      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
+    })
+    await container.start()
+
     onProgress('Preparing workspace…')
     const mkdir = await execInContainer(container, ['mkdir', '-p', clonePath])
     if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
@@ -100,7 +101,10 @@ export async function createWindow(
       status: 'running' as WindowStatus
     }
   } catch (err) {
-    await container.stop({ t: 1 }).catch(() => {})
+    if (container) {
+      await container.stop({ t: 1 }).catch(() => {})
+      await container.remove({ force: true }).catch(() => {})
+    }
     throw err
   }
 }

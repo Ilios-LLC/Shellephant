@@ -12,11 +12,13 @@ const mockExecInstance = { start: mockExecStart, inspect: mockExecInspect }
 const mockContainerExec = vi.fn().mockResolvedValue(mockExecInstance)
 const mockStart = vi.fn().mockResolvedValue(undefined)
 const mockStop = vi.fn().mockResolvedValue(undefined)
+const mockRemove = vi.fn().mockResolvedValue(undefined)
 const mockInspect = vi.fn().mockResolvedValue({ State: { Status: 'running' } })
 const mockContainer = {
   id: 'mock-container-abc123',
   start: mockStart,
   stop: mockStop,
+  remove: mockRemove,
   inspect: mockInspect,
   exec: mockContainerExec
 }
@@ -37,11 +39,6 @@ const mockExecFile = vi.fn((_cmd: string, _args: string[], _opts: object, cb: Fu
 )
 vi.mock('child_process', () => ({
   execFile: (...args: any[]) => mockExecFile(...(args as [string, string[], object, Function]))
-}))
-
-const mockRm = vi.fn().mockResolvedValue(undefined)
-vi.mock('fs/promises', () => ({
-  rm: (...args: any[]) => mockRm(...args)
 }))
 
 const mockGetGitHubPat = vi.fn<[], string | null>()
@@ -84,9 +81,9 @@ describe('windowService', () => {
     mockExecFile.mockImplementation(
       (_cmd: string, _args: string[], _opts: object, cb: Function) => cb(null, '', '')
     )
-    mockRm.mockResolvedValue(undefined)
     mockStart.mockResolvedValue(undefined)
     mockStop.mockResolvedValue(undefined)
+    mockRemove.mockResolvedValue(undefined)
     mockInspect.mockResolvedValue({ State: { Status: 'running' } })
     mockCreateContainer.mockResolvedValue(mockContainer)
     mockGetContainer.mockReturnValue(mockContainer)
@@ -247,27 +244,40 @@ describe('windowService', () => {
       ])
     })
 
-    it('stops the container if the clone fails', async () => {
+    it('stops and removes the container if the clone fails', async () => {
       const projectId = seedProject('git@github.com:org/my-repo.git')
-      // First mkdir exec succeeds, then clone exec exits non-zero.
-      let call = 0
-      mockContainerExec.mockImplementation(async () => {
-        call++
+      // Fail the git clone exec by matching on the Cmd prefix, so the test
+      // stays valid even if new pre-flight execs are added to cloneInContainer.
+      mockContainerExec.mockImplementation(async (opts: { Cmd: string[] }) => {
+        const isClone = opts.Cmd[0] === 'git' && opts.Cmd[1] === 'clone'
         return {
           start: async () => ({
             on(event: string, cb: (d?: Buffer) => void) {
-              if (event === 'data' && call === 2) {
+              if (event === 'data' && isClone) {
                 setImmediate(() => cb(Buffer.from('fatal: auth')))
               }
               if (event === 'end') setImmediate(() => cb())
               return this
             }
           }),
-          inspect: async () => ({ ExitCode: call === 2 ? 128 : 0 })
+          inspect: async () => ({ ExitCode: isClone ? 128 : 0 })
         }
       })
       await expect(createWindow('test', projectId)).rejects.toThrow()
       expect(mockStop).toHaveBeenCalled()
+      expect(mockRemove).toHaveBeenCalledWith(expect.objectContaining({ force: true }))
+    })
+
+    it('removes the container if container.start fails', async () => {
+      const projectId = seedProject('git@github.com:org/my-repo.git')
+      const failingRemove = vi.fn().mockResolvedValue(undefined)
+      mockCreateContainer.mockResolvedValueOnce({
+        ...mockContainer,
+        remove: failingRemove,
+        start: vi.fn().mockRejectedValue(new Error('docker daemon unreachable'))
+      })
+      await expect(createWindow('boom', projectId)).rejects.toThrow('docker daemon unreachable')
+      expect(failingRemove).toHaveBeenCalledWith(expect.objectContaining({ force: true }))
     })
 
     it('persists the window to SQLite', async () => {
