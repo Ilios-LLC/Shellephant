@@ -18,6 +18,8 @@ contextBridge.exposeInMainWorld('api', {
 
   // Git API
   getCurrentBranch: (windowId: number) => ipcRenderer.invoke('git:current-branch', windowId),
+  commit: (windowId: number, payload: { subject: string; body?: string }) =>
+    ipcRenderer.invoke('git:commit', windowId, payload),
 
   // Settings API
   getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),

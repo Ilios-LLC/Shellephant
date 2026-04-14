@@ -3,6 +3,7 @@ import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject } from './projectService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
 import {
+  getGitHubPat,
   getGitHubPatStatus,
   setGitHubPat,
   clearGitHubPat,
@@ -13,7 +14,9 @@ import {
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch } from './gitOps'
+import { getCurrentBranch, stageAndCommit } from './gitOps'
+import { getIdentity } from './githubIdentity'
+import { scrubPat } from './scrub'
 
 export function registerIpcHandlers(): void {
   // Project handlers
@@ -46,6 +49,37 @@ export function registerIpcHandlers(): void {
     const container = getDocker().getContainer(row.containerId)
     return getCurrentBranch(container, clonePath)
   })
+
+  ipcMain.handle(
+    'git:commit',
+    async (_, windowId: number, payload: { subject: string; body?: string }) => {
+      const pat = getGitHubPat()
+      if (!pat) throw new Error('GitHub PAT not configured.')
+      const row = getDb()
+        .prepare(
+          `SELECT w.container_id AS containerId, p.git_url AS gitUrl
+           FROM windows w JOIN projects p ON p.id = w.project_id
+           WHERE w.id = ? AND w.deleted_at IS NULL`
+        )
+        .get(windowId) as { containerId: string; gitUrl: string } | undefined
+      if (!row) throw new Error('Window not found')
+
+      const identity = await getIdentity(pat)
+      const clonePath = `/workspace/${extractRepoName(row.gitUrl)}`
+      const container = getDocker().getContainer(row.containerId)
+      const result = await stageAndCommit(container, clonePath, {
+        subject: payload.subject,
+        body: payload.body,
+        name: identity.name,
+        email: identity.email
+      })
+      return {
+        ...result,
+        stdout: scrubPat(result.stdout, pat),
+        stderr: scrubPat(result.stderr, pat)
+      }
+    }
+  )
 
   // Settings handlers
   ipcMain.handle('settings:get-github-pat-status', () => getGitHubPatStatus())

@@ -36,6 +36,10 @@ export interface Api {
 
   // Git
   getCurrentBranch: (windowId: number) => Promise<string>
+  commit: (
+    windowId: number,
+    payload: { subject: string; body?: string }
+  ) => Promise<{ ok: boolean; code: number; stdout: string; stderr: string }>
 
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>

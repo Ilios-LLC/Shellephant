@@ -30,7 +30,22 @@ vi.mock('../../src/main/projectService', () => ({
 }))
 
 vi.mock('../../src/main/gitOps', () => ({
-  getCurrentBranch: vi.fn()
+  getCurrentBranch: vi.fn(),
+  stageAndCommit: vi.fn()
+}))
+
+vi.mock('../../src/main/settingsService', () => ({
+  getGitHubPat: vi.fn(),
+  getGitHubPatStatus: vi.fn(),
+  setGitHubPat: vi.fn(),
+  clearGitHubPat: vi.fn(),
+  getClaudeTokenStatus: vi.fn(),
+  setClaudeToken: vi.fn(),
+  clearClaudeToken: vi.fn()
+}))
+
+vi.mock('../../src/main/githubIdentity', () => ({
+  getIdentity: vi.fn()
 }))
 
 const mockContainer = { id: 'container-xyz' }
@@ -55,7 +70,9 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
-import { getCurrentBranch } from '../../src/main/gitOps'
+import { getCurrentBranch, stageAndCommit } from '../../src/main/gitOps'
+import { getGitHubPat } from '../../src/main/settingsService'
+import { getIdentity } from '../../src/main/githubIdentity'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
 
 const mockWin = { webContents: {} } as any
@@ -181,5 +198,44 @@ describe('registerIpcHandlers', () => {
   it('git:current-branch throws when the window does not exist', async () => {
     mockDbGet.mockReturnValue(undefined)
     await expect(getHandler('git:current-branch')({}, 9999)).rejects.toThrow(/window not found/i)
+  })
+
+  it('registers git:commit handler that scrubs PAT from stdout/stderr', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue({ containerId: 'container-xyz', gitUrl: 'git@github.com:org/my-repo.git' })
+    vi.mocked(getIdentity).mockResolvedValue({ name: 'Octo', email: 'o@x' })
+    vi.mocked(stageAndCommit).mockResolvedValue({
+      ok: true,
+      code: 0,
+      stdout: 'pushing via https://my-pat@github.com/org/my-repo.git',
+      stderr: 'error for my-pat'
+    })
+
+    const result = await getHandler('git:commit')({}, 7, { subject: 'Fix bug', body: 'details' })
+
+    expect(stageAndCommit).toHaveBeenCalledWith(
+      mockContainer,
+      '/workspace/my-repo',
+      { subject: 'Fix bug', body: 'details', name: 'Octo', email: 'o@x' }
+    )
+    expect(result.ok).toBe(true)
+    expect(result.stdout).not.toContain('my-pat')
+    expect(result.stdout).toContain('***')
+    expect(result.stderr).not.toContain('my-pat')
+  })
+
+  it('git:commit throws when PAT is not configured', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue(null)
+    await expect(
+      getHandler('git:commit')({}, 7, { subject: 's' })
+    ).rejects.toThrow(/pat not configured/i)
+  })
+
+  it('git:commit throws when the window is not found', async () => {
+    vi.mocked(getGitHubPat).mockReturnValue('my-pat')
+    mockDbGet.mockReturnValue(undefined)
+    await expect(
+      getHandler('git:commit')({}, 9999, { subject: 's' })
+    ).rejects.toThrow(/window not found/i)
   })
 })
