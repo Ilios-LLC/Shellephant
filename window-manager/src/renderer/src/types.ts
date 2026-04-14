@@ -34,6 +34,9 @@ export interface Api {
   onWindowCreateProgress: (callback: (step: string) => void) => void
   offWindowCreateProgress: () => void
 
+  // Git
+  getCurrentBranch: (windowId: number) => Promise<string>
+
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>
   setGitHubPat: (pat: string) => Promise<TokenStatus>

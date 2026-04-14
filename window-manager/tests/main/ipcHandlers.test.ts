@@ -29,6 +29,23 @@ vi.mock('../../src/main/projectService', () => ({
   deleteProject: vi.fn()
 }))
 
+vi.mock('../../src/main/gitOps', () => ({
+  getCurrentBranch: vi.fn()
+}))
+
+const mockContainer = { id: 'container-xyz' }
+const mockGetContainer = vi.fn().mockReturnValue(mockContainer)
+vi.mock('../../src/main/docker', () => ({
+  getDocker: () => ({ getContainer: mockGetContainer })
+}))
+
+const mockDbGet = vi.fn()
+vi.mock('../../src/main/db', () => ({
+  getDb: () => ({
+    prepare: () => ({ get: mockDbGet })
+  })
+}))
+
 import { ipcMain, BrowserWindow } from 'electron'
 import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
 import { createProject, listProjects, deleteProject } from '../../src/main/projectService'
@@ -38,6 +55,7 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
+import { getCurrentBranch } from '../../src/main/gitOps'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
 
 const mockWin = { webContents: {} } as any
@@ -59,6 +77,8 @@ function getListener(channel: string) {
 describe('registerIpcHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDbGet.mockReset()
+    mockGetContainer.mockClear()
     registerIpcHandlers()
   })
 
@@ -145,5 +165,21 @@ describe('registerIpcHandlers', () => {
   it('registers terminal:close listener that calls closeTerminal', () => {
     getListener('terminal:close')({}, 'container-abc')
     expect(closeTerminal).toHaveBeenCalledWith('container-abc')
+  })
+
+  it('registers git:current-branch handler that returns the trimmed branch', async () => {
+    mockDbGet.mockReturnValue({ containerId: 'container-xyz', gitUrl: 'git@github.com:org/my-repo.git' })
+    vi.mocked(getCurrentBranch).mockResolvedValue('feature-x')
+
+    const result = await getHandler('git:current-branch')({}, 42)
+    expect(mockDbGet).toHaveBeenCalledWith(42)
+    expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
+    expect(getCurrentBranch).toHaveBeenCalledWith(mockContainer, '/workspace/my-repo')
+    expect(result).toBe('feature-x')
+  })
+
+  it('git:current-branch throws when the window does not exist', async () => {
+    mockDbGet.mockReturnValue(undefined)
+    await expect(getHandler('git:current-branch')({}, 9999)).rejects.toThrow(/window not found/i)
   })
 })

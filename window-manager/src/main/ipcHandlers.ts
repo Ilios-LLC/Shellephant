@@ -10,6 +10,10 @@ import {
   setClaudeToken,
   clearClaudeToken
 } from './settingsService'
+import { getDb } from './db'
+import { extractRepoName } from './gitUrl'
+import { getDocker } from './docker'
+import { getCurrentBranch } from './gitOps'
 
 export function registerIpcHandlers(): void {
   // Project handlers
@@ -27,6 +31,21 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
+
+  // Git handlers
+  ipcMain.handle('git:current-branch', async (_, windowId: number) => {
+    const row = getDb()
+      .prepare(
+        `SELECT w.container_id AS containerId, p.git_url AS gitUrl
+         FROM windows w JOIN projects p ON p.id = w.project_id
+         WHERE w.id = ? AND w.deleted_at IS NULL`
+      )
+      .get(windowId) as { containerId: string; gitUrl: string } | undefined
+    if (!row) throw new Error('Window not found')
+    const clonePath = `/workspace/${extractRepoName(row.gitUrl)}`
+    const container = getDocker().getContainer(row.containerId)
+    return getCurrentBranch(container, clonePath)
+  })
 
   // Settings handlers
   ipcMain.handle('settings:get-github-pat-status', () => getGitHubPatStatus())

@@ -5,6 +5,7 @@ import { getGitHubPat, getClaudeToken } from './settingsService'
 import { closeTerminalSessionFor } from './terminalService'
 import { toSlug } from './slug'
 import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug } from './gitOps'
+import { getDocker } from './docker'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -17,17 +18,11 @@ export interface WindowRecord {
   status: WindowStatus
 }
 
-let _docker: Dockerode | null = null
 const statusMap = new Map<number, WindowStatus>()
 
 // Test-only: reset in-memory statusMap between tests that re-init the DB.
 export function __resetStatusMapForTests(): void {
   statusMap.clear()
-}
-
-function getDocker(): Dockerode {
-  if (!_docker) _docker = new Dockerode()
-  return _docker
 }
 
 export type ProgressReporter = (step: string) => void

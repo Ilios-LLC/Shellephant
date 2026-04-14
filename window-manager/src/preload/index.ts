@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('window:create-progress', (_, step: string) => callback(step)),
   offWindowCreateProgress: () => ipcRenderer.removeAllListeners('window:create-progress'),
 
+  // Git API
+  getCurrentBranch: (windowId: number) => ipcRenderer.invoke('git:current-branch', windowId),
+
   // Settings API
   getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),
   setGitHubPat: (pat: string) => ipcRenderer.invoke('settings:set-github-pat', pat),
