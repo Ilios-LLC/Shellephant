@@ -8,12 +8,7 @@
   import SettingsView, { type SettingsRequirement } from './SettingsView.svelte'
   import AssetTesting from './AssetTesting.svelte'
 
-  export type MainPaneView =
-    | 'default'
-    | 'new-project'
-    | 'new-window'
-    | 'settings'
-    | 'asset-testing'
+  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings' | 'asset-testing'
 
   interface Props {
     project: ProjectRecord | null

@@ -44,9 +44,7 @@ describe('WindowDetailPane', () => {
   })
 
   it('polls the branch every 5 seconds', async () => {
-    getCurrentBranch
-      .mockResolvedValueOnce('my-feature')
-      .mockResolvedValueOnce('other')
+    getCurrentBranch.mockResolvedValueOnce('my-feature').mockResolvedValueOnce('other')
     render(WindowDetailPane, { props: { win, project } })
     // Advance 5 s once: this fires the interval tick + flushes the initial
     // onMount microtask, producing two calls and leaving the UI on 'other'.

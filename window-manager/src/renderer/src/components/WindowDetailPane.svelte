@@ -73,14 +73,34 @@
     font-size: 0.82rem;
     color: var(--fg-1);
   }
-  .info { display: flex; gap: 0.4rem; align-items: baseline; }
-  .name { font-weight: 600; color: var(--fg-0); }
-  .sep { color: var(--fg-3); }
-  .branch { font-family: var(--font-mono); }
-  .status.running { color: var(--success, #4ade80); }
-  .status.stopped { color: var(--fg-3); }
-  .status.unknown { color: var(--warning, #facc15); }
-  .actions { display: flex; gap: 0.4rem; }
+  .info {
+    display: flex;
+    gap: 0.4rem;
+    align-items: baseline;
+  }
+  .name {
+    font-weight: 600;
+    color: var(--fg-0);
+  }
+  .sep {
+    color: var(--fg-3);
+  }
+  .branch {
+    font-family: var(--font-mono);
+  }
+  .status.running {
+    color: var(--success, #4ade80);
+  }
+  .status.stopped {
+    color: var(--fg-3);
+  }
+  .status.unknown {
+    color: var(--warning, #facc15);
+  }
+  .actions {
+    display: flex;
+    gap: 0.4rem;
+  }
   button {
     font-family: var(--font-ui);
     font-size: 0.82rem;
@@ -91,5 +111,8 @@
     border-radius: 4px;
     cursor: pointer;
   }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
 </style>
