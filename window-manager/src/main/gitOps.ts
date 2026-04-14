@@ -133,17 +133,20 @@ export async function stageAndCommit(
   clonePath: string,
   input: CommitInput
 ): Promise<GitResult> {
-  const addResult = await execInContainer(container, [
-    'git', '-C', clonePath, 'add', '--all'
-  ])
+  const addResult = await execInContainer(container, ['git', '-C', clonePath, 'add', '--all'])
   if (!addResult.ok) return addResult
 
   const commitArgs = [
-    'git', '-C', clonePath,
-    '-c', `user.name=${input.name}`,
-    '-c', `user.email=${input.email}`,
+    'git',
+    '-C',
+    clonePath,
+    '-c',
+    `user.name=${input.name}`,
+    '-c',
+    `user.email=${input.email}`,
     'commit',
-    '-m', input.subject
+    '-m',
+    input.subject
   ]
   if (input.body && input.body.trim().length > 0) {
     commitArgs.push('-m', input.body)
@@ -160,8 +163,11 @@ export async function push(
 ): Promise<GitResult> {
   const httpsUrl = sshUrlToHttps(sshUrl, pat)
   const result = await execInContainer(container, [
-    'git', '-C', clonePath,
-    'push', '-u',
+    'git',
+    '-C',
+    clonePath,
+    'push',
+    '-u',
     httpsUrl,
     branch
   ])

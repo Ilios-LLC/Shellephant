@@ -203,16 +203,25 @@ describe('stageAndCommit', () => {
     const { stageAndCommit } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
     await stageAndCommit(container, '/workspace/r', {
-      subject: 'Fix bug', body: '', name: 'Octo', email: 'o@x'
+      subject: 'Fix bug',
+      body: '',
+      name: 'Octo',
+      email: 'o@x'
     })
 
     const cmds = container.exec.mock.calls.map((c) => c[0].Cmd)
     expect(cmds[0]).toEqual(['git', '-C', '/workspace/r', 'add', '--all'])
     expect(cmds[1]).toEqual([
-      'git', '-C', '/workspace/r',
-      '-c', 'user.name=Octo',
-      '-c', 'user.email=o@x',
-      'commit', '-m', 'Fix bug'
+      'git',
+      '-C',
+      '/workspace/r',
+      '-c',
+      'user.name=Octo',
+      '-c',
+      'user.email=o@x',
+      'commit',
+      '-m',
+      'Fix bug'
     ])
   })
 
@@ -221,7 +230,10 @@ describe('stageAndCommit', () => {
     const { stageAndCommit } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
     await stageAndCommit(container, '/workspace/r', {
-      subject: 'subj', body: 'more details', name: 'n', email: 'e'
+      subject: 'subj',
+      body: 'more details',
+      name: 'n',
+      email: 'e'
     })
     const commitCmd = container.exec.mock.calls[1][0].Cmd
     expect(commitCmd).toContain('-m')
@@ -234,7 +246,10 @@ describe('stageAndCommit', () => {
     const { stageAndCommit } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
     await stageAndCommit(container, '/workspace/r', {
-      subject: 's', body: '   ', name: 'n', email: 'e'
+      subject: 's',
+      body: '   ',
+      name: 'n',
+      email: 'e'
     })
     const commitCmd = container.exec.mock.calls[1][0].Cmd
     // Count -m occurrences: should be exactly 1 (for subject).
@@ -245,32 +260,35 @@ describe('stageAndCommit', () => {
   it('short-circuits with the add result when git add fails', async () => {
     const container = {
       id: 'c',
-      exec: vi.fn()
-        .mockResolvedValueOnce({
-          start: async () => ({
-            on(event: string, cb: (d?: Buffer) => void) {
-              if (event === 'data') setImmediate(() => cb(Buffer.from('add failed')))
-              if (event === 'end') setImmediate(() => cb())
-              return this
-            }
-          }),
-          inspect: async () => ({ ExitCode: 128 })
-        })
+      exec: vi.fn().mockResolvedValueOnce({
+        start: async () => ({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from('add failed')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: async () => ({ ExitCode: 128 })
+      })
     }
     const { stageAndCommit } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
     const res = await stageAndCommit(container, '/workspace/r', {
-      subject: 's', body: '', name: 'n', email: 'e'
+      subject: 's',
+      body: '',
+      name: 'n',
+      email: 'e'
     })
     expect(res.ok).toBe(false)
     expect(res.code).toBe(128)
-    expect(container.exec).toHaveBeenCalledTimes(1)  // commit was NOT attempted
+    expect(container.exec).toHaveBeenCalledTimes(1) // commit was NOT attempted
   })
 
   it('returns the non-zero commit result when "nothing to commit"', async () => {
     const container = {
       id: 'c',
-      exec: vi.fn()
+      exec: vi
+        .fn()
         .mockResolvedValueOnce({
           start: async () => ({
             on(event: string, cb: (d?: Buffer) => void) {
@@ -283,7 +301,8 @@ describe('stageAndCommit', () => {
         .mockResolvedValueOnce({
           start: async () => ({
             on(event: string, cb: (d?: Buffer) => void) {
-              if (event === 'data') setImmediate(() => cb(Buffer.from('nothing to commit, working tree clean')))
+              if (event === 'data')
+                setImmediate(() => cb(Buffer.from('nothing to commit, working tree clean')))
               if (event === 'end') setImmediate(() => cb())
               return this
             }
@@ -294,7 +313,10 @@ describe('stageAndCommit', () => {
     const { stageAndCommit } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
     const res = await stageAndCommit(container, '/workspace/r', {
-      subject: 's', body: '', name: 'n', email: 'e'
+      subject: 's',
+      body: '',
+      name: 'n',
+      email: 'e'
     })
     expect(res.ok).toBe(false)
     expect(res.code).toBe(1)
@@ -320,12 +342,21 @@ describe('push', () => {
     }
     const { push } = await import('../../src/main/gitOps')
     // @ts-expect-error mock
-    const res = await push(container, '/workspace/r', 'my-feature', 'git@github.com:org/r.git', 'PAT')
+    const res = await push(
+      container,
+      '/workspace/r',
+      'my-feature',
+      'git@github.com:org/r.git',
+      'PAT'
+    )
 
     const cmd = container.exec.mock.calls[0][0].Cmd
     expect(cmd).toEqual([
-      'git', '-C', '/workspace/r',
-      'push', '-u',
+      'git',
+      '-C',
+      '/workspace/r',
+      'push',
+      '-u',
       'https://PAT@github.com/org/r.git',
       'my-feature'
     ])
@@ -341,7 +372,9 @@ describe('push', () => {
         start: async () => ({
           on(event: string, cb: (d?: Buffer) => void) {
             if (event === 'data')
-              setImmediate(() => cb(Buffer.from('! [rejected] non-fast-forward https://PAT@github.com/o/r.git')))
+              setImmediate(() =>
+                cb(Buffer.from('! [rejected] non-fast-forward https://PAT@github.com/o/r.git'))
+              )
             if (event === 'end') setImmediate(() => cb())
             return this
           }

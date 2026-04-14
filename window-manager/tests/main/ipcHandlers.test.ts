@@ -101,7 +101,12 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers project:create handler that calls createProject', async () => {
-    const record = { id: 1, name: 'test', git_url: 'git@github.com:org/repo.git', created_at: '2026-01-01' }
+    const record = {
+      id: 1,
+      name: 'test',
+      git_url: 'git@github.com:org/repo.git',
+      created_at: '2026-01-01'
+    }
     vi.mocked(createProject).mockResolvedValue(record)
     const result = await getHandler('project:create')({}, 'test', 'git@github.com:org/repo.git')
     expect(createProject).toHaveBeenCalledWith('test', 'git@github.com:org/repo.git')
@@ -109,7 +114,9 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers project:list handler that calls listProjects', async () => {
-    const records = [{ id: 1, name: 'p', git_url: 'git@github.com:org/repo.git', created_at: '2026-01-01' }]
+    const records = [
+      { id: 1, name: 'p', git_url: 'git@github.com:org/repo.git', created_at: '2026-01-01' }
+    ]
     vi.mocked(listProjects).mockReturnValue(records)
     const result = await getHandler('project:list')({})
     expect(listProjects).toHaveBeenCalled()
@@ -133,11 +140,7 @@ describe('registerIpcHandlers', () => {
     }
     vi.mocked(createWindow).mockResolvedValue(record)
     const fakeSender = { send: vi.fn() }
-    const result = await getHandler('window:create')(
-      { sender: fakeSender },
-      'test',
-      1
-    )
+    const result = await getHandler('window:create')({ sender: fakeSender }, 'test', 1)
     expect(createWindow).toHaveBeenCalledWith('test', 1, expect.any(Function))
     expect(result).toEqual(record)
 
@@ -186,7 +189,10 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers git:current-branch handler that returns the trimmed branch', async () => {
-    mockDbGet.mockReturnValue({ containerId: 'container-xyz', gitUrl: 'git@github.com:org/my-repo.git' })
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
     vi.mocked(getCurrentBranch).mockResolvedValue('feature-x')
 
     const result = await getHandler('git:current-branch')({}, 42)
@@ -203,7 +209,10 @@ describe('registerIpcHandlers', () => {
 
   it('registers git:commit handler that scrubs PAT from stdout/stderr', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({ containerId: 'container-xyz', gitUrl: 'git@github.com:org/my-repo.git' })
+    mockDbGet.mockReturnValue({
+      containerId: 'container-xyz',
+      gitUrl: 'git@github.com:org/my-repo.git'
+    })
     vi.mocked(getIdentity).mockResolvedValue({ name: 'Octo', email: 'o@x' })
     vi.mocked(stageAndCommit).mockResolvedValue({
       ok: true,
@@ -214,11 +223,12 @@ describe('registerIpcHandlers', () => {
 
     const result = await getHandler('git:commit')({}, 7, { subject: 'Fix bug', body: 'details' })
 
-    expect(stageAndCommit).toHaveBeenCalledWith(
-      mockContainer,
-      '/workspace/my-repo',
-      { subject: 'Fix bug', body: 'details', name: 'Octo', email: 'o@x' }
-    )
+    expect(stageAndCommit).toHaveBeenCalledWith(mockContainer, '/workspace/my-repo', {
+      subject: 'Fix bug',
+      body: 'details',
+      name: 'Octo',
+      email: 'o@x'
+    })
     expect(result.ok).toBe(true)
     expect(result.stdout).not.toContain('my-pat')
     expect(result.stdout).toContain('***')
@@ -227,17 +237,17 @@ describe('registerIpcHandlers', () => {
 
   it('git:commit throws when PAT is not configured', async () => {
     vi.mocked(getGitHubPat).mockReturnValue(null)
-    await expect(
-      getHandler('git:commit')({}, 7, { subject: 's' })
-    ).rejects.toThrow(/pat not configured/i)
+    await expect(getHandler('git:commit')({}, 7, { subject: 's' })).rejects.toThrow(
+      /pat not configured/i
+    )
   })
 
   it('git:commit throws when the window is not found', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
     mockDbGet.mockReturnValue(undefined)
-    await expect(
-      getHandler('git:commit')({}, 9999, { subject: 's' })
-    ).rejects.toThrow(/window not found/i)
+    await expect(getHandler('git:commit')({}, 9999, { subject: 's' })).rejects.toThrow(
+      /window not found/i
+    )
   })
 
   it('git:commit returns ok=false unchanged when stageAndCommit fails', async () => {
