@@ -39,8 +39,8 @@ export interface Api {
   commit: (
     windowId: number,
     payload: { subject: string; body?: string }
-  ) => Promise<{ ok: boolean; code: number; stdout: string; stderr: string }>
-  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string; stderr: string }>
+  ) => Promise<{ ok: boolean; code: number; stdout: string }>
+  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string }>
 
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>

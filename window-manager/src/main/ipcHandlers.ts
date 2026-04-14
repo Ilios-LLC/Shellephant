@@ -74,8 +74,7 @@ export function registerIpcHandlers(): void {
       })
       return {
         ...result,
-        stdout: scrubPat(result.stdout, pat),
-        stderr: scrubPat(result.stderr, pat)
+        stdout: scrubPat(result.stdout, pat)
       }
     }
   )

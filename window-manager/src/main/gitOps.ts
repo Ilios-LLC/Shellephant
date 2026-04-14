@@ -7,7 +7,6 @@ export interface GitResult {
   ok: boolean
   code: number
   stdout: string
-  stderr: string
 }
 
 type Container = ReturnType<Dockerode['getContainer']>
@@ -26,7 +25,6 @@ export async function execInContainer(
   const stream = await execInstance.start({})
 
   let stdout = ''
-  const stderr = ''
   await new Promise<void>((resolve, reject) => {
     stream.on('data', (chunk: Buffer) => {
       stdout += chunk.toString('utf8')
@@ -37,7 +35,7 @@ export async function execInContainer(
 
   const inspect = await execInstance.inspect()
   const code = inspect.ExitCode ?? 0
-  return { ok: code === 0, code, stdout, stderr }
+  return { ok: code === 0, code, stdout }
 }
 
 export async function remoteBranchExists(
@@ -173,7 +171,6 @@ export async function push(
   ])
   return {
     ...result,
-    stdout: scrubPat(result.stdout, pat),
-    stderr: scrubPat(result.stderr, pat)
+    stdout: scrubPat(result.stdout, pat)
   }
 }

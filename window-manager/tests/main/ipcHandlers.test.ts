@@ -207,7 +207,7 @@ describe('registerIpcHandlers', () => {
     await expect(getHandler('git:current-branch')({}, 9999)).rejects.toThrow(/window not found/i)
   })
 
-  it('registers git:commit handler that scrubs PAT from stdout/stderr', async () => {
+  it('registers git:commit handler that scrubs PAT from stdout', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
     mockDbGet.mockReturnValue({
       containerId: 'container-xyz',
@@ -217,8 +217,7 @@ describe('registerIpcHandlers', () => {
     vi.mocked(stageAndCommit).mockResolvedValue({
       ok: true,
       code: 0,
-      stdout: 'pushing via https://my-pat@github.com/org/my-repo.git',
-      stderr: 'error for my-pat'
+      stdout: 'pushing via https://my-pat@github.com/org/my-repo.git'
     })
 
     const result = await getHandler('git:commit')({}, 7, { subject: 'Fix bug', body: 'details' })
@@ -232,7 +231,6 @@ describe('registerIpcHandlers', () => {
     expect(result.ok).toBe(true)
     expect(result.stdout).not.toContain('my-pat')
     expect(result.stdout).toContain('***')
-    expect(result.stderr).not.toContain('my-pat')
   })
 
   it('git:commit throws when PAT is not configured', async () => {
@@ -260,8 +258,7 @@ describe('registerIpcHandlers', () => {
     vi.mocked(stageAndCommit).mockResolvedValue({
       ok: false,
       code: 1,
-      stdout: 'nothing to commit, working tree clean',
-      stderr: ''
+      stdout: 'nothing to commit, working tree clean'
     })
 
     const result = await getHandler('git:commit')({}, 7, { subject: 's' })
@@ -280,8 +277,7 @@ describe('registerIpcHandlers', () => {
     vi.mocked(push).mockResolvedValue({
       ok: true,
       code: 0,
-      stdout: '',
-      stderr: ''
+      stdout: ''
     })
 
     const result = await getHandler('git:push')({}, 7)
@@ -338,8 +334,7 @@ describe('registerIpcHandlers', () => {
     vi.mocked(push).mockResolvedValue({
       ok: false,
       code: 1,
-      stdout: '! [rejected] non-fast-forward',
-      stderr: ''
+      stdout: '! [rejected] non-fast-forward'
     })
     const result = await getHandler('git:push')({}, 7)
     expect(result.ok).toBe(false)

@@ -33,12 +33,11 @@
       if (res.ok) {
         pushToast({ level: 'success', title: 'Committed', body: res.stdout })
       } else {
-        const output = `${res.stdout}\n${res.stderr}`.trim()
-        const nothing = /nothing to commit/i.test(output)
+        const nothing = /nothing to commit/i.test(res.stdout)
         pushToast({
           level: nothing ? 'success' : 'error',
           title: nothing ? 'Nothing to commit' : 'Commit failed',
-          body: nothing ? undefined : output
+          body: nothing ? undefined : res.stdout
         })
       }
       commitOpen = false
@@ -56,7 +55,7 @@
       pushToast({
         level: res.ok ? 'success' : 'error',
         title: res.ok ? 'Pushed' : 'Push failed',
-        body: res.stdout || res.stderr || undefined
+        body: res.stdout || undefined
       })
     } catch (err) {
       pushToast({ level: 'error', title: 'Push error', body: (err as Error).message })

@@ -83,8 +83,8 @@ describe('TerminalHost', () => {
       onTerminalData: vi.fn(),
       offTerminalData: vi.fn(),
       getCurrentBranch: vi.fn().mockResolvedValue('main'),
-      commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '', stderr: '' }),
-      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '', stderr: '' })
+      commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' })
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(
