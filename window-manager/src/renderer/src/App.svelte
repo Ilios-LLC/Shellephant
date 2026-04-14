@@ -3,6 +3,7 @@
   import type { ProjectRecord, TokenStatus, WindowRecord } from './types'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane, { type MainPaneView } from './components/MainPane.svelte'
+  import Toasts from './components/Toasts.svelte'
   import type { SettingsRequirement } from './components/SettingsView.svelte'
 
   let projects = $state<ProjectRecord[]>([])
@@ -160,6 +161,7 @@
     onClaudeStatusChange={handleClaudeStatusChange}
     onWizardCancel={handleWizardCancel}
   />
+  <Toasts />
 </div>
 
 <style>
