@@ -1,26 +1,35 @@
 <script lang="ts">
-  import type { ProjectRecord } from '../types'
+  import type { ProjectRecord, ProjectGroupRecord } from '../types'
   import ProjectItem from './ProjectItem.svelte'
+  import GroupStrip from './GroupStrip.svelte'
   import { waitingWindows, type WaitingEntry } from '../lib/waitingWindows'
 
   interface Props {
     projects: ProjectRecord[]
     selectedProjectId: number | null
+    groups: ProjectGroupRecord[]
+    activeGroupId: number | null
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
     onRequestHome: () => void
     onWaitingWindowSelect: (entry: WaitingEntry) => void
+    onGroupSelect: (id: number) => void
+    onGroupCreated: (group: ProjectGroupRecord) => void
   }
 
   let {
     projects,
     selectedProjectId,
+    groups,
+    activeGroupId,
     onProjectSelect,
     onRequestNewProject,
     onRequestSettings,
     onRequestHome,
-    onWaitingWindowSelect
+    onWaitingWindowSelect,
+    onGroupSelect,
+    onGroupCreated
   }: Props = $props()
 </script>
 
@@ -88,6 +97,7 @@
       {/each}
     </div>
   {/if}
+  <GroupStrip {groups} {activeGroupId} {onGroupSelect} {onGroupCreated} />
 </aside>
 
 <style>
@@ -158,6 +168,7 @@
     display: flex;
     flex-direction: column;
     overflow-y: auto;
+    flex: 1;
     padding: 0.35rem 0;
   }
 

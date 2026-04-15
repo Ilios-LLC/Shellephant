@@ -2,6 +2,7 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sidebar from '../../src/renderer/src/components/Sidebar.svelte'
 import type { ProjectRecord } from '../../src/renderer/src/types'
+import type { ProjectGroupRecord } from '../../src/renderer/src/types'
 import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
 import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 
@@ -20,6 +21,8 @@ describe('Sidebar', () => {
   let onRequestSettings: ReturnType<typeof vi.fn>
   let onRequestHome: ReturnType<typeof vi.fn>
   let onWaitingWindowSelect: ReturnType<typeof vi.fn>
+  let onGroupSelect: ReturnType<typeof vi.fn>
+  let onGroupCreated: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     onProjectSelect = vi.fn()
@@ -27,19 +30,29 @@ describe('Sidebar', () => {
     onRequestSettings = vi.fn()
     onRequestHome = vi.fn()
     onWaitingWindowSelect = vi.fn()
+    onGroupSelect = vi.fn()
+    onGroupCreated = vi.fn()
+    vi.stubGlobal('api', { createGroup: vi.fn() })
   })
 
-  afterEach(() => cleanup())
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+  })
 
   function baseProps(overrides: Record<string, unknown> = {}) {
     return {
       projects: [] as ProjectRecord[],
       selectedProjectId: null as number | null,
+      groups: [] as ProjectGroupRecord[],
+      activeGroupId: null as number | null,
       onProjectSelect,
       onRequestNewProject,
       onRequestSettings,
       onRequestHome,
       onWaitingWindowSelect,
+      onGroupSelect,
+      onGroupCreated,
       ...overrides
     }
   }
