@@ -20,16 +20,15 @@ vi.mock('../../src/main/settingsService', () => ({
   getClaudeToken: () => mockGetClaudeToken()
 }))
 
-const { MockNotification, mockNotificationShow } = vi.hoisted(() => {
-  const mockNotificationShow = vi.fn()
-  const MockNotification = vi.fn().mockImplementation(function () {
-    return { show: mockNotificationShow }
-  })
-  return { MockNotification, mockNotificationShow }
-})
-
-vi.mock('electron', () => ({
-  Notification: MockNotification
+const { mockGetContainer, mockExecInContainer } = vi.hoisted(() => ({
+  mockGetContainer: vi.fn(),
+  mockExecInContainer: vi.fn()
+}))
+vi.mock('../../src/main/docker', () => ({
+  getDocker: () => ({ getContainer: (id: string) => mockGetContainer(id) })
+}))
+vi.mock('../../src/main/gitOps', () => ({
+  execInContainer: (...args: unknown[]) => mockExecInContainer(...args)
 }))
 
 import {
@@ -37,7 +36,8 @@ import {
   writeInput,
   resizeTerminal,
   closeTerminal,
-  closeTerminalSessionFor
+  closeTerminalSessionFor,
+  getSession
 } from '../../src/main/terminalService'
 
 type DataHandler = (data: string) => void
@@ -74,13 +74,13 @@ function makeFakeWin(isDestroyed = false) {
   }
 }
 
-const WAITING_SIGNAL = '\x1b]9999;claude-waiting\x07'
-
 describe('terminalService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
     mockGetClaudeToken.mockReturnValue(null)
+    mockGetContainer.mockReturnValue({})
+    mockExecInContainer.mockResolvedValue({ ok: true, code: 0, stdout: '' })
   })
 
   afterEach(() => {
@@ -126,6 +126,25 @@ describe('terminalService', () => {
       expect(opts.cols).toBe(120)
       expect(opts.rows).toBe(40)
       expect(opts.name).toBe('xterm-256color')
+    })
+
+    it('fires a stale-marker cleanup exec on open', async () => {
+      mockSpawn.mockReturnValueOnce(makeFakePty())
+      await openTerminal('container-stale', makeFakeWin() as any, 80, 24)
+      // Fire-and-forget — wait a tick for the promise chain to settle.
+      await vi.advanceTimersByTimeAsync(0)
+      await Promise.resolve()
+      expect(mockGetContainer).toHaveBeenCalledWith('container-stale')
+      const cmd = mockExecInContainer.mock.calls[0]?.[1] as string[]
+      expect(cmd).toEqual(['rm', '-f', '/tmp/claude-waiting'])
+    })
+
+    it('swallows errors from the stale-marker cleanup', async () => {
+      mockSpawn.mockReturnValueOnce(makeFakePty())
+      mockExecInContainer.mockRejectedValueOnce(new Error('docker down'))
+      await expect(
+        openTerminal('container-stale-err', makeFakeWin() as any, 80, 24)
+      ).resolves.toBeUndefined()
     })
 
     it('clamps non-positive cols/rows to 1', async () => {
@@ -219,94 +238,21 @@ describe('terminalService', () => {
     })
   })
 
-  describe('OSC waiting signal', () => {
-    it('strips the waiting signal from data before forwarding to renderer', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
+  describe('getSession', () => {
+    it('returns the session for the given containerId', async () => {
+      mockSpawn.mockReturnValueOnce(makeFakePty())
       const win = makeFakeWin()
-      await openAndSettle('container-strip', win, 80, 24)
-      win.webContents.send.mockClear()
-
-      ptyInstance.emitData(`before${WAITING_SIGNAL}after`)
-
-      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-strip', 'beforeafter')
+      await openAndSettle('container-gs', win, 80, 24, 'my-name')
+      const s = getSession('container-gs')
+      expect(s?.displayName).toBe('my-name')
+      expect(s?.win).toBe(win)
     })
 
-    it('does not send terminal:data when the signal is the entire chunk', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-      await openAndSettle('container-only-signal', win, 80, 24)
-      win.webContents.send.mockClear()
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      const dataCalls = (win.webContents.send as ReturnType<typeof vi.fn>).mock.calls.filter(
-        (c) => c[0] === 'terminal:data'
-      )
-      expect(dataCalls).toHaveLength(0)
-    })
-
-    it('sends terminal:waiting IPC event when signal detected', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-      await openAndSettle('container-ipc', win, 80, 24)
-      win.webContents.send.mockClear()
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      expect(win.webContents.send).toHaveBeenCalledWith('terminal:waiting', 'container-ipc')
-    })
-
-    it('fires OS Notification with displayName as body', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-      await openAndSettle('container-notif', win, 80, 24, 'my-window')
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      expect(MockNotification).toHaveBeenCalledWith({ title: 'Claude is waiting', body: 'my-window' })
-      expect(mockNotificationShow).toHaveBeenCalled()
-    })
-
-    it('debounce: second signal within 2s does not fire a second notification', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-      await openAndSettle('container-deb', win, 80, 24)
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      expect(mockNotificationShow).toHaveBeenCalledTimes(1)
-    })
-
-    it('debounce resets after 2s, allowing a new notification', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-      await openAndSettle('container-deb2', win, 80, 24)
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-      await vi.advanceTimersByTimeAsync(2001)
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      expect(mockNotificationShow).toHaveBeenCalledTimes(2)
-    })
-
-    it('does not fire notification when window is destroyed', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin(true)
-      await openAndSettle('container-destroyed-notif', win, 80, 24)
-
-      ptyInstance.emitData(WAITING_SIGNAL)
-
-      expect(mockNotificationShow).not.toHaveBeenCalled()
+    it('returns undefined for an unknown containerId', () => {
+      expect(getSession('nope')).toBeUndefined()
     })
   })
+
 
   describe('writeInput', () => {
     it('writes to the right session pty', async () => {
@@ -361,10 +307,11 @@ describe('terminalService', () => {
   })
 
   describe('closeTerminal', () => {
-    it('kills the pty and clears the session', async () => {
+    it('kills the pty and drops the session', async () => {
       const ptyInstance = makeFakePty()
       mockSpawn.mockReturnValueOnce(ptyInstance)
       await openAndSettle('container-c', makeFakeWin(), 80, 24)
+
       closeTerminal('container-c')
 
       expect(mockKill).toHaveBeenCalled()

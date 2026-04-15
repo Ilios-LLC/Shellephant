@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('api', {
   // Project API
-  createProject: (name: string, gitUrl: string) =>
-    ipcRenderer.invoke('project:create', name, gitUrl),
+  createProject: (name: string, gitUrl: string, ports?: number[]) =>
+    ipcRenderer.invoke('project:create', name, gitUrl, ports),
   listProjects: () => ipcRenderer.invoke('project:list'),
   deleteProject: (id: number) => ipcRenderer.invoke('project:delete', id),
 
@@ -41,9 +41,29 @@ contextBridge.exposeInMainWorld('api', {
   onTerminalData: (callback: (containerId: string, data: string) => void) =>
     ipcRenderer.on('terminal:data', (_, containerId, data) => callback(containerId, data)),
   offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data'),
-  onTerminalWaiting: (callback: (containerId: string) => void) =>
-    ipcRenderer.on('terminal:waiting', (_, containerId) => callback(containerId)),
+  onTerminalWaiting: (
+    callback: (info: {
+      containerId: string
+      windowId: number
+      windowName: string
+      projectId: number
+      projectName: string
+    }) => void
+  ) => ipcRenderer.on('terminal:waiting', (_, info) => callback(info)),
   offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting'),
+
+  // Focus API — tells main which container the user is currently viewing,
+  // so OS notifications are suppressed for the window already on screen.
+  setActiveContainer: (containerId: string | null) =>
+    ipcRenderer.send('focus:active-container', containerId),
+
+  // File system API (container exec bridge)
+  listContainerDir: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:list-dir', containerId, path),
+  readContainerFile: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:read-file', containerId, path),
+  writeContainerFile: (containerId: string, path: string, content: string) =>
+    ipcRenderer.invoke('fs:write-file', containerId, path, content),
 
   // Shell
   openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)

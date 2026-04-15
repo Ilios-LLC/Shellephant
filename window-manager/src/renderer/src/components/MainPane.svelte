@@ -6,13 +6,14 @@
   import NewProjectWizard from './NewProjectWizard.svelte'
   import NewWindowWizard from './NewWindowWizard.svelte'
   import SettingsView, { type SettingsRequirement } from './SettingsView.svelte'
-  import AssetTesting from './AssetTesting.svelte'
 
-  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings' | 'asset-testing'
+  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings'
 
   interface Props {
     project: ProjectRecord | null
+    projects: ProjectRecord[]
     windows: WindowRecord[]
+    allWindows: WindowRecord[]
     selectedWindow: WindowRecord | null
     view: MainPaneView
     patStatus: TokenStatus
@@ -28,11 +29,14 @@
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
     onWizardCancel: () => void
+    onNavigateToWindow: (projectId: number, windowId: number) => void
   }
 
   let {
     project,
+    projects,
     windows,
+    allWindows,
     selectedWindow,
     view,
     patStatus,
@@ -47,14 +51,13 @@
     onWindowDeleted,
     onPatStatusChange,
     onClaudeStatusChange,
-    onWizardCancel
+    onWizardCancel,
+    onNavigateToWindow
   }: Props = $props()
 </script>
 
 <main class="main-pane">
-  {#if view === 'asset-testing'}
-    <AssetTesting />
-  {:else if view === 'settings'}
+  {#if view === 'settings'}
     <SettingsView
       {patStatus}
       {claudeStatus}
@@ -81,7 +84,7 @@
       {onWindowDeleted}
     />
   {:else}
-    <EmptyState {onRequestNewProject} />
+    <EmptyState {onRequestNewProject} {allWindows} {projects} {onNavigateToWindow} />
   {/if}
 </main>
 

@@ -23,7 +23,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\033]9999;claude-waiting\\007' >/dev/tty"
+            "command": "touch /tmp/claude-waiting 2>/dev/null; exit 0"
           }
         ]
       }

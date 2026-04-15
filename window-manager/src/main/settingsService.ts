@@ -1,6 +1,7 @@
 import { safeStorage } from 'electron'
 import { getDb } from './db'
-import { invalidateIdentity } from './githubIdentity'
+import { invalidateIdentity, getIdentity } from './githubIdentity'
+import { applyGitIdentity } from './gitOps'
 
 const PAT_KEY = 'github_pat'
 const CLAUDE_KEY = 'claude_oauth_token'
@@ -36,7 +37,16 @@ function getSecret(key: string): string | null {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('Stored secret cannot be decrypted: OS secure storage unavailable')
   }
-  return safeStorage.decryptString(cipher)
+  // Ciphertext is bound to the OS keychain entry for this app. If the app is
+  // renamed (or the keychain entry is removed/rotated), decryption fails
+  // permanently. Drop the unreadable row so the user is prompted to re-enter
+  // the secret instead of seeing repeated decrypt errors.
+  try {
+    return safeStorage.decryptString(cipher)
+  } catch {
+    deleteRow(key)
+    return null
+  }
 }
 
 function setSecret(key: string, value: string): void {
@@ -66,6 +76,9 @@ export function getGitHubPatStatus(): TokenStatus {
 export function setGitHubPat(pat: string): void {
   setSecret(PAT_KEY, pat)
   invalidateIdentity()
+  getIdentity(pat)
+    .then(({ name, email }) => applyGitIdentity(name, email))
+    .catch((err) => console.error('Failed to apply git identity after PAT save:', err))
 }
 
 export function clearGitHubPat(): void {

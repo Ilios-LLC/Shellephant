@@ -14,8 +14,14 @@ vi.mock('electron', () => ({
 }))
 
 const mockInvalidateIdentity = vi.fn()
+const mockGetIdentity = vi.fn().mockResolvedValue({ name: 'Test User', email: 'test@example.com' })
+const mockApplyGitIdentity = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../src/main/githubIdentity', () => ({
-  invalidateIdentity: () => mockInvalidateIdentity()
+  invalidateIdentity: () => mockInvalidateIdentity(),
+  getIdentity: (pat: string) => mockGetIdentity(pat)
+}))
+vi.mock('../../src/main/gitOps', () => ({
+  applyGitIdentity: (name: string, email: string) => mockApplyGitIdentity(name, email)
 }))
 
 import {
@@ -77,6 +83,19 @@ describe('settingsService', () => {
       setGitHubPat('ghp_abcdefgh')
       mockIsAvailable.mockReturnValue(false)
       expect(() => getGitHubPat()).toThrow(/secure storage unavailable/i)
+    })
+
+    it('returns null and drops the row when decryption fails (e.g. after rename)', () => {
+      setGitHubPat('ghp_abcdefgh')
+      mockDecrypt.mockImplementationOnce(() => {
+        throw new Error('Error while decrypting the ciphertext provided to safeStorage.decryptString.')
+      })
+      expect(getGitHubPat()).toBeNull()
+      expect(getGitHubPatStatus()).toEqual({ configured: false, hint: null })
+      const row = getDb()
+        .prepare('SELECT value FROM settings WHERE key = ?')
+        .get('github_pat')
+      expect(row).toBeUndefined()
     })
 
     it('setGitHubPat replaces an existing PAT', () => {

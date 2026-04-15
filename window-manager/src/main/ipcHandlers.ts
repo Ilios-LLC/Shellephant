@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject } from './projectService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
+import { setActiveContainer } from './focusState'
 import {
   getGitHubPat,
   getGitHubPatStatus,
@@ -14,7 +15,7 @@ import {
 import { getDb } from './db'
 import { extractRepoName, buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 
@@ -42,7 +43,7 @@ function resolveWindowGitContext(windowId: number): WindowGitContext {
 
 export function registerIpcHandlers(): void {
   // Project handlers
-  ipcMain.handle('project:create', (_, name: string, gitUrl: string) => createProject(name, gitUrl))
+  ipcMain.handle('project:create', (_, name: string, gitUrl: string, ports?: number[]) => createProject(name, gitUrl, ports))
   ipcMain.handle('project:list', () => listProjects())
   ipcMain.handle('project:delete', (_, id: number) => deleteProject(id))
 
@@ -121,7 +122,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error('No window found for terminal:open')
-    return openTerminal(containerId, win, cols, rows, displayName)
+    const row = getDb()
+      .prepare(
+        `SELECT p.git_url FROM windows w JOIN projects p ON p.id = w.project_id
+         WHERE w.container_id = ? AND w.deleted_at IS NULL LIMIT 1`
+      )
+      .get(containerId) as { git_url: string } | undefined
+    const workDir = row ? `/workspace/${extractRepoName(row.git_url)}` : undefined
+    return openTerminal(containerId, win, cols, rows, displayName, workDir)
   })
   ipcMain.on('terminal:input', (_, containerId: string, data: string) =>
     writeInput(containerId, data)
@@ -130,4 +138,25 @@ export function registerIpcHandlers(): void {
     resizeTerminal(containerId, cols, rows)
   )
   ipcMain.on('terminal:close', (_, containerId: string) => closeTerminal(containerId))
+
+  // Focus handlers
+  ipcMain.on('focus:active-container', (_, containerId: string | null) =>
+    setActiveContainer(containerId)
+  )
+
+  // File system handlers (container exec bridge)
+  ipcMain.handle('fs:list-dir', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return listContainerDir(container, path)
+  })
+
+  ipcMain.handle('fs:read-file', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return readContainerFile(container, path)
+  })
+
+  ipcMain.handle('fs:write-file', async (_, containerId: string, path: string, content: string) => {
+    const container = getDocker().getContainer(containerId)
+    return writeFileInContainer(container, path, content)
+  })
 }

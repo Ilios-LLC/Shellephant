@@ -4,6 +4,7 @@ export interface ProjectRecord {
   id: number
   name: string
   git_url: string
+  ports?: string
   created_at: string
 }
 
@@ -12,6 +13,7 @@ export interface WindowRecord {
   name: string
   project_id: number
   container_id: string
+  ports?: string
   created_at: string
   status: WindowStatus
 }
@@ -23,7 +25,7 @@ export interface TokenStatus {
 
 export interface Api {
   // Projects
-  createProject: (name: string, gitUrl: string) => Promise<ProjectRecord>
+  createProject: (name: string, gitUrl: string, ports?: number[]) => Promise<ProjectRecord>
   listProjects: () => Promise<ProjectRecord[]>
   deleteProject: (id: number) => Promise<void>
 
@@ -57,8 +59,24 @@ export interface Api {
   closeTerminal: (containerId: string) => void
   onTerminalData: (callback: (containerId: string, data: string) => void) => void
   offTerminalData: () => void
-  onTerminalWaiting: (callback: (containerId: string) => void) => void
+  onTerminalWaiting: (
+    callback: (info: {
+      containerId: string
+      windowId: number
+      windowName: string
+      projectId: number
+      projectName: string
+    }) => void
+  ) => void
   offTerminalWaiting: () => void
+
+  // Focus
+  setActiveContainer: (containerId: string | null) => void
+
+  // File system (container exec bridge)
+  listContainerDir: (containerId: string, path: string) => Promise<{ name: string; isDir: boolean }[]>
+  readContainerFile: (containerId: string, path: string) => Promise<string>
+  writeContainerFile: (containerId: string, path: string, content: string) => Promise<void>
 
   // Shell
   openExternal: (url: string) => Promise<void>

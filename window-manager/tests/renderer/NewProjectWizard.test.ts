@@ -46,7 +46,7 @@ describe('NewProjectWizard', () => {
     await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
 
     await waitFor(() => {
-      expect(mockCreateProject).toHaveBeenCalledWith('alpha', 'git@github.com:org/alpha.git')
+      expect(mockCreateProject).toHaveBeenCalledWith('alpha', 'git@github.com:org/alpha.git', undefined)
       expect(onCreated).toHaveBeenCalledWith(created)
     })
   })
@@ -76,6 +76,100 @@ describe('NewProjectWizard', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/clone failed/i)).toBeDefined()
+    })
+  })
+
+  it('renders a ports input field', () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+    expect(screen.getByPlaceholderText('3000, 8080')).toBeInTheDocument()
+  })
+
+  it('passes parsed ports to createProject when ports field is filled', async () => {
+    const onCreated = vi.fn()
+    render(NewProjectWizard, { onCreated, onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+      target: { value: '3000, 8080' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(mockCreateProject).toHaveBeenCalledWith(
+        '',
+        'git@github.com:org/alpha.git',
+        [3000, 8080]
+      )
+    })
+  })
+
+  it('passes undefined ports when ports field is empty', async () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(mockCreateProject).toHaveBeenCalledWith(
+        '',
+        'git@github.com:org/alpha.git',
+        undefined
+      )
+    })
+  })
+
+  it('shows error when ports field contains non-numeric value', async () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+      target: { value: '3000, abc' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/ports must be comma-separated numbers/i)).toBeInTheDocument()
+      expect(mockCreateProject).not.toHaveBeenCalled()
+    })
+  })
+
+  it('shows error when port token has trailing non-numeric characters', async () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+      target: { value: '3000abc' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/ports must be comma-separated numbers/i)).toBeInTheDocument()
+      expect(mockCreateProject).not.toHaveBeenCalled()
+    })
+  })
+
+  it('shows error when port is out of range', async () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+      target: { value: '99999' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/ports must be between 1 and 65535/i)).toBeInTheDocument()
+      expect(mockCreateProject).not.toHaveBeenCalled()
     })
   })
 })

@@ -9,10 +9,17 @@ export function initDb(dbPath: string): void {
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       name       TEXT NOT NULL,
       git_url    TEXT NOT NULL UNIQUE,
+      ports      TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at DATETIME DEFAULT NULL
     )
   `)
+  // Migrate: add ports column for databases created before this feature
+  const projCols = _db.pragma('table_info(projects)') as { name: string }[]
+  if (!projCols.some((c) => c.name === 'ports')) {
+    _db.exec('ALTER TABLE projects ADD COLUMN ports TEXT DEFAULT NULL')
+  }
+
   // Pre-project windows tables lack project_id. Drop so the CREATE below
   // applies the current schema. Containers are ephemeral so data loss is fine.
   const winCols = _db.pragma('table_info(windows)') as { name: string }[]
@@ -26,10 +33,17 @@ export function initDb(dbPath: string): void {
       name         TEXT NOT NULL,
       project_id   INTEGER NOT NULL REFERENCES projects(id),
       container_id TEXT NOT NULL,
+      ports        TEXT DEFAULT NULL,
       created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at   DATETIME DEFAULT NULL
     )
   `)
+  // Migrate: add ports column for databases created before this feature
+  const winPortCols = _db.pragma('table_info(windows)') as { name: string }[]
+  if (!winPortCols.some((c) => c.name === 'ports')) {
+    _db.exec('ALTER TABLE windows ADD COLUMN ports TEXT DEFAULT NULL')
+  }
+
   _db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key        TEXT PRIMARY KEY,

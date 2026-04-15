@@ -8,6 +8,7 @@ export interface ProjectRecord {
   id: number
   name: string
   git_url: string
+  ports?: string
   created_at: string
 }
 
@@ -27,10 +28,19 @@ function verifyRemote(httpsUrl: string): Promise<void> {
 
 export async function createProject(
   name: string,
-  gitUrl: string
+  gitUrl: string,
+  ports?: number[]
 ): Promise<ProjectRecord> {
   if (!isValidSshUrl(gitUrl)) {
     throw new Error('Invalid SSH URL format. Expected: git@host:org/repo.git')
+  }
+
+  if (ports && ports.length > 0) {
+    for (const p of ports) {
+      if (!Number.isInteger(p) || p < 1 || p > 65535) {
+        throw new Error(`Invalid port: ${p}. Must be integer between 1 and 65535.`)
+      }
+    }
   }
 
   const resolvedName = name.trim() || extractRepoName(gitUrl)
@@ -44,16 +54,18 @@ export async function createProject(
   }
   await verifyRemote(sshUrlToHttps(gitUrl, pat))
 
+  const portsJson = ports && ports.length > 0 ? JSON.stringify(ports) : null
   const db = getDb()
   try {
     const result = db
-      .prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
-      .run(resolvedName, gitUrl)
+      .prepare('INSERT INTO projects (name, git_url, ports) VALUES (?, ?, ?)')
+      .run(resolvedName, gitUrl, portsJson)
 
     return {
       id: result.lastInsertRowid as number,
       name: resolvedName,
       git_url: gitUrl,
+      ports: portsJson ?? undefined,
       created_at: new Date().toISOString()
     }
   } catch (err) {
@@ -67,7 +79,7 @@ export async function createProject(
 export function listProjects(): ProjectRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, created_at FROM projects WHERE deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, created_at FROM projects WHERE deleted_at IS NULL'
     )
     .all() as ProjectRecord[]
 }

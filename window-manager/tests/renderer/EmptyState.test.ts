@@ -5,9 +5,9 @@ import EmptyState from '../../src/renderer/src/components/EmptyState.svelte'
 describe('EmptyState', () => {
   afterEach(() => cleanup())
 
-  it('renders the heading', () => {
+  it('renders the heading when no windows are running', () => {
     render(EmptyState, {})
-    expect(screen.getByText(/no project selected/i)).toBeDefined()
+    expect(screen.getByText(/no windows running/i)).toBeDefined()
   })
 
   it('renders the hint', () => {
