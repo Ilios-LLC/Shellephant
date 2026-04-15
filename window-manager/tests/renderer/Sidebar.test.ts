@@ -96,43 +96,40 @@ describe('Sidebar', () => {
     expect(btn.classList.contains('active')).toBe(true)
   })
 
-  beforeEach(() => waitingWindows._resetForTest())
+  describe('waiting section', () => {
+    beforeEach(() => waitingWindows._resetForTest())
 
-  it('does not render the waiting section when no windows are waiting', () => {
-    render(Sidebar, baseProps())
-    expect(screen.queryByText(/waiting/i)).toBeNull()
-  })
-
-  it('renders the waiting section when a window is waiting', async () => {
-    const entry: WaitingEntry = {
-      containerId: 'c1',
-      windowId: 1,
-      windowName: 'my-window',
-      projectId: 1,
-      projectName: 'my-project'
-    }
-    waitingWindows.add(entry)
-    render(Sidebar, baseProps())
-    await vi.waitFor(() => {
-      expect(screen.getByText(/waiting/i)).toBeDefined()
+    it('does not render the waiting section when no windows are waiting', () => {
+      render(Sidebar, baseProps())
+      expect(screen.queryByText(/waiting/i)).toBeNull()
     })
-    expect(screen.getByText('my-project / my-window')).toBeDefined()
-  })
 
-  it('clicking a waiting item calls onWaitingWindowSelect with the entry', async () => {
-    const entry: WaitingEntry = {
-      containerId: 'c1',
-      windowId: 1,
-      windowName: 'my-window',
-      projectId: 1,
-      projectName: 'my-project'
-    }
-    waitingWindows.add(entry)
-    render(Sidebar, baseProps())
-    await vi.waitFor(() => {
+    it('renders the waiting section when a window is waiting', () => {
+      const entry: WaitingEntry = {
+        containerId: 'c1',
+        windowId: 1,
+        windowName: 'my-window',
+        projectId: 1,
+        projectName: 'my-project'
+      }
+      waitingWindows.add(entry)
+      render(Sidebar, baseProps())
+      expect(screen.getByText(/waiting/i)).toBeDefined()
       expect(screen.getByText('my-project / my-window')).toBeDefined()
     })
-    await fireEvent.click(screen.getByText('my-project / my-window'))
-    expect(onWaitingWindowSelect).toHaveBeenCalledWith(entry)
+
+    it('clicking a waiting item calls onWaitingWindowSelect with the entry', async () => {
+      const entry: WaitingEntry = {
+        containerId: 'c1',
+        windowId: 1,
+        windowName: 'my-window',
+        projectId: 1,
+        projectName: 'my-project'
+      }
+      waitingWindows.add(entry)
+      render(Sidebar, baseProps())
+      await fireEvent.click(screen.getByText('my-project / my-window'))
+      expect(onWaitingWindowSelect).toHaveBeenCalledWith(entry)
+    })
   })
 })
