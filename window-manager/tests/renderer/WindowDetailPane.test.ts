@@ -5,13 +5,16 @@ import type { ConversationSummary } from '../../src/renderer/src/lib/conversatio
 
 const getCurrentBranch = vi.fn()
 const sendTerminalInput = vi.fn()
+const getGitStatus = vi.fn()
 
 beforeEach(() => {
   vi.useFakeTimers()
   getCurrentBranch.mockReset()
   sendTerminalInput.mockReset()
+  getGitStatus.mockReset()
+  getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
   // @ts-expect-error test bridge
-  globalThis.window.api = { getCurrentBranch, sendTerminalInput }
+  globalThis.window.api = { getCurrentBranch, sendTerminalInput, getGitStatus }
 })
 afterEach(() => vi.useRealTimers())
 
@@ -207,13 +210,6 @@ describe('WindowDetailPane', () => {
   })
 
   describe('git status display', () => {
-    let getGitStatus: ReturnType<typeof vi.fn>
-
-    beforeEach(() => {
-      getGitStatus = vi.fn()
-      // @ts-expect-error test bridge
-      globalThis.window.api = { getCurrentBranch, sendTerminalInput, getGitStatus }
-    })
 
     it('shows nothing extra before first poll resolves', () => {
       getCurrentBranch.mockResolvedValue('main')

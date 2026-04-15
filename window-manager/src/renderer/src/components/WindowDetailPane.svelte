@@ -144,6 +144,7 @@
           <span class="sep">·</span>
           <span class="git-stat">+{gitStatus.added} −{gitStatus.deleted}</span>
         {:else if !gitStatus.isDirty}
+          <span class="sep">·</span>
           <span class="git-clean">(clean)</span>
         {/if}
       {/if}
