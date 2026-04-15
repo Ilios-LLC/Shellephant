@@ -1,7 +1,15 @@
 import { execFile } from 'child_process'
+import { promisify } from 'util'
 import type Dockerode from 'dockerode'
 import { sshUrlToHttps } from './gitUrl'
 import { scrubPat } from './scrub'
+
+const execFileAsync = promisify(execFile)
+
+export async function applyGitIdentity(name: string, email: string): Promise<void> {
+  await execFileAsync('git', ['config', '--global', 'user.name', name])
+  await execFileAsync('git', ['config', '--global', 'user.email', email])
+}
 
 export interface GitResult {
   ok: boolean

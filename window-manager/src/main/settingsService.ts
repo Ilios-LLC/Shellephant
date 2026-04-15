@@ -1,6 +1,7 @@
 import { safeStorage } from 'electron'
 import { getDb } from './db'
-import { invalidateIdentity } from './githubIdentity'
+import { invalidateIdentity, getIdentity } from './githubIdentity'
+import { applyGitIdentity } from './gitOps'
 
 const PAT_KEY = 'github_pat'
 const CLAUDE_KEY = 'claude_oauth_token'
@@ -75,6 +76,9 @@ export function getGitHubPatStatus(): TokenStatus {
 export function setGitHubPat(pat: string): void {
   setSecret(PAT_KEY, pat)
   invalidateIdentity()
+  getIdentity(pat)
+    .then(({ name, email }) => applyGitIdentity(name, email))
+    .catch((err) => console.error('Failed to apply git identity after PAT save:', err))
 }
 
 export function clearGitHubPat(): void {
