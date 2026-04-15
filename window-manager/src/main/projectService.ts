@@ -4,6 +4,11 @@ import { isValidSshUrl, extractRepoName, sshUrlToHttps } from './gitUrl'
 import { deleteWindow, listWindows } from './windowService'
 import { getGitHubPat, getClaudeToken } from './settingsService'
 
+export interface PortMapping {
+  container: number
+  host?: number
+}
+
 export interface ProjectRecord {
   id: number
   name: string
@@ -30,16 +35,21 @@ function verifyRemote(httpsUrl: string): Promise<void> {
 export async function createProject(
   name: string,
   gitUrl: string,
-  ports?: number[]
+  ports?: PortMapping[]
 ): Promise<ProjectRecord> {
   if (!isValidSshUrl(gitUrl)) {
     throw new Error('Invalid SSH URL format. Expected: git@host:org/repo.git')
   }
 
   if (ports && ports.length > 0) {
-    for (const p of ports) {
-      if (!Number.isInteger(p) || p < 1 || p > 65535) {
-        throw new Error(`Invalid port: ${p}. Must be integer between 1 and 65535.`)
+    for (const pm of ports) {
+      if (!Number.isInteger(pm.container) || pm.container < 1 || pm.container > 65535) {
+        throw new Error(`Invalid container port: ${pm.container}. Must be integer between 1 and 65535.`)
+      }
+      if (pm.host !== undefined) {
+        if (!Number.isInteger(pm.host) || pm.host < 1 || pm.host > 65535) {
+          throw new Error(`Invalid host port: ${pm.host}. Must be integer between 1 and 65535.`)
+        }
       }
     }
   }

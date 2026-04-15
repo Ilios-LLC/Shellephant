@@ -1,5 +1,10 @@
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
+export interface PortMapping {
+  container: number
+  host?: number
+}
+
 export interface ProjectGroupRecord {
   id: number
   name: string
@@ -32,7 +37,7 @@ export interface TokenStatus {
 
 export interface Api {
   // Projects
-  createProject: (name: string, gitUrl: string, ports?: number[]) => Promise<ProjectRecord>
+  createProject: (name: string, gitUrl: string, ports?: PortMapping[]) => Promise<ProjectRecord>
   listProjects: () => Promise<ProjectRecord[]>
   deleteProject: (id: number) => Promise<void>
   updateProject: (id: number, patch: { groupId: number | null }) => Promise<ProjectRecord>

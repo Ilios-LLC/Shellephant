@@ -64,7 +64,9 @@ import {
   __resetStatusMapForTests
 } from '../../src/main/windowService'
 
-function seedProject(gitUrl: string, name = 'test', ports?: number[]): number {
+interface PortMapping { container: number; host?: number }
+
+function seedProject(gitUrl: string, name = 'test', ports?: PortMapping[]): number {
   const result = getDb()
     .prepare('INSERT INTO projects (name, git_url, ports) VALUES (?, ?, ?)')
     .run(name, gitUrl, ports ? JSON.stringify(ports) : null)
@@ -326,8 +328,11 @@ describe('windowService', () => {
       ])
     })
 
-    it('passes ExposedPorts and PortBindings when project has ports', async () => {
-      const projectId = seedProject('git@github.com:org/ports-repo.git', 'ports', [3000, 8080])
+    it('passes ExposedPorts and PortBindings when project has ports (ephemeral)', async () => {
+      const projectId = seedProject('git@github.com:org/ports-repo.git', 'ports', [
+        { container: 3000 },
+        { container: 8080 }
+      ])
       mockInspect.mockResolvedValueOnce({
         State: { Status: 'running' },
         NetworkSettings: {
@@ -353,8 +358,33 @@ describe('windowService', () => {
       )
     })
 
+    it('passes fixed HostPort when host port is specified in mapping', async () => {
+      const projectId = seedProject('git@github.com:org/fixed-port-repo.git', 'fixed', [
+        { container: 3000, host: 9000 }
+      ])
+      mockInspect.mockResolvedValueOnce({
+        State: { Status: 'running' },
+        NetworkSettings: {
+          Ports: { '3000/tcp': [{ HostPort: '9000' }] }
+        }
+      })
+
+      await createWindow('fixed-port-window', projectId)
+
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ExposedPorts: { '3000/tcp': {} },
+          HostConfig: {
+            PortBindings: {
+              '3000/tcp': [{ HostPort: '9000' }]
+            }
+          }
+        })
+      )
+    })
+
     it('stores the host port mapping on the window record', async () => {
-      const projectId = seedProject('git@github.com:org/ports-repo2.git', 'ports2', [3000])
+      const projectId = seedProject('git@github.com:org/ports-repo2.git', 'ports2', [{ container: 3000 }])
       mockInspect.mockResolvedValueOnce({
         State: { Status: 'running' },
         NetworkSettings: {
@@ -382,7 +412,7 @@ describe('windowService', () => {
     })
 
     it('listWindows includes ports from the database', async () => {
-      const projectId = seedProject('git@github.com:org/list-ports-repo.git', 'lp', [4000])
+      const projectId = seedProject('git@github.com:org/list-ports-repo.git', 'lp', [{ container: 4000 }])
       mockInspect.mockResolvedValueOnce({
         State: { Status: 'running' },
         NetworkSettings: { Ports: { '4000/tcp': [{ HostPort: '55000' }] } }
@@ -393,7 +423,7 @@ describe('windowService', () => {
     })
 
     it('stores null ports when container has no NetworkSettings', async () => {
-      const projectId = seedProject('git@github.com:org/no-net-repo.git', 'no-net', [3000])
+      const projectId = seedProject('git@github.com:org/no-net-repo.git', 'no-net', [{ container: 3000 }])
       mockInspect.mockResolvedValueOnce({
         State: { Status: 'running' }
         // no NetworkSettings
@@ -409,7 +439,7 @@ describe('windowService', () => {
     })
 
     it('continues window creation when port inspection fails', async () => {
-      const projectId = seedProject('git@github.com:org/inspect-fail.git', 'if', [3000])
+      const projectId = seedProject('git@github.com:org/inspect-fail.git', 'if', [{ container: 3000 }])
       mockInspect.mockRejectedValueOnce(new Error('docker API timeout'))
 
       const win = await createWindow('inspect-fail-win', projectId)
