@@ -65,7 +65,6 @@
       bind:value={newName}
       placeholder="Name…"
       onkeydown={handleKeydown}
-      onblur={cancelAdd}
     />
   {:else}
     <button
