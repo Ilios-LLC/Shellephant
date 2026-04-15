@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { ProjectRecord, TokenStatus, WindowRecord } from './types'
+  import type { WaitingEntry } from './lib/waitingWindows'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane, { type MainPaneView } from './components/MainPane.svelte'
   import type { SettingsRequirement } from './components/SettingsView.svelte'
@@ -127,6 +128,13 @@
     if (selectedWindowId === id) selectedWindowId = null
   }
 
+  async function handleWaitingWindowSelect(entry: WaitingEntry): Promise<void> {
+    selectedProjectId = entry.projectId
+    selectedWindowId = entry.windowId
+    view = 'default'
+    windows = await window.api.listWindows(entry.projectId)
+  }
+
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
   let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
 </script>
@@ -140,6 +148,7 @@
     onRequestSettings={handleRequestSettings}
     onRequestAssetTesting={handleRequestAssetTesting}
     assetTestingActive={view === 'asset-testing'}
+    onWaitingWindowSelect={handleWaitingWindowSelect}
   />
   <MainPane
     project={selectedProject}
