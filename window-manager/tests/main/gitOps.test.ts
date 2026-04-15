@@ -392,3 +392,189 @@ describe('push', () => {
     expect(res.stdout).not.toContain('PAT')
   })
 })
+
+describe('listContainerDir', () => {
+  it('parses ls -1p output into name/isDir pairs', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data')
+              setImmediate(() => cb(Buffer.from('src/\nREADME.md\npackage.json\n')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    expect(entries).toEqual([
+      { name: 'src', isDir: true },
+      { name: 'README.md', isDir: false },
+      { name: 'package.json', isDir: false }
+    ])
+  })
+
+  it('filters out blocked directories', async () => {
+    const blocked = 'node_modules/\n.venv/\nvenv/\n__pycache__/\n.git/\ndist/\nbuild/\n.next/\n.nuxt/\ntarget/\ncoverage/\nout/\n'
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from(`src/\n${blocked}index.ts\n`)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    const names = entries.map((e: { name: string }) => e.name)
+    expect(names).toContain('src')
+    expect(names).toContain('index.ts')
+    expect(names).not.toContain('node_modules')
+    expect(names).not.toContain('.venv')
+    expect(names).not.toContain('dist')
+  })
+
+  it('returns empty array when exec fails', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    expect(entries).toEqual([])
+  })
+})
+
+describe('readContainerFile', () => {
+  it('returns the file content as a string', async () => {
+    const content = 'console.log("hello")\n'
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from(content)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await readContainerFile(container, '/workspace/r/index.ts')
+    expect(result).toBe(content)
+  })
+
+  it('issues cat with the exact file path', async () => {
+    const container = makeContainer()
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await readContainerFile(container, '/workspace/r/src/app.ts')
+    expect(container.exec.mock.calls[0][0].Cmd).toEqual(['cat', '/workspace/r/src/app.ts'])
+  })
+
+  it('throws when exec returns non-zero exit code', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+      })
+    }
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await expect(readContainerFile(container, '/workspace/r/missing.ts')).rejects.toThrow(/readContainerFile failed/)
+  })
+})
+
+describe('writeFileInContainer', () => {
+  it('execs tee with the target path and AttachStdin: true', async () => {
+    const mockStream = {
+      on: vi.fn().mockReturnThis(),
+      write: vi.fn(),
+      end: vi.fn()
+    }
+    // Simulate 'finish' event firing after end()
+    mockStream.on.mockImplementation(function (
+      this: typeof mockStream,
+      event: string,
+      cb: () => void
+    ) {
+      if (event === 'finish') setImmediate(() => cb())
+      return this
+    })
+
+    const execInstance = {
+      start: vi.fn().mockResolvedValue(mockStream),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+    }
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue(execInstance)
+    }
+
+    const { writeFileInContainer } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await writeFileInContainer(container, '/workspace/r/file.ts', 'content here')
+
+    expect(container.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: ['tee', '/workspace/r/file.ts'],
+        AttachStdin: true,
+        Tty: false
+      })
+    )
+    expect(execInstance.start).toHaveBeenCalledWith({ hijack: true, stdin: true })
+    expect(mockStream.write).toHaveBeenCalledWith(Buffer.from('content here', 'utf8'))
+    expect(mockStream.end).toHaveBeenCalled()
+  })
+
+  it('throws when tee exits with non-zero code', async () => {
+    const execInstance = {
+      start: vi.fn().mockResolvedValue({
+        on(event: string, cb: (d?: Buffer) => void) {
+          if (event === 'finish') setImmediate(() => cb())
+          return this
+        },
+        write: vi.fn(),
+        end: vi.fn()
+      }),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+    }
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue(execInstance)
+    }
+    const { writeFileInContainer } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await expect(writeFileInContainer(container, '/workspace/r/file.ts', 'content'))
+      .rejects.toThrow(/writeFileInContainer failed/)
+  })
+})

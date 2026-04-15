@@ -6,6 +6,7 @@
   import '@xterm/xterm/css/xterm.css'
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
+  import EditorPane from './EditorPane.svelte'
   import CommitModal from './CommitModal.svelte'
   import { waitingWindows } from '../lib/waitingWindows'
 
@@ -16,13 +17,17 @@
 
   let { win, project }: Props = $props()
 
+  const rootPath = $derived('/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''))
+
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
+  let fitAddon: FitAddon | undefined
   let resizeObserver: ResizeObserver | undefined
 
   let commitOpen = $state(false)
   let commitBusy = $state(false)
   let pushBusy = $state(false)
+  let viewMode = $state<'terminal' | 'editor' | 'both'>('terminal')
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
@@ -79,7 +84,7 @@
       scrollback: 1000
     })
 
-    const fitAddon = new FitAddon()
+    fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
 
@@ -87,7 +92,7 @@
     fitAddon.fit()
     term.reset()
 
-    resizeObserver = new ResizeObserver(() => fitAddon.fit())
+    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
     resizeObserver.observe(terminalEl)
 
     window.api.openTerminal(win.container_id, term.cols, term.rows, win.name)
@@ -115,13 +120,28 @@
     waitingWindows.remove(win.container_id)
     term?.dispose()
   })
+
+  $effect(() => {
+    if (viewMode !== 'editor' && fitAddon) {
+      fitAddon.fit()
+    }
+  })
 </script>
 
 <section class="terminal-host">
-  <div class="terminal-body" bind:this={terminalEl}></div>
+  <div class="content-area" class:split={viewMode === 'both'}>
+    {#if viewMode !== 'terminal'}
+      <div class="editor-wrap">
+        <EditorPane containerId={win.container_id} {rootPath} />
+      </div>
+    {/if}
+    <div class="terminal-body" class:hidden={viewMode === 'editor'} bind:this={terminalEl}></div>
+  </div>
   <WindowDetailPane
     {win}
     {project}
+    {viewMode}
+    onViewChange={(mode) => (viewMode = mode)}
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
     commitDisabled={commitBusy || pushBusy}
@@ -140,9 +160,24 @@
     background: var(--bg-0);
   }
 
+  .content-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .editor-wrap {
+    flex: 1;
+    overflow: hidden;
+  }
+
   .terminal-body {
     flex: 1;
     overflow: hidden;
     padding: 0.5rem;
+  }
+
+  .terminal-body.hidden {
+    display: none;
   }
 </style>
