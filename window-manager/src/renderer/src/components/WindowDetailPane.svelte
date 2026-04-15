@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, WindowRecord } from '../types'
+  import type { ConversationSummary } from '../lib/conversationSummary'
 
   type ViewMode = 'terminal' | 'editor' | 'both'
 
@@ -15,6 +16,7 @@
     commitDisabled?: boolean
     pushDisabled?: boolean
     deleteDisabled?: boolean
+    summary?: ConversationSummary
   }
 
   let {
@@ -27,7 +29,8 @@
     onDelete,
     commitDisabled = true,
     pushDisabled = true,
-    deleteDisabled = false
+    deleteDisabled = false,
+    summary = undefined
   }: Props = $props()
 
   let deleteArmed = $state(false)
@@ -145,6 +148,14 @@
       {/if}
     </div>
   </div>
+  {#if summary}
+    <div class="summary-row">
+      <span class="summary-title">{summary.title}</span>
+      <ul class="summary-bullets">
+        {#each summary.bullets as b}<li>{b}</li>{/each}
+      </ul>
+    </div>
+  {/if}
 </footer>
 
 <style>
@@ -240,5 +251,26 @@
     background: var(--danger, #f87171);
     border-color: var(--danger, #f87171);
     color: #09090b;
+  }
+  .summary-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+  }
+  .summary-title {
+    color: var(--fg-1);
+    font-weight: 500;
+  }
+  .summary-bullets {
+    margin: 0;
+    padding-left: 1rem;
+    color: var(--fg-2);
+    list-style: disc;
+  }
+  .summary-bullets li {
+    line-height: 1.4;
   }
 </style>
