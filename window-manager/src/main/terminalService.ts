@@ -98,6 +98,7 @@ export function openTerminal(
   })
 
   child.onExit(() => {
+    if (session.waitingDebounceTimer) clearTimeout(session.waitingDebounceTimer)
     sessions.delete(containerId)
     if (!win.isDestroyed()) {
       win.webContents.send('terminal:data', containerId, '\r\n[detached]\r\n')
