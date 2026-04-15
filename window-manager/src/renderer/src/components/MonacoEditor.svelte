@@ -11,6 +11,8 @@
 
   let editorEl: HTMLDivElement
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let monacoRef: any | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let editor: any | undefined
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let contentListener: any | undefined
@@ -19,10 +21,26 @@
   let pollTimer: ReturnType<typeof setInterval> | undefined
   let mounted = false
 
+  // Build a model with a URI carrying the file extension so Monaco picks the
+  // language (json/ts/py/…). Without this the model defaults to plaintext and
+  // no syntax highlighting is applied. Disposes the old model first.
+  function swapModel(path: string, content: string): void {
+    if (!editor || !monacoRef) return
+    contentListener?.dispose()
+    const previous = editor.getModel()
+    const uri = monacoRef.Uri.parse(`inmemory://container/${containerId}${path}`)
+    const model =
+      monacoRef.editor.getModel(uri) ?? monacoRef.editor.createModel('', undefined, uri)
+    model.setValue(content)
+    editor.setModel(model)
+    if (previous && previous !== model) previous.dispose()
+    contentListener = model.onDidChangeContent(() => { isDirty = true })
+  }
+
   async function loadFile(path: string): Promise<void> {
     const content = await window.api.readContainerFile(containerId, path)
     lastContent = content
-    editor?.getModel()?.setValue(content)
+    swapModel(path, content)
     isDirty = false
   }
 
@@ -54,18 +72,15 @@
 
   onMount(async () => {
     const monaco = await initMonaco()
+    monacoRef = monaco
 
     editor = monaco.editor.create(editorEl, {
-      theme: 'claude-dark',
+      theme: 'material-dark',
       automaticLayout: true,
       minimap: { enabled: false },
       scrollBeyondLastLine: false,
       fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
       fontSize: 13
-    })
-
-    contentListener = editor.getModel()?.onDidChangeContent(() => {
-      isDirty = true
     })
 
     editor.addCommand(
@@ -81,6 +96,7 @@
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer)
     contentListener?.dispose()
+    editor?.getModel()?.dispose()
     editor?.dispose()
   })
 
@@ -103,7 +119,7 @@
     display: flex;
     flex-direction: column;
     height: 100%;
-    background: #09090b;
+    background: #011627;
   }
 
   .file-path-bar {

@@ -51,8 +51,9 @@ describe('MainPane', () => {
   })
 
   it('renders EmptyState when no project selected', () => {
-    render(MainPane, baseProps())
-    expect(screen.getByText(/no windows running/i)).toBeDefined()
+    const { container } = render(MainPane, baseProps())
+    // EmptyState is identified by its logo SVG (no headings/copy left to assert).
+    expect(container.querySelector('svg.logo')).not.toBeNull()
   })
 
   it('renders ProjectView when project selected but no window', () => {

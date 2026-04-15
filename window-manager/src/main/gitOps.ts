@@ -101,7 +101,9 @@ export async function execInContainer(
 
   const inspect = await execInstance.inspect()
   const code = inspect.ExitCode ?? 0
-  return { ok: code === 0, code, stdout }
+  // Docker TTY mode emits CRLF; normalize to LF so callers parsing line-by-line
+  // (e.g. listContainerDir) don't carry stray '\r' that breaks suffix checks.
+  return { ok: code === 0, code, stdout: stdout.replace(/\r\n/g, '\n') }
 }
 
 export async function remoteBranchExists(

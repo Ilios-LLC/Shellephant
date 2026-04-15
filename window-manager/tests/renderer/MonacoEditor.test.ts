@@ -32,6 +32,7 @@ const {
     setValue: mockSetValue,
     getFullModelRange: mockGetFullModelRange,
     pushEditOperations: mockPushEditOperations,
+    dispose: vi.fn(),
     onDidChangeContent: (cb: () => void) => {
       didChangeContentCb = cb
       return { dispose: vi.fn() }
@@ -40,6 +41,7 @@ const {
 
   const mockEditor = {
     getModel: vi.fn().mockReturnValue(mockModel),
+    setModel: vi.fn(),
     getValue: mockGetValue,
     getPosition: mockGetPosition,
     setPosition: mockSetPosition,
@@ -48,7 +50,12 @@ const {
   }
 
   const mockMonaco = {
-    editor: { create: vi.fn().mockReturnValue(mockEditor) },
+    editor: {
+      create: vi.fn().mockReturnValue(mockEditor),
+      getModel: vi.fn().mockReturnValue(undefined),
+      createModel: vi.fn().mockReturnValue(mockModel)
+    },
+    Uri: { parse: vi.fn().mockImplementation((s: string) => ({ toString: () => s })) },
     KeyMod: { CtrlCmd: 2048 },
     KeyCode: { KeyS: 49 }
   }
@@ -163,6 +170,17 @@ describe('MonacoEditor', () => {
       expect(mockReadFile).toHaveBeenCalledWith('ctr', '/workspace/r/file.ts')
       expect(mockPushEditOperations).toHaveBeenCalled()
     })
+  })
+
+  it('creates a model with a URI that carries the file extension (so Monaco picks the language)', async () => {
+    mockReadFile.mockResolvedValue('{}')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/settings.json' })
+    await vi.waitFor(() => expect(mockMonaco.editor.createModel).toHaveBeenCalled())
+    const uriArg = mockMonaco.Uri.parse.mock.calls[0][0]
+    expect(uriArg).toMatch(/\.json$/)
+    // language argument is `undefined` so Monaco infers from URI extension
+    const [, langArg] = mockMonaco.editor.createModel.mock.calls[0]
+    expect(langArg).toBeUndefined()
   })
 
   it('disposes editor on unmount', async () => {
