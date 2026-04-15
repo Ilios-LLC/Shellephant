@@ -212,5 +212,9 @@ describe('projectService', () => {
       const cleared = updateProject(project.id, { groupId: null })
       expect(cleared.group_id).toBeNull()
     })
+
+    it('throws when the project does not exist', () => {
+      expect(() => updateProject(99999, { groupId: null })).toThrow('Project 99999 not found')
+    })
   })
 })

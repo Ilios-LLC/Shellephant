@@ -89,14 +89,16 @@ export function listProjects(): ProjectRecord[] {
 export function updateProject(id: number, patch: { groupId: number | null }): ProjectRecord {
   const db = getDb()
   db.prepare('UPDATE projects SET group_id = ? WHERE id = ? AND deleted_at IS NULL').run(
-    patch.groupId ?? null,
+    patch.groupId,
     id
   )
-  return db
+  const record = db
     .prepare(
       'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE id = ?'
     )
-    .get(id) as ProjectRecord
+    .get(id) as ProjectRecord | undefined
+  if (!record) throw new Error(`Project ${id} not found`)
+  return record
 }
 
 export async function deleteProject(id: number): Promise<void> {
