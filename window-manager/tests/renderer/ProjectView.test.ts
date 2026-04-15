@@ -132,13 +132,16 @@ describe('ProjectView', () => {
         deleteWindow: vi.fn(),
         updateProject: mockUpdate
       })
+      const onProjectUpdated = vi.fn()
       render(ProjectView, baseProjectViewProps({
-        groups: [makeGroup(1, 'Frontend')]
+        groups: [makeGroup(1, 'Frontend')],
+        onProjectUpdated
       }))
       const select = screen.getByRole('combobox', { name: /group/i })
       await fireEvent.change(select, { target: { value: '1' } })
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith(project.id, { groupId: 1 })
+        expect(onProjectUpdated).toHaveBeenCalledWith({ ...project, group_id: 1 })
       })
     })
 
@@ -150,14 +153,17 @@ describe('ProjectView', () => {
         updateProject: mockUpdate
       })
       const projectWithGroup = { ...project, group_id: 1 }
+      const onProjectUpdated = vi.fn()
       render(ProjectView, baseProjectViewProps({
         project: projectWithGroup,
-        groups: [makeGroup(1, 'Frontend')]
+        groups: [makeGroup(1, 'Frontend')],
+        onProjectUpdated
       }))
       const select = screen.getByRole('combobox', { name: /group/i })
       await fireEvent.change(select, { target: { value: '' } })
       await waitFor(() => {
         expect(mockUpdate).toHaveBeenCalledWith(project.id, { groupId: null })
+        expect(onProjectUpdated).toHaveBeenCalledWith({ ...project, group_id: null })
       })
     })
   })
