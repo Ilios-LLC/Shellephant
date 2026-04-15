@@ -494,6 +494,24 @@ describe('readContainerFile', () => {
     await readContainerFile(container, '/workspace/r/src/app.ts')
     expect(container.exec.mock.calls[0][0].Cmd).toEqual(['cat', '/workspace/r/src/app.ts'])
   })
+
+  it('throws when exec returns non-zero exit code', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+      })
+    }
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await expect(readContainerFile(container, '/workspace/r/missing.ts')).rejects.toThrow(/readContainerFile failed/)
+  })
 })
 
 describe('writeFileInContainer', () => {

@@ -38,6 +38,7 @@ export async function readContainerFile(
   filePath: string
 ): Promise<string> {
   const result = await execInContainer(container, ['cat', filePath])
+  if (!result.ok) throw new Error(`readContainerFile failed (exit ${result.code}): ${filePath}`)
   return result.stdout
 }
 

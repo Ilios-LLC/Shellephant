@@ -369,6 +369,13 @@ describe('registerIpcHandlers', () => {
     expect(result).toBe('file content')
   })
 
+  it('fs:read-file propagates rejection from readContainerFile', async () => {
+    vi.mocked(readContainerFile).mockRejectedValue(new Error('readContainerFile failed (exit 1): /no/such'))
+    await expect(
+      getHandler('fs:read-file')({}, 'container-xyz', '/no/such')
+    ).rejects.toThrow(/readContainerFile failed/)
+  })
+
   it('registers fs:write-file handler that calls writeFileInContainer', async () => {
     vi.mocked(writeFileInContainer).mockResolvedValue(undefined)
     await getHandler('fs:write-file')({}, 'container-xyz', '/workspace/r/file.ts', 'new content')
