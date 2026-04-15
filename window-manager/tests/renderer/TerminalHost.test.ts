@@ -53,6 +53,19 @@ vi.mock('../../src/renderer/src/lib/waitingWindows', () => ({
   }
 }))
 
+const mockSummarySet = vi.fn()
+const mockSummaryRemove = vi.fn()
+vi.mock('../../src/renderer/src/lib/conversationSummary', () => ({
+  conversationSummary: {
+    subscribe: vi.fn((cb: (v: Map<string, unknown>) => void) => {
+      cb(new Map())
+      return () => {}
+    }),
+    set: (...args: unknown[]) => mockSummarySet(...args),
+    remove: (...args: unknown[]) => mockSummaryRemove(...args)
+  }
+}))
+
 const mockPushToast = vi.fn()
 vi.mock('../../src/renderer/src/lib/toasts', () => ({
   pushToast: (...args: unknown[]) => mockPushToast(...args)
@@ -90,6 +103,8 @@ describe('TerminalHost', () => {
     offTerminalData: ReturnType<typeof vi.fn>
     onTerminalWaiting: ReturnType<typeof vi.fn>
     offTerminalWaiting: ReturnType<typeof vi.fn>
+    onTerminalSummary: ReturnType<typeof vi.fn>
+    offTerminalSummary: ReturnType<typeof vi.fn>
     getCurrentBranch: ReturnType<typeof vi.fn>
     commit: ReturnType<typeof vi.fn>
     push: ReturnType<typeof vi.fn>
@@ -105,6 +120,8 @@ describe('TerminalHost', () => {
       offTerminalData: vi.fn(),
       onTerminalWaiting: vi.fn(),
       offTerminalWaiting: vi.fn(),
+      onTerminalSummary: vi.fn(),
+      offTerminalSummary: vi.fn(),
       getCurrentBranch: vi.fn().mockResolvedValue('main'),
       commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' })
@@ -246,5 +263,45 @@ describe('TerminalHost', () => {
     await fireEvent.click(screen.getByRole('button', { name: /terminal/i }))
     const body = document.querySelector('.terminal-body')
     expect(body?.classList.contains('hidden')).toBe(false)
+  })
+
+  it('registers onTerminalSummary listener on mount', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.onTerminalSummary).toHaveBeenCalled())
+  })
+
+  it('calls conversationSummary.set when terminal:summary fires for this container', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.onTerminalSummary).toHaveBeenCalled())
+    const cb = mockApi.onTerminalSummary.mock.calls[0][0] as (d: {
+      containerId: string
+      title: string
+      bullets: string[]
+    }) => void
+    cb({ containerId: 'container123abc', title: 'Built X', bullets: ['a', 'b'] })
+    expect(mockSummarySet).toHaveBeenCalledWith('container123abc', {
+      title: 'Built X',
+      bullets: ['a', 'b']
+    })
+  })
+
+  it('ignores terminal:summary for a different container', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.onTerminalSummary).toHaveBeenCalled())
+    const cb = mockApi.onTerminalSummary.mock.calls[0][0] as (d: {
+      containerId: string
+      title: string
+      bullets: string[]
+    }) => void
+    cb({ containerId: 'other-container', title: 'x', bullets: [] })
+    expect(mockSummarySet).not.toHaveBeenCalled()
+  })
+
+  it('calls offTerminalSummary and removes summary from store on unmount', async () => {
+    const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    unmount()
+    expect(mockApi.offTerminalSummary).toHaveBeenCalled()
+    expect(mockSummaryRemove).toHaveBeenCalledWith('container123abc')
   })
 })
