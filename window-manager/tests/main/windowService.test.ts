@@ -407,6 +407,20 @@ describe('windowService', () => {
         .get(win.id) as { ports: string | null }
       expect(row.ports).toBeNull()
     })
+
+    it('continues window creation when port inspection fails', async () => {
+      const projectId = seedProject('git@github.com:org/inspect-fail.git', 'if', [3000])
+      mockInspect.mockRejectedValueOnce(new Error('docker API timeout'))
+
+      const win = await createWindow('inspect-fail-win', projectId)
+
+      expect(win.ports).toBeUndefined()
+      expect(win.container_id).toBe('mock-container-abc123')
+      const row = getDb()
+        .prepare('SELECT ports FROM windows WHERE id = ?')
+        .get(win.id) as { ports: string | null }
+      expect(row.ports).toBeNull()
+    })
   })
 
   describe('listWindows', () => {

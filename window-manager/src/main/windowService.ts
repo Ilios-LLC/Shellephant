@@ -79,18 +79,23 @@ export async function createWindow(
 
     let portsJson: string | null = null
     if (projectPorts.length > 0) {
-      const containerInfo = await container.inspect()
-      const portMap: Record<string, string> = {}
-      const netPorts = (containerInfo.NetworkSettings?.Ports ?? {}) as Record<
-        string,
-        { HostPort: string }[] | null
-      >
-      for (const [key, bindings] of Object.entries(netPorts)) {
-        if (bindings && bindings.length > 0) {
-          portMap[key.replace('/tcp', '')] = bindings[0].HostPort
+      try {
+        const containerInfo = await container.inspect()
+        const portMap: Record<string, string> = {}
+        const netPorts = (containerInfo.NetworkSettings?.Ports ?? {}) as Record<
+          string,
+          { HostPort: string }[] | null
+        >
+        for (const [key, bindings] of Object.entries(netPorts)) {
+          if (bindings && bindings.length > 0) {
+            portMap[key.replace('/tcp', '')] = bindings[0].HostPort
+          }
         }
+        portsJson = Object.keys(portMap).length > 0 ? JSON.stringify(portMap) : null
+      } catch {
+        // inspect failure should not abort window creation; ports will be unknown
+        portsJson = null
       }
-      portsJson = Object.keys(portMap).length > 0 ? JSON.stringify(portMap) : null
     }
 
     onProgress('Preparing workspace…')
