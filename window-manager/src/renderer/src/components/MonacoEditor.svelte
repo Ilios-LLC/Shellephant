@@ -12,6 +12,8 @@
   let editorEl: HTMLDivElement
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let editor: any | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let contentListener: any | undefined
   let isDirty = $state(false)
   let lastContent = ''
   let pollTimer: ReturnType<typeof setInterval> | undefined
@@ -62,7 +64,7 @@
       fontSize: 13
     })
 
-    editor.getModel()?.onDidChangeContent(() => {
+    contentListener = editor.getModel()?.onDidChangeContent(() => {
       isDirty = true
     })
 
@@ -78,6 +80,7 @@
 
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer)
+    contentListener?.dispose()
     editor?.dispose()
   })
 

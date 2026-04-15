@@ -100,3 +100,13 @@ Lazy-loaded directory tree component for Svelte 5 runes mode.
 - State: `childrenMap` (Map of loaded entries), `expanded` (Set of expanded dir paths, root pre-expanded), `loading` (Set), `selectedPath`.
 - `flatList` derived state from `flattenVisible(rootPath, 0)` recurses into expanded dirs.
 - Tests live in `window-manager/tests/renderer/FileTree.test.ts` (5 tests).
+
+### window-manager/src/renderer/src/components/MonacoEditor.svelte
+Monaco editor wrapper for Svelte 5 runes mode.
+- Props: `containerId: string`, `filePath: string`
+- Initializes Monaco via `initMonaco()` from `lib/monacoConfig.ts` on mount.
+- Loads file content via `window.api.readContainerFile` on mount; saves via `window.api.writeContainerFile` on Ctrl+S.
+- Tracks `isDirty` state via `onDidChangeContent`; polls every 2s with `setInterval`, skipping update when dirty.
+- Poll uses `pushEditOperations` to update model content while preserving cursor position.
+- Disposes editor and clears poll timer on destroy.
+- Tests live in `window-manager/tests/renderer/MonacoEditor.test.ts` (7 tests). Mocks use `vi.hoisted()` to avoid hoisting issues with `vi.mock` factory references.
