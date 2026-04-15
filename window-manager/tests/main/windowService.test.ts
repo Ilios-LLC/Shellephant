@@ -391,6 +391,22 @@ describe('windowService', () => {
       const windows = listWindows()
       expect(windows[0].ports).toBe(JSON.stringify({ '4000': '55000' }))
     })
+
+    it('stores null ports when container has no NetworkSettings', async () => {
+      const projectId = seedProject('git@github.com:org/no-net-repo.git', 'no-net', [3000])
+      mockInspect.mockResolvedValueOnce({
+        State: { Status: 'running' }
+        // no NetworkSettings
+      })
+
+      const win = await createWindow('no-net-win', projectId)
+
+      expect(win.ports).toBeUndefined()
+      const row = getDb()
+        .prepare('SELECT ports FROM windows WHERE id = ?')
+        .get(win.id) as { ports: string | null }
+      expect(row.ports).toBeNull()
+    })
   })
 
   describe('listWindows', () => {

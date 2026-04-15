@@ -90,7 +90,7 @@ export async function createWindow(
           portMap[key.replace('/tcp', '')] = bindings[0].HostPort
         }
       }
-      portsJson = JSON.stringify(portMap)
+      portsJson = Object.keys(portMap).length > 0 ? JSON.stringify(portMap) : null
     }
 
     onProgress('Preparing workspace…')
