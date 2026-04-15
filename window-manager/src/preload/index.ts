@@ -55,5 +55,13 @@ contextBridge.exposeInMainWorld('api', {
   // Focus API — tells main which container the user is currently viewing,
   // so OS notifications are suppressed for the window already on screen.
   setActiveContainer: (containerId: string | null) =>
-    ipcRenderer.send('focus:active-container', containerId)
+    ipcRenderer.send('focus:active-container', containerId),
+
+  // File system API (container exec bridge)
+  listContainerDir: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:list-dir', containerId, path),
+  readContainerFile: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:read-file', containerId, path),
+  writeContainerFile: (containerId: string, path: string, content: string) =>
+    ipcRenderer.invoke('fs:write-file', containerId, path, content),
 })

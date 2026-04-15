@@ -83,4 +83,30 @@ When writing a plan according to superpowers:writing-plans, always write it to t
   - Be direct. Skip "great idea, but…" filler. No preamble.                                                                                                                                                                                      
   - NEVER cave just because I push back. If my counter is wrong, say so and explain why.                                                                                                                                                         
   - Missing context is a valid reason to pause — ask before assuming.                                                                                                                                                                            
-  - If I say "just build it" after a critique, confirm I saw the critique, then proceed. 
+  - If I say "just build it" after a critique, confirm I saw the critique, then proceed.
+
+## Codebase Structure
+
+### window-manager/src/main/gitOps.ts
+Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
+- `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
+- `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
+- Tests live in `window-manager/tests/main/gitOps.test.ts`.
+
+### window-manager/src/renderer/src/components/FileTree.svelte
+Lazy-loaded directory tree component for Svelte 5 runes mode.
+- Props: `containerId: string`, `rootPath: string`, `onFileSelect: (path) => void`
+- Fetches children via `window.api.listContainerDir(containerId, dirPath)` only on first expand (caches in `childrenMap` Map).
+- State: `childrenMap` (Map of loaded entries), `expanded` (Set of expanded dir paths, root pre-expanded), `loading` (Set), `selectedPath`.
+- `flatList` derived state from `flattenVisible(rootPath, 0)` recurses into expanded dirs.
+- Tests live in `window-manager/tests/renderer/FileTree.test.ts` (5 tests).
+
+### window-manager/src/renderer/src/components/MonacoEditor.svelte
+Monaco editor wrapper for Svelte 5 runes mode.
+- Props: `containerId: string`, `filePath: string`
+- Initializes Monaco via `initMonaco()` from `lib/monacoConfig.ts` on mount.
+- Loads file content via `window.api.readContainerFile` on mount; saves via `window.api.writeContainerFile` on Ctrl+S.
+- Tracks `isDirty` state via `onDidChangeContent`; polls every 2s with `setInterval`, skipping update when dirty.
+- Poll uses `pushEditOperations` to update model content while preserving cursor position.
+- Disposes editor and clears poll timer on destroy.
+- Tests live in `window-manager/tests/renderer/MonacoEditor.test.ts` (7 tests). Mocks use `vi.hoisted()` to avoid hoisting issues with `vi.mock` factory references.

@@ -15,7 +15,7 @@ import {
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 
@@ -136,4 +136,20 @@ export function registerIpcHandlers(): void {
   ipcMain.on('focus:active-container', (_, containerId: string | null) =>
     setActiveContainer(containerId)
   )
+
+  // File system handlers (container exec bridge)
+  ipcMain.handle('fs:list-dir', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return listContainerDir(container, path)
+  })
+
+  ipcMain.handle('fs:read-file', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return readContainerFile(container, path)
+  })
+
+  ipcMain.handle('fs:write-file', async (_, containerId: string, path: string, content: string) => {
+    const container = getDocker().getContainer(containerId)
+    return writeFileInContainer(container, path, content)
+  })
 }

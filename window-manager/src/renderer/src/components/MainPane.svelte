@@ -6,9 +6,8 @@
   import NewProjectWizard from './NewProjectWizard.svelte'
   import NewWindowWizard from './NewWindowWizard.svelte'
   import SettingsView, { type SettingsRequirement } from './SettingsView.svelte'
-  import AssetTesting from './AssetTesting.svelte'
 
-  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings' | 'asset-testing'
+  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings'
 
   interface Props {
     project: ProjectRecord | null
@@ -58,9 +57,7 @@
 </script>
 
 <main class="main-pane">
-  {#if view === 'asset-testing'}
-    <AssetTesting />
-  {:else if view === 'settings'}
+  {#if view === 'settings'}
     <SettingsView
       {patStatus}
       {claudeStatus}

@@ -32,7 +32,10 @@ vi.mock('../../src/main/projectService', () => ({
 vi.mock('../../src/main/gitOps', () => ({
   getCurrentBranch: vi.fn(),
   stageAndCommit: vi.fn(),
-  push: vi.fn()
+  push: vi.fn(),
+  listContainerDir: vi.fn(),
+  readContainerFile: vi.fn(),
+  writeFileInContainer: vi.fn()
 }))
 
 vi.mock('../../src/main/settingsService', () => ({
@@ -71,7 +74,7 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
-import { getCurrentBranch, stageAndCommit, push } from '../../src/main/gitOps'
+import { getCurrentBranch, stageAndCommit, push, listContainerDir, readContainerFile, writeFileInContainer } from '../../src/main/gitOps'
 import { getGitHubPat } from '../../src/main/settingsService'
 import { getIdentity } from '../../src/main/githubIdentity'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
@@ -356,5 +359,36 @@ describe('registerIpcHandlers', () => {
     expect(result.ok).toBe(false)
     expect(result.code).toBe(1)
     expect(result.stdout).toMatch(/non-fast-forward/)
+  })
+
+  it('registers fs:list-dir handler that calls listContainerDir', async () => {
+    const entries = [{ name: 'src', isDir: true }, { name: 'README.md', isDir: false }]
+    vi.mocked(listContainerDir).mockResolvedValue(entries)
+    const result = await getHandler('fs:list-dir')({}, 'container-xyz', '/workspace/r')
+    expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
+    expect(listContainerDir).toHaveBeenCalledWith(mockContainer, '/workspace/r')
+    expect(result).toEqual(entries)
+  })
+
+  it('registers fs:read-file handler that calls readContainerFile', async () => {
+    vi.mocked(readContainerFile).mockResolvedValue('file content')
+    const result = await getHandler('fs:read-file')({}, 'container-xyz', '/workspace/r/file.ts')
+    expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
+    expect(readContainerFile).toHaveBeenCalledWith(mockContainer, '/workspace/r/file.ts')
+    expect(result).toBe('file content')
+  })
+
+  it('fs:read-file propagates rejection from readContainerFile', async () => {
+    vi.mocked(readContainerFile).mockRejectedValue(new Error('readContainerFile failed (exit 1): /no/such'))
+    await expect(
+      getHandler('fs:read-file')({}, 'container-xyz', '/no/such')
+    ).rejects.toThrow(/readContainerFile failed/)
+  })
+
+  it('registers fs:write-file handler that calls writeFileInContainer', async () => {
+    vi.mocked(writeFileInContainer).mockResolvedValue(undefined)
+    await getHandler('fs:write-file')({}, 'container-xyz', '/workspace/r/file.ts', 'new content')
+    expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
+    expect(writeFileInContainer).toHaveBeenCalledWith(mockContainer, '/workspace/r/file.ts', 'new content')
   })
 })

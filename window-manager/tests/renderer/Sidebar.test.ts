@@ -18,7 +18,6 @@ describe('Sidebar', () => {
   let onProjectSelect: ReturnType<typeof vi.fn>
   let onRequestNewProject: ReturnType<typeof vi.fn>
   let onRequestSettings: ReturnType<typeof vi.fn>
-  let onRequestAssetTesting: ReturnType<typeof vi.fn>
   let onRequestHome: ReturnType<typeof vi.fn>
   let onWaitingWindowSelect: ReturnType<typeof vi.fn>
 
@@ -26,7 +25,6 @@ describe('Sidebar', () => {
     onProjectSelect = vi.fn()
     onRequestNewProject = vi.fn()
     onRequestSettings = vi.fn()
-    onRequestAssetTesting = vi.fn()
     onRequestHome = vi.fn()
     onWaitingWindowSelect = vi.fn()
   })
@@ -40,9 +38,7 @@ describe('Sidebar', () => {
       onProjectSelect,
       onRequestNewProject,
       onRequestSettings,
-      onRequestAssetTesting,
       onRequestHome,
-      assetTestingActive: false,
       onWaitingWindowSelect,
       ...overrides
     }
@@ -93,18 +89,6 @@ describe('Sidebar', () => {
     render(Sidebar, baseProps())
     await fireEvent.click(screen.getByRole('button', { name: /settings/i }))
     expect(onRequestSettings).toHaveBeenCalled()
-  })
-
-  it('clicking the asset testing tab calls onRequestAssetTesting', async () => {
-    render(Sidebar, baseProps())
-    await fireEvent.click(screen.getByRole('button', { name: /asset testing/i }))
-    expect(onRequestAssetTesting).toHaveBeenCalled()
-  })
-
-  it('marks the asset testing tab active when assetTestingActive=true', () => {
-    render(Sidebar, baseProps({ assetTestingActive: true }))
-    const btn = screen.getByRole('button', { name: /asset testing/i })
-    expect(btn.classList.contains('active')).toBe(true)
   })
 
   describe('waiting section', () => {

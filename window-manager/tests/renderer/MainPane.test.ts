@@ -1,5 +1,10 @@
 import { render, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src/renderer/src/components/EditorPane.svelte', () => ({
+  default: vi.fn(() => ({}))
+}))
+
 import MainPane from '../../src/renderer/src/components/MainPane.svelte'
 import type { ProjectRecord, TokenStatus } from '../../src/renderer/src/types'
 
@@ -103,11 +108,6 @@ describe('MainPane', () => {
       })
     )
     expect(screen.getByText(/required before you can create a project/i)).toBeDefined()
-  })
-
-  it('renders AssetTesting when view=asset-testing', () => {
-    render(MainPane, baseProps({ view: 'asset-testing' }))
-    expect(screen.getByRole('heading', { name: /asset testing/i })).toBeDefined()
   })
 
   it('shows window-required banner when settingsRequiredFor=window', () => {

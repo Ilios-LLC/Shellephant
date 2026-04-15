@@ -9,9 +9,7 @@
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
-    onRequestAssetTesting: () => void
     onRequestHome: () => void
-    assetTestingActive: boolean
     onWaitingWindowSelect: (entry: WaitingEntry) => void
   }
 
@@ -21,9 +19,7 @@
     onProjectSelect,
     onRequestNewProject,
     onRequestSettings,
-    onRequestAssetTesting,
     onRequestHome,
-    assetTestingActive,
     onWaitingWindowSelect
   }: Props = $props()
 </script>
@@ -92,16 +88,6 @@
       {/each}
     </div>
   {/if}
-  <footer class="sidebar-footer">
-    <button
-      type="button"
-      class="tab-link"
-      class:active={assetTestingActive}
-      onclick={onRequestAssetTesting}
-    >
-      Asset Testing
-    </button>
-  </footer>
 </aside>
 
 <style>
@@ -225,37 +211,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .sidebar-footer {
-    margin-top: auto;
-    padding: 0.5rem 0.65rem;
-    border-top: 1px solid var(--border);
-  }
-
-  .tab-link {
-    width: 100%;
-    text-align: left;
-    padding: 0.45rem 0.55rem;
-    font-family: var(--font-ui);
-    font-size: 0.78rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    color: var(--fg-2);
-    cursor: pointer;
-  }
-
-  .tab-link:hover {
-    color: var(--fg-0);
-    border-color: var(--border);
-  }
-
-  .tab-link.active {
-    color: var(--accent-hi);
-    border-color: var(--accent);
-    background: rgba(139, 92, 246, 0.08);
   }
 </style>

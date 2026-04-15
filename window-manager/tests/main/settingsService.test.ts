@@ -14,8 +14,14 @@ vi.mock('electron', () => ({
 }))
 
 const mockInvalidateIdentity = vi.fn()
+const mockGetIdentity = vi.fn().mockResolvedValue({ name: 'Test User', email: 'test@example.com' })
+const mockApplyGitIdentity = vi.fn().mockResolvedValue(undefined)
 vi.mock('../../src/main/githubIdentity', () => ({
-  invalidateIdentity: () => mockInvalidateIdentity()
+  invalidateIdentity: () => mockInvalidateIdentity(),
+  getIdentity: (pat: string) => mockGetIdentity(pat)
+}))
+vi.mock('../../src/main/gitOps', () => ({
+  applyGitIdentity: (name: string, email: string) => mockApplyGitIdentity(name, email)
 }))
 
 import {

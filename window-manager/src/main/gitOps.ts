@@ -1,7 +1,15 @@
 import { execFile } from 'child_process'
+import { promisify } from 'util'
 import type Dockerode from 'dockerode'
 import { sshUrlToHttps } from './gitUrl'
 import { scrubPat } from './scrub'
+
+const execFileAsync = promisify(execFile)
+
+export async function applyGitIdentity(name: string, email: string): Promise<void> {
+  await execFileAsync('git', ['config', '--global', 'user.name', name])
+  await execFileAsync('git', ['config', '--global', 'user.email', email])
+}
 
 export interface GitResult {
   ok: boolean
@@ -10,6 +18,62 @@ export interface GitResult {
 }
 
 type Container = ReturnType<Dockerode['getContainer']>
+
+const BLOCKED_DIRS = new Set([
+  'node_modules', '.venv', 'venv', '__pycache__', '.git',
+  'dist', 'build', '.next', '.nuxt', 'target', 'coverage', 'out'
+])
+
+export async function listContainerDir(
+  container: Container,
+  dirPath: string
+): Promise<{ name: string; isDir: boolean }[]> {
+  const result = await execInContainer(container, ['ls', '-1p', dirPath])
+  if (!result.ok) return []
+  return result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((entry) => {
+      const isDir = entry.endsWith('/')
+      const name = isDir ? entry.slice(0, -1) : entry
+      return { name, isDir }
+    })
+    .filter(({ name, isDir }) => !(isDir && BLOCKED_DIRS.has(name)))
+}
+
+export async function readContainerFile(
+  container: Container,
+  filePath: string
+): Promise<string> {
+  const result = await execInContainer(container, ['cat', filePath])
+  if (!result.ok) throw new Error(`readContainerFile failed (exit ${result.code}): ${filePath}`)
+  return result.stdout
+}
+
+export async function writeFileInContainer(
+  container: Container,
+  filePath: string,
+  content: string
+): Promise<void> {
+  const execInstance = await container.exec({
+    Cmd: ['tee', filePath],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false
+  })
+  const stream = await execInstance.start({ hijack: true, stdin: true })
+  await new Promise<void>((resolve, reject) => {
+    stream.on('error', reject)
+    stream.on('finish', resolve)
+    stream.write(Buffer.from(content, 'utf8'))
+    stream.end()
+  })
+  const info = await execInstance.inspect()
+  if (info.ExitCode !== 0) {
+    throw new Error(`writeFileInContainer failed (exit ${info.ExitCode}): ${filePath}`)
+  }
+}
 
 export async function execInContainer(
   container: Container,
