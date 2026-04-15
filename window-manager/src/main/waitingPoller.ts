@@ -2,18 +2,13 @@ import { getDocker } from './docker'
 import { execInContainer } from './gitOps'
 import { getDb } from './db'
 import { dispatchWaiting } from './waitingDispatcher'
+import { dispatchSummary } from './summaryDispatcher'
 
-// Every tick, each active terminal session is probed for the hook marker.
-// 3s keeps the user-visible latency below what feels laggy while avoiding
-// excessive docker-daemon chatter at realistic session counts.
 const POLL_INTERVAL_MS = 3000
 const MARKER = '/tmp/claude-waiting'
+const SUMMARY_FILE = '/tmp/claude-summary.json'
 
 export function startWaitingPoller(): () => void {
-  // Clear any markers left over from a previous app run before we start
-  // firing notifications — otherwise a stale /tmp/claude-waiting would
-  // alert on the first poll tick even though Claude idled before this
-  // session started.
   void primeMarkers()
   const interval = setInterval(() => {
     void pollOnce()
@@ -35,7 +30,6 @@ function getMonitoredContainerIds(): string[] {
       .all() as { container_id: string }[]
     return rows.map((r) => r.container_id)
   } catch {
-    // DB not initialized yet (very early boot); skip this tick.
     return []
   }
 }
@@ -56,12 +50,31 @@ async function primeMarkers(): Promise<void> {
 async function checkOne(containerId: string): Promise<void> {
   try {
     const container = getDocker().getContainer(containerId)
+
+    // Check waiting marker
     const r = await execInContainer(container, [
       'sh',
       '-c',
       `test -e ${MARKER} && rm -f ${MARKER} && echo Y`
     ])
     if (r.ok && r.stdout.trim() === 'Y') dispatchWaiting(containerId)
+
+    // Check summary file — read and delete atomically
+    const s = await execInContainer(container, [
+      'sh',
+      '-c',
+      `test -f ${SUMMARY_FILE} && cat ${SUMMARY_FILE} && rm -f ${SUMMARY_FILE}`
+    ])
+    if (s.ok && s.stdout.trim()) {
+      try {
+        const summary = JSON.parse(s.stdout.trim()) as { title: string; bullets: string[] }
+        if (summary.title && Array.isArray(summary.bullets)) {
+          dispatchSummary(containerId, summary)
+        }
+      } catch {
+        // Malformed JSON — skip silently.
+      }
+    }
   } catch {
     // Container gone / docker unreachable; next tick will retry naturally.
   }

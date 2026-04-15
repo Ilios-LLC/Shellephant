@@ -10,6 +10,7 @@
   import CommitModal from './CommitModal.svelte'
   import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
+  import { conversationSummary } from '../lib/conversationSummary'
 
   interface Props {
     win: WindowRecord
@@ -118,6 +119,12 @@
       }
     })
 
+    window.api.onTerminalSummary(({ containerId, title, bullets }) => {
+      if (containerId === win.container_id) {
+        conversationSummary.set(containerId, { title, bullets })
+      }
+    })
+
     term.onData((data: string) => {
       window.api.sendTerminalInput(win.container_id, data)
       waitingWindows.remove(win.container_id)
@@ -133,6 +140,8 @@
     window.api.offTerminalData()
     window.api.closeTerminal(win.container_id)
     waitingWindows.remove(win.container_id)
+    window.api.offTerminalSummary()
+    conversationSummary.remove(win.container_id)
     term?.dispose()
   })
 
@@ -156,6 +165,7 @@
     {win}
     {project}
     {viewMode}
+    summary={$conversationSummary.get(win.container_id)}
     onViewChange={(mode) => (viewMode = mode)}
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
@@ -165,7 +175,13 @@
     deleteDisabled={deleteBusy}
   />
   {#if commitOpen}
-    <CommitModal onSubmit={runCommit} onCancel={() => (commitOpen = false)} busy={commitBusy} />
+    <CommitModal
+      initialSubject={$conversationSummary.get(win.container_id)?.title ?? ''}
+      initialBody={$conversationSummary.get(win.container_id)?.bullets.join('\n') ?? ''}
+      onSubmit={runCommit}
+      onCancel={() => (commitOpen = false)}
+      busy={commitBusy}
+    />
   {/if}
 </section>
 

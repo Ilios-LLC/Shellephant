@@ -116,8 +116,9 @@ RUN claude plugin marketplace add JuliusBrussee/caveman && \
     claude plugin install superpowers@superpowers-marketplace
 
 USER root
+COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node

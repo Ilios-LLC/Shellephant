@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
+import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
 
 const getCurrentBranch = vi.fn()
 const sendTerminalInput = vi.fn()
@@ -178,5 +179,30 @@ describe('WindowDetailPane', () => {
     const badWin = { ...win, ports: 'not-valid-json' }
     render(WindowDetailPane, { props: { win: badWin, project } })
     expect(screen.queryByText(/→/)).not.toBeInTheDocument()
+  })
+
+  it('does not render summary row when summary prop is undefined', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(document.querySelector('.summary-row')).toBeNull()
+  })
+
+  it('renders summary title when summary prop is provided', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    const summary: ConversationSummary = { title: 'Fixed auth bug', bullets: ['updated middleware'] }
+    render(WindowDetailPane, { props: { win, project, summary } })
+    expect(screen.getByText('Fixed auth bug')).toBeInTheDocument()
+  })
+
+  it('renders all summary bullets when summary prop is provided', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    const summary: ConversationSummary = {
+      title: 'Built feature',
+      bullets: ['added endpoint', 'wrote tests', 'updated docs']
+    }
+    render(WindowDetailPane, { props: { win, project, summary } })
+    expect(screen.getByText('added endpoint')).toBeInTheDocument()
+    expect(screen.getByText('wrote tests')).toBeInTheDocument()
+    expect(screen.getByText('updated docs')).toBeInTheDocument()
   })
 })

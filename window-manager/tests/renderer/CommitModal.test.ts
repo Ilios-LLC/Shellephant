@@ -53,4 +53,26 @@ describe('CommitModal', () => {
     await fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
     expect(onCancel).toHaveBeenCalled()
   })
+
+  it('pre-populates subject from initialSubject prop', () => {
+    render(CommitModal, {
+      props: { onSubmit: vi.fn(), onCancel: vi.fn(), busy: false, initialSubject: 'Add feature X' }
+    })
+    const subject = screen.getByLabelText(/subject/i) as HTMLInputElement
+    expect(subject.value).toBe('Add feature X')
+  })
+
+  it('pre-populates body from initialBody prop', () => {
+    render(CommitModal, {
+      props: {
+        onSubmit: vi.fn(),
+        onCancel: vi.fn(),
+        busy: false,
+        initialSubject: 'x',
+        initialBody: '- point one\n- point two'
+      }
+    })
+    const body = screen.getByLabelText(/body/i) as HTMLTextAreaElement
+    expect(body.value).toBe('- point one\n- point two')
+  })
 })

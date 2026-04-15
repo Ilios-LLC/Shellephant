@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld('api', {
     }) => void
   ) => ipcRenderer.on('terminal:waiting', (_, info) => callback(info)),
   offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting'),
+  onTerminalSummary: (
+    callback: (data: { containerId: string; title: string; bullets: string[] }) => void
+  ) => ipcRenderer.on('terminal:summary', (_, data) => callback(data)),
+  offTerminalSummary: () => ipcRenderer.removeAllListeners('terminal:summary'),
 
   // Focus API — tells main which container the user is currently viewing,
   // so OS notifications are suppressed for the window already on screen.
