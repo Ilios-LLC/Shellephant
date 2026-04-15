@@ -67,6 +67,18 @@ describe('db', () => {
       expect.arrayContaining(['key', 'value', 'updated_at'])
     )
   })
+
+  it('projects table has a ports column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('ports')
+  })
+
+  it('windows table has a ports column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('ports')
+  })
 })
 
 describe('db migrations', () => {
@@ -99,6 +111,46 @@ describe('db migrations', () => {
     expect(cols.map((c) => c.name)).toContain('project_id')
     const rows = migrated.prepare('SELECT * FROM windows').all()
     expect(rows).toHaveLength(0)
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
+
+  it('adds ports column to projects and windows tables that lack it', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-ports-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`
+      CREATE TABLE projects (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        git_url    TEXT NOT NULL UNIQUE,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE windows (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name         TEXT NOT NULL,
+        project_id   INTEGER NOT NULL,
+        container_id TEXT NOT NULL,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at   DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const projCols = migrated.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    const winCols = migrated.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(projCols.map((c) => c.name)).toContain('ports')
+    expect(winCols.map((c) => c.name)).toContain('ports')
 
     closeDb()
     fs.rmSync(tmpPath, { force: true })

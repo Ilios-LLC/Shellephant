@@ -112,7 +112,7 @@ describe('registerIpcHandlers', () => {
     }
     vi.mocked(createProject).mockResolvedValue(record)
     const result = await getHandler('project:create')({}, 'test', 'git@github.com:org/repo.git')
-    expect(createProject).toHaveBeenCalledWith('test', 'git@github.com:org/repo.git')
+    expect(createProject).toHaveBeenCalledWith('test', 'git@github.com:org/repo.git', undefined)
     expect(result).toEqual(record)
   })
 

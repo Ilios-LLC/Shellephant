@@ -113,6 +113,34 @@ describe('projectService', () => {
       expect(mockExecFile).not.toHaveBeenCalled()
       expect(listProjects()).toHaveLength(0)
     })
+
+    it('stores ports when provided', async () => {
+      const result = await createProject('with-ports', 'git@github.com:org/repo2.git', [3000, 8080])
+      expect(result.ports).toBe(JSON.stringify([3000, 8080]))
+    })
+
+    it('stores no ports when omitted', async () => {
+      const result = await createProject('no-ports', 'git@github.com:org/repo3.git')
+      expect(result.ports).toBeUndefined()
+    })
+
+    it('rejects port value 0', async () => {
+      await expect(
+        createProject('bad-ports', 'git@github.com:org/repo4.git', [0])
+      ).rejects.toThrow(/Invalid port/)
+    })
+
+    it('rejects port value 65536', async () => {
+      await expect(
+        createProject('bad-ports2', 'git@github.com:org/repo5.git', [65536])
+      ).rejects.toThrow(/Invalid port/)
+    })
+
+    it('rejects non-integer port value', async () => {
+      await expect(
+        createProject('bad-ports3', 'git@github.com:org/repo6.git', [NaN])
+      ).rejects.toThrow(/Invalid port/)
+    })
   })
 
   describe('listProjects', () => {
@@ -128,6 +156,12 @@ describe('projectService', () => {
       await deleteProject(deletedProject.id)
       expect(listProjects()).toHaveLength(1)
       expect(listProjects()[0].name).toBe('active')
+    })
+
+    it('listProjects includes ports field', async () => {
+      await createProject('list-ports', 'git@github.com:org/list-ports.git', [5432])
+      const projects = listProjects()
+      expect(projects[0].ports).toBe(JSON.stringify([5432]))
     })
   })
 

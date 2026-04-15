@@ -3,12 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 
 const getCurrentBranch = vi.fn()
+const sendTerminalInput = vi.fn()
 
 beforeEach(() => {
   vi.useFakeTimers()
   getCurrentBranch.mockReset()
+  sendTerminalInput.mockReset()
   // @ts-expect-error test bridge
-  globalThis.window.api = { getCurrentBranch }
+  globalThis.window.api = { getCurrentBranch, sendTerminalInput }
 })
 afterEach(() => vi.useRealTimers())
 
@@ -19,6 +21,11 @@ const win = {
   container_id: 'abc123def456',
   created_at: '2026-04-14T00:00:00Z',
   status: 'running' as const
+}
+
+const winWithPorts = {
+  ...win,
+  ports: JSON.stringify({ '3000': '54321', '8080': '54322' })
 }
 const project = {
   id: 7,
@@ -115,5 +122,61 @@ describe('WindowDetailPane', () => {
     render(WindowDetailPane, { props: { win, project, viewMode: 'terminal', onViewChange } })
     await fireEvent.click(screen.getByRole('button', { name: /editor/i }))
     expect(onViewChange).toHaveBeenCalledWith('editor')
+  })
+
+  it('renders a Claude button', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeInTheDocument()
+  })
+
+  it('Claude button is disabled when container is not running', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const stoppedWin = { ...win, status: 'stopped' as const }
+    render(WindowDetailPane, { props: { win: stoppedWin, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
+  })
+
+  it('Claude button is disabled when container status is unknown', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const unknownWin = { ...win, status: 'unknown' as const }
+    render(WindowDetailPane, { props: { win: unknownWin, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
+  })
+
+  it('Claude button is enabled when container is running', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).not.toBeDisabled()
+  })
+
+  it('clicking Claude button sends the inject command to the terminal', async () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    await fireEvent.click(screen.getByRole('button', { name: /claude/i }))
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'abc123def456',
+      '\x15claude --dangerously-skip-permissions\n'
+    )
+  })
+
+  it('does not render port arrows when window has no ports', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument()
+  })
+
+  it('renders port mappings when window has ports', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win: winWithPorts, project } })
+    expect(screen.getByText(':3000→:54321')).toBeInTheDocument()
+    expect(screen.getByText(':8080→:54322')).toBeInTheDocument()
+  })
+
+  it('renders nothing for malformed ports JSON', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const badWin = { ...win, ports: 'not-valid-json' }
+    render(WindowDetailPane, { props: { win: badWin, project } })
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument()
   })
 })

@@ -12,6 +12,7 @@
   let name = $state('')
   let loading = $state(false)
   let error = $state('')
+  let ports = $state('')
 
   async function handleSubmit(): Promise<void> {
     const trimmedUrl = gitUrl.trim()
@@ -19,7 +20,28 @@
     loading = true
     error = ''
     try {
-      const record = await window.api.createProject(name.trim(), trimmedUrl)
+      const rawTokens = ports
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+
+      let parsedPorts: number[] | undefined
+      if (rawTokens.length > 0) {
+        const nums = rawTokens.map((s) => (/^\d+$/.test(s) ? parseInt(s, 10) : NaN))
+        if (nums.some((n) => isNaN(n))) {
+          error = 'Ports must be comma-separated numbers (e.g. 3000, 8080)'
+          loading = false
+          return
+        }
+        if (nums.some((n) => n < 1 || n > 65535)) {
+          error = 'Ports must be between 1 and 65535'
+          loading = false
+          return
+        }
+        parsedPorts = nums
+      }
+
+      const record = await window.api.createProject(name.trim(), trimmedUrl, parsedPorts)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -61,6 +83,18 @@
         type="text"
         placeholder="my-project"
         bind:value={name}
+        disabled={loading}
+        onkeydown={handleKey}
+      />
+    </div>
+
+    <div class="field">
+      <label for="ports">Ports <span class="muted">(optional)</span></label>
+      <input
+        id="ports"
+        type="text"
+        placeholder="3000, 8080"
+        bind:value={ports}
         disabled={loading}
         onkeydown={handleKey}
       />

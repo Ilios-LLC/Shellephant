@@ -43,7 +43,7 @@ function resolveWindowGitContext(windowId: number): WindowGitContext {
 
 export function registerIpcHandlers(): void {
   // Project handlers
-  ipcMain.handle('project:create', (_, name: string, gitUrl: string) => createProject(name, gitUrl))
+  ipcMain.handle('project:create', (_, name: string, gitUrl: string, ports?: number[]) => createProject(name, gitUrl, ports))
   ipcMain.handle('project:list', () => listProjects())
   ipcMain.handle('project:delete', (_, id: number) => deleteProject(id))
 
