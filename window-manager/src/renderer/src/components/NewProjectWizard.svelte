@@ -33,6 +33,11 @@
           loading = false
           return
         }
+        if (nums.some((n) => n < 1 || n > 65535)) {
+          error = 'Ports must be between 1 and 65535'
+          loading = false
+          return
+        }
         parsedPorts = nums
       }
 
