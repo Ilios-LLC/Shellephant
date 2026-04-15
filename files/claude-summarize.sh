@@ -8,7 +8,7 @@ TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')
 [[ -z "$TRANSCRIPT" || ! -f "$TRANSCRIPT" ]] && exit 0
 
 RESULT=$(claude --print \
-  "Read this conversation transcript and output ONLY a JSON object with two fields: \"title\" (string, ≤60 chars, summarizes what was accomplished) and \"bullets\" (array of ≤5 strings, key points). No markdown, no explanation, no code fences." \
+  "Read this conversation transcript. Focus only on code changes made — ignore discussion, questions, and explanations. Output ONLY a JSON object with two fields: \"title\" (string, ≤50 chars, conventional commit format e.g. 'feat: add retry logic', imperative mood, present tense) and \"bullets\" (array of ≤5 strings, each naming a specific code change: what file or behavior changed). No markdown, no explanation, no code fences." \
   < "$TRANSCRIPT" 2>/dev/null) || exit 0
 
 TMP=$(mktemp /tmp/claude-summary.XXXXXX)
