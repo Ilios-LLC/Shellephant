@@ -28,7 +28,8 @@ function verifyRemote(httpsUrl: string): Promise<void> {
 
 export async function createProject(
   name: string,
-  gitUrl: string
+  gitUrl: string,
+  ports?: number[]
 ): Promise<ProjectRecord> {
   if (!isValidSshUrl(gitUrl)) {
     throw new Error('Invalid SSH URL format. Expected: git@host:org/repo.git')
