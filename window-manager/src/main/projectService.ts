@@ -14,6 +14,7 @@ export interface ProjectRecord {
   name: string
   git_url: string
   ports?: string
+  env_vars?: string | null
   group_id?: number | null
   created_at: string
 }
@@ -91,7 +92,7 @@ export async function createProject(
 export function listProjects(): ProjectRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE deleted_at IS NULL'
     )
     .all() as ProjectRecord[]
 }
@@ -104,7 +105,7 @@ export function updateProject(id: number, patch: { groupId: number | null }): Pr
   )
   const record = db
     .prepare(
-      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
     )
     .get(id) as ProjectRecord | undefined
   if (!record) throw new Error(`Project ${id} not found`)
@@ -128,4 +129,19 @@ export async function deleteProject(id: number): Promise<void> {
   db.prepare("UPDATE projects SET deleted_at = datetime('now') WHERE id = ?").run(
     id
   )
+}
+
+export function getProject(id: number): ProjectRecord | undefined {
+  return getDb()
+    .prepare(
+      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
+    )
+    .get(id) as ProjectRecord | undefined
+}
+
+export function updateProjectEnvVars(id: number, envVars: Record<string, string>): void {
+  const result = getDb()
+    .prepare('UPDATE projects SET env_vars = ? WHERE id = ? AND deleted_at IS NULL')
+    .run(JSON.stringify(envVars), id)
+  if (result.changes === 0) throw new Error(`Project ${id} not found`)
 }
