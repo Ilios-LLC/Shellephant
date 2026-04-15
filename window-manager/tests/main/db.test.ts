@@ -79,6 +79,28 @@ describe('db', () => {
     const cols = db.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
     expect(cols.map((c) => c.name)).toContain('ports')
   })
+
+  it('creates the project_groups table on init', () => {
+    const db = getDb()
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_groups'")
+      .all()
+    expect(tables).toHaveLength(1)
+  })
+
+  it('project_groups table has expected columns', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(project_groups)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toEqual(
+      expect.arrayContaining(['id', 'name', 'created_at'])
+    )
+  })
+
+  it('projects table has a group_id column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('group_id')
+  })
 })
 
 describe('db migrations', () => {
@@ -151,6 +173,42 @@ describe('db migrations', () => {
     const winCols = migrated.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
     expect(projCols.map((c) => c.name)).toContain('ports')
     expect(winCols.map((c) => c.name)).toContain('ports')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
+
+  it('adds group_id column to projects table that lacks it', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-groupid-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`
+      CREATE TABLE project_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE projects (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        git_url    TEXT NOT NULL UNIQUE,
+        ports      TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const cols = migrated.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('group_id')
 
     closeDb()
     fs.rmSync(tmpPath, { force: true })
