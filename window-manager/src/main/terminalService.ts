@@ -23,7 +23,13 @@ const REFRESH_KICK_MS = 120
 
 // OSC sequence emitted by the Claude Code Stop hook inside the container.
 // Stripped before forwarding to xterm; invisible to the user.
+// Assumption: node-pty delivers this 22-byte sequence in a single chunk.
+// If it ever split across two chunks the signal would be missed (notification
+// silently dropped), which is acceptable — no correctness damage.
 const WAITING_SIGNAL = '\x1b]9999;claude-waiting\x07'
+// First signal within a turn fires; subsequent signals within this window are
+// dropped. This means a second rapid Stop (e.g. two agent turns < 2s apart)
+// will not produce a second notification. Acceptable for the expected use case.
 const WAITING_DEBOUNCE_MS = 2000
 
 const sessions = new Map<string, TerminalSession>()
@@ -87,7 +93,10 @@ export function openTerminal(
       }
       if (!session.waitingDebounceTimer) {
         win.webContents.send('terminal:waiting', containerId)
-        new Notification({ title: 'Claude is waiting', body: session.displayName }).show()
+        new Notification({
+          title: 'Claude is waiting',
+          body: session.displayName || containerId.slice(0, 12)
+        }).show()
         session.waitingDebounceTimer = setTimeout(() => {
           session.waitingDebounceTimer = null
         }, WAITING_DEBOUNCE_MS)
