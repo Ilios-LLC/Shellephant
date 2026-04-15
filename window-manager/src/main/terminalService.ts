@@ -1,12 +1,14 @@
 import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
-import type { BrowserWindow } from 'electron'
+import { Notification, type BrowserWindow } from 'electron'
 import { getClaudeToken } from './settingsService'
 
 interface TerminalSession {
   pty: IPty
   resizeTimer: ReturnType<typeof setTimeout> | null
   pendingResize: { cols: number; rows: number } | null
+  displayName: string
+  waitingDebounceTimer: ReturnType<typeof setTimeout> | null
 }
 
 // Collapse bursts of resize events into a single pty.resize call. During
@@ -19,13 +21,19 @@ const RESIZE_DEBOUNCE_MS = 80
 // the persistent-session prompt the user expects to see on re-open.
 const REFRESH_KICK_MS = 120
 
+// OSC sequence emitted by the Claude Code Stop hook inside the container.
+// Stripped before forwarding to xterm; invisible to the user.
+const WAITING_SIGNAL = '\x1b]9999;claude-waiting\x07'
+const WAITING_DEBOUNCE_MS = 2000
+
 const sessions = new Map<string, TerminalSession>()
 
 export function openTerminal(
   containerId: string,
   win: BrowserWindow,
   cols: number,
-  rows: number
+  rows: number,
+  displayName: string = ''
 ): Promise<void> {
   // Idempotent: tear down any existing session for this container first.
   if (sessions.has(containerId)) {
@@ -35,11 +43,6 @@ export function openTerminal(
   const safeCols = Math.max(1, Math.floor(cols))
   const safeRows = Math.max(1, Math.floor(rows))
 
-  // Spawn `docker exec -it <id> sh -c 'exec tmux -u new-session -A -s cw'`
-  // as a child under a locally-allocated PTY. node-pty creates the PTY at the
-  // exact size we specify; the docker CLI's -t inherits that geometry and
-  // forwards it to the container exec. TIOCSWINSZ propagation is correct from
-  // byte 1, so tmux/zsh paint at the right size with no race.
   const args = [
     'exec',
     '-i',
@@ -68,13 +71,30 @@ export function openTerminal(
   const session: TerminalSession = {
     pty: child,
     resizeTimer: null,
-    pendingResize: null
+    pendingResize: null,
+    displayName,
+    waitingDebounceTimer: null
   }
   sessions.set(containerId, session)
 
   child.onData((data: string) => {
     if (win.isDestroyed()) return
-    win.webContents.send('terminal:data', containerId, data)
+
+    if (data.includes(WAITING_SIGNAL)) {
+      const stripped = data.replaceAll(WAITING_SIGNAL, '')
+      if (stripped) {
+        win.webContents.send('terminal:data', containerId, stripped)
+      }
+      if (!session.waitingDebounceTimer) {
+        win.webContents.send('terminal:waiting', containerId)
+        new Notification({ title: 'Claude is waiting', body: session.displayName }).show()
+        session.waitingDebounceTimer = setTimeout(() => {
+          session.waitingDebounceTimer = null
+        }, WAITING_DEBOUNCE_MS)
+      }
+    } else {
+      win.webContents.send('terminal:data', containerId, data)
+    }
   })
 
   child.onExit(() => {
@@ -84,8 +104,6 @@ export function openTerminal(
     }
   })
 
-  // Kick tmux with a real SIGWINCH so it repaints the pane state whether we
-  // are creating the session or re-attaching to an existing one.
   setTimeout(() => {
     if (!sessions.has(containerId)) return
     try {
@@ -128,6 +146,7 @@ export function closeTerminal(containerId: string): void {
   const session = sessions.get(containerId)
   if (!session) return
   if (session.resizeTimer) clearTimeout(session.resizeTimer)
+  if (session.waitingDebounceTimer) clearTimeout(session.waitingDebounceTimer)
   try {
     session.pty.kill()
   } catch {

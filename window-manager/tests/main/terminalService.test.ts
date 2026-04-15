@@ -20,6 +20,18 @@ vi.mock('../../src/main/settingsService', () => ({
   getClaudeToken: () => mockGetClaudeToken()
 }))
 
+const { MockNotification, mockNotificationShow } = vi.hoisted(() => {
+  const mockNotificationShow = vi.fn()
+  const MockNotification = vi.fn().mockImplementation(function () {
+    return { show: mockNotificationShow }
+  })
+  return { MockNotification, mockNotificationShow }
+})
+
+vi.mock('electron', () => ({
+  Notification: MockNotification
+}))
+
 import {
   openTerminal,
   writeInput,
@@ -62,6 +74,8 @@ function makeFakeWin(isDestroyed = false) {
   }
 }
 
+const WAITING_SIGNAL = '\x1b]9999;claude-waiting\x07'
+
 describe('terminalService', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -77,9 +91,10 @@ describe('terminalService', () => {
     containerId: string,
     win: ReturnType<typeof makeFakeWin>,
     cols: number,
-    rows: number
+    rows: number,
+    displayName: string = ''
   ): Promise<void> {
-    await openTerminal(containerId, win as any, cols, rows)
+    await openTerminal(containerId, win as any, cols, rows, displayName)
     await vi.advanceTimersByTimeAsync(400)
   }
 
@@ -101,17 +116,13 @@ describe('terminalService', () => {
       expect(args).toContain('exec')
       expect(args).toContain('-i')
       expect(args).toContain('-t')
-      // env flags: TERM, LANG, LC_ALL
       expect(args).toContain('TERM=xterm-256color')
       expect(args).toContain('LANG=C.UTF-8')
       expect(args).toContain('LC_ALL=C.UTF-8')
-      // container id as a bare arg
       expect(args).toContain('container-1')
-      // shell + tmux boot
       expect(args).toContain('sh')
       expect(args).toContain('-c')
       expect(args.join(' ')).toMatch(/tmux -u new-session -A -s cw/)
-      // PTY size
       expect(opts.cols).toBe(120)
       expect(opts.rows).toBe(40)
       expect(opts.name).toBe('xterm-256color')
@@ -161,7 +172,6 @@ describe('terminalService', () => {
 
       await openAndSettle('container-kick', win, 80, 24)
 
-      // Size-bump pattern: rows-1 then rows, same cols.
       expect(mockResize).toHaveBeenCalledWith(80, 23)
       expect(mockResize).toHaveBeenCalledWith(80, 24)
     })
@@ -191,7 +201,6 @@ describe('terminalService', () => {
         '\r\n[detached]\r\n'
       )
 
-      // After exit, writeInput is a no-op (session gone).
       writeInput('container-exit', 'x')
       expect(mockWrite).not.toHaveBeenCalled()
     })
@@ -207,6 +216,95 @@ describe('terminalService', () => {
 
       expect(mockKill).toHaveBeenCalledTimes(1)
       expect(mockSpawn).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('OSC waiting signal', () => {
+    it('strips the waiting signal from data before forwarding to renderer', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-strip', win, 80, 24)
+      win.webContents.send.mockClear()
+
+      ptyInstance.emitData(`before${WAITING_SIGNAL}after`)
+
+      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-strip', 'beforeafter')
+    })
+
+    it('does not send terminal:data when the signal is the entire chunk', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-only-signal', win, 80, 24)
+      win.webContents.send.mockClear()
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      const dataCalls = (win.webContents.send as ReturnType<typeof vi.fn>).mock.calls.filter(
+        (c) => c[0] === 'terminal:data'
+      )
+      expect(dataCalls).toHaveLength(0)
+    })
+
+    it('sends terminal:waiting IPC event when signal detected', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-ipc', win, 80, 24)
+      win.webContents.send.mockClear()
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      expect(win.webContents.send).toHaveBeenCalledWith('terminal:waiting', 'container-ipc')
+    })
+
+    it('fires OS Notification with displayName as body', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-notif', win, 80, 24, 'my-window')
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      expect(MockNotification).toHaveBeenCalledWith({ title: 'Claude is waiting', body: 'my-window' })
+      expect(mockNotificationShow).toHaveBeenCalled()
+    })
+
+    it('debounce: second signal within 2s does not fire a second notification', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-deb', win, 80, 24)
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      expect(mockNotificationShow).toHaveBeenCalledTimes(1)
+    })
+
+    it('debounce resets after 2s, allowing a new notification', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+      await openAndSettle('container-deb2', win, 80, 24)
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+      await vi.advanceTimersByTimeAsync(2001)
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      expect(mockNotificationShow).toHaveBeenCalledTimes(2)
+    })
+
+    it('does not fire notification when window is destroyed', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin(true)
+      await openAndSettle('container-destroyed-notif', win, 80, 24)
+
+      ptyInstance.emitData(WAITING_SIGNAL)
+
+      expect(mockNotificationShow).not.toHaveBeenCalled()
     })
   })
 
@@ -230,7 +328,7 @@ describe('terminalService', () => {
       const ptyInstance = makeFakePty()
       mockSpawn.mockReturnValueOnce(ptyInstance)
       await openAndSettle('container-r', makeFakeWin(), 80, 24)
-      mockResize.mockClear() // drop the boot-settle size-bump calls
+      mockResize.mockClear()
 
       resizeTerminal('container-r', 100, 30)
       resizeTerminal('container-r', 110, 35)
