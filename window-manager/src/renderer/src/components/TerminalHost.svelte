@@ -17,11 +17,11 @@
 
   let { win, project }: Props = $props()
 
-  const repoName = project.git_url.split('/').pop()!.replace(/\.git$/, '')
-  const rootPath = `/workspace/${repoName}`
+  const rootPath = $derived('/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''))
 
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
+  let fitAddon: FitAddon | undefined
   let resizeObserver: ResizeObserver | undefined
 
   let commitOpen = $state(false)
@@ -84,7 +84,7 @@
       scrollback: 1000
     })
 
-    const fitAddon = new FitAddon()
+    fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
 
@@ -92,7 +92,7 @@
     fitAddon.fit()
     term.reset()
 
-    resizeObserver = new ResizeObserver(() => fitAddon.fit())
+    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
     resizeObserver.observe(terminalEl)
 
     window.api.openTerminal(win.container_id, term.cols, term.rows, win.name)
@@ -119,6 +119,12 @@
     window.api.closeTerminal(win.container_id)
     waitingWindows.remove(win.container_id)
     term?.dispose()
+  })
+
+  $effect(() => {
+    if (viewMode !== 'editor' && fitAddon) {
+      fitAddon.fit()
+    }
   })
 </script>
 
