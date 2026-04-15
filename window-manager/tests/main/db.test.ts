@@ -213,4 +213,34 @@ describe('db migrations', () => {
     closeDb()
     fs.rmSync(tmpPath, { force: true })
   })
+
+  it('creates project_groups and adds group_id to a fully legacy database', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-fulllegacy-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`
+      CREATE TABLE projects (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        git_url    TEXT NOT NULL UNIQUE
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const tables = migrated
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_groups'")
+      .all()
+    expect(tables).toHaveLength(1)
+    const cols = migrated.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('group_id')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
 })
