@@ -6,6 +6,7 @@
   import '@xterm/xterm/css/xterm.css'
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
+  import EditorPane from './EditorPane.svelte'
   import CommitModal from './CommitModal.svelte'
   import { waitingWindows } from '../lib/waitingWindows'
 
@@ -16,6 +17,9 @@
 
   let { win, project }: Props = $props()
 
+  const repoName = project.git_url.split('/').pop()!.replace(/\.git$/, '')
+  const rootPath = `/workspace/${repoName}`
+
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
   let resizeObserver: ResizeObserver | undefined
@@ -23,6 +27,7 @@
   let commitOpen = $state(false)
   let commitBusy = $state(false)
   let pushBusy = $state(false)
+  let viewMode = $state<'terminal' | 'editor' | 'both'>('terminal')
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
@@ -118,10 +123,19 @@
 </script>
 
 <section class="terminal-host">
-  <div class="terminal-body" bind:this={terminalEl}></div>
+  <div class="content-area" class:split={viewMode === 'both'}>
+    {#if viewMode !== 'terminal'}
+      <div class="editor-wrap">
+        <EditorPane containerId={win.container_id} {rootPath} />
+      </div>
+    {/if}
+    <div class="terminal-body" class:hidden={viewMode === 'editor'} bind:this={terminalEl}></div>
+  </div>
   <WindowDetailPane
     {win}
     {project}
+    {viewMode}
+    onViewChange={(mode) => (viewMode = mode)}
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
     commitDisabled={commitBusy || pushBusy}
@@ -140,9 +154,24 @@
     background: var(--bg-0);
   }
 
+  .content-area {
+    flex: 1;
+    display: flex;
+    overflow: hidden;
+  }
+
+  .editor-wrap {
+    flex: 1;
+    overflow: hidden;
+  }
+
   .terminal-body {
     flex: 1;
     overflow: hidden;
     padding: 0.5rem;
+  }
+
+  .terminal-body.hidden {
+    display: none;
   }
 </style>

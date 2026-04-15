@@ -1,5 +1,10 @@
 import { render, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('../../src/renderer/src/components/EditorPane.svelte', () => ({
+  default: vi.fn(() => ({}))
+}))
+
 import MainPane from '../../src/renderer/src/components/MainPane.svelte'
 import type { ProjectRecord, TokenStatus } from '../../src/renderer/src/types'
 

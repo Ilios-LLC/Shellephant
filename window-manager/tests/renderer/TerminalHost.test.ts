@@ -1,4 +1,4 @@
-import { render, cleanup } from '@testing-library/svelte'
+import { render, cleanup, screen, fireEvent } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ProjectRecord, WindowRecord } from '../../src/renderer/src/types'
 
@@ -56,6 +56,10 @@ vi.mock('../../src/renderer/src/lib/waitingWindows', () => ({
 const mockPushToast = vi.fn()
 vi.mock('../../src/renderer/src/lib/toasts', () => ({
   pushToast: (...args: unknown[]) => mockPushToast(...args)
+}))
+
+vi.mock('../../src/renderer/src/components/EditorPane.svelte', () => ({
+  default: vi.fn(() => ({}))
 }))
 
 import TerminalHost from '../../src/renderer/src/components/TerminalHost.svelte'
@@ -207,5 +211,40 @@ describe('TerminalHost', () => {
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
     unmount()
     expect(mockWaitingRemove).toHaveBeenCalledWith('container123abc')
+  })
+
+  it('renders a content-area div that wraps the terminal', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    // The terminal-body must be inside a content-area
+    const body = document.querySelector('.terminal-body')
+    expect(body?.closest('.content-area')).not.toBeNull()
+  })
+
+  it('passes viewMode and onViewChange to WindowDetailPane (terminal default)', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    // Terminal toggle button should be active (aria-pressed true)
+    const termBtn = screen.getByRole('button', { name: /terminal/i })
+    expect(termBtn).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('hides terminal-body (adds .hidden) when Editor mode is active', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    const editorBtn = screen.getByRole('button', { name: /^editor$/i })
+    await fireEvent.click(editorBtn)
+    const body = document.querySelector('.terminal-body')
+    expect(body?.classList.contains('hidden')).toBe(true)
+  })
+
+  it('shows terminal-body when Terminal mode is active', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    // Switch to editor then back to terminal
+    await fireEvent.click(screen.getByRole('button', { name: /^editor$/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /terminal/i }))
+    const body = document.querySelector('.terminal-body')
+    expect(body?.classList.contains('hidden')).toBe(false)
   })
 })
