@@ -24,7 +24,8 @@ vi.mock('../../src/main/settingsService', () => ({
 import {
   createProject,
   listProjects,
-  deleteProject
+  deleteProject,
+  updateProject
 } from '../../src/main/projectService'
 
 describe('projectService', () => {
@@ -163,6 +164,12 @@ describe('projectService', () => {
       const projects = listProjects()
       expect(projects[0].ports).toBe(JSON.stringify([5432]))
     })
+
+    it('includes group_id in returned records', async () => {
+      await createProject('grouped', 'git@github.com:org/grouped.git')
+      const projects = listProjects()
+      expect('group_id' in projects[0]).toBe(true)
+    })
   })
 
   describe('deleteProject', () => {
@@ -183,6 +190,27 @@ describe('projectService', () => {
 
     it('is idempotent — no error when project id does not exist', async () => {
       await expect(deleteProject(99999)).resolves.toBeUndefined()
+    })
+  })
+
+  describe('updateProject', () => {
+    it('sets group_id on a project', async () => {
+      const project = await createProject('my-project', 'git@github.com:org/repo.git')
+      const { createGroup } = await import('../../src/main/projectGroupService')
+      const group = createGroup('frontend')
+
+      const updated = updateProject(project.id, { groupId: group.id })
+      expect(updated.group_id).toBe(group.id)
+    })
+
+    it('clears group_id when null is passed', async () => {
+      const project = await createProject('my-project', 'git@github.com:org/repo2.git')
+      const { createGroup } = await import('../../src/main/projectGroupService')
+      const group = createGroup('frontend')
+      updateProject(project.id, { groupId: group.id })
+
+      const cleared = updateProject(project.id, { groupId: null })
+      expect(cleared.group_id).toBeNull()
     })
   })
 })
