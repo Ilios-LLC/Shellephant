@@ -63,6 +63,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
   sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
+# Install Playwright system dependencies for Chromium (needs root for apt)
+RUN npx -y playwright-core install-deps chromium && \
+  apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set up non-root user
 USER node
 
@@ -96,6 +100,18 @@ RUN mkdir -p /home/node/.ssh && \
 # Install Claude
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
+# Install Playwright MCP server and download Chromium for headless browsing
+ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
+RUN npm install -g @playwright/mcp@latest && \
+    npx -y playwright-core install --no-shell chromium
+
+# Configure Playwright defaults for Docker (headless, no sandbox, chromium-only)
+ENV PLAYWRIGHT_MCP_HEADLESS=true
+ENV PLAYWRIGHT_MCP_NO_SANDBOX=true
+ENV PLAYWRIGHT_MCP_BROWSER=chromium
+
+# Enable experimental agent teams feature in Claude Code
+ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

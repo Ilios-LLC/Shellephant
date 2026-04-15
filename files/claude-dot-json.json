@@ -1,15 +1,23 @@
 {
   "hasCompletedOnboarding": true,
   "theme": "dark",
+  "teammateMode": "tmux",
   "customApiKeyResponses": {
     "approved": [],
     "rejected": []
+  },
+  "mcpServers": {
+    "playwright": {
+      "command": "/usr/local/share/npm-global/bin/playwright-mcp"
+    }
   },
   "projects": {
     "/workspace": {
       "hasTrustDialogAccepted": true,
       "hasCompletedProjectOnboarding": true,
-      "projectOnboardingSeenCount": 1
+      "projectOnboardingSeenCount": 1,
+      "enabledMcpjsonServers": ["playwright"],
+      "enableAllProjectMcpServers": true
     }
   }
 }
