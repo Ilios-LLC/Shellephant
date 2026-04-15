@@ -35,6 +35,14 @@ export async function createProject(
     throw new Error('Invalid SSH URL format. Expected: git@host:org/repo.git')
   }
 
+  if (ports && ports.length > 0) {
+    for (const p of ports) {
+      if (!Number.isInteger(p) || p < 1 || p > 65535) {
+        throw new Error(`Invalid port: ${p}. Must be integer between 1 and 65535.`)
+      }
+    }
+  }
+
   const resolvedName = name.trim() || extractRepoName(gitUrl)
 
   const pat = getGitHubPat()
@@ -46,16 +54,18 @@ export async function createProject(
   }
   await verifyRemote(sshUrlToHttps(gitUrl, pat))
 
+  const portsJson = ports && ports.length > 0 ? JSON.stringify(ports) : null
   const db = getDb()
   try {
     const result = db
-      .prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
-      .run(resolvedName, gitUrl)
+      .prepare('INSERT INTO projects (name, git_url, ports) VALUES (?, ?, ?)')
+      .run(resolvedName, gitUrl, portsJson)
 
     return {
       id: result.lastInsertRowid as number,
       name: resolvedName,
       git_url: gitUrl,
+      ports: portsJson ?? undefined,
       created_at: new Date().toISOString()
     }
   } catch (err) {
