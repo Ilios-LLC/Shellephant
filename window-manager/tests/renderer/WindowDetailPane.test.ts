@@ -244,7 +244,6 @@ describe('WindowDetailPane', () => {
       getGitStatus.mockResolvedValue({ isDirty: true, added: 0, deleted: 0 })
       render(WindowDetailPane, { props: { win, project } })
       await vi.runOnlyPendingTimersAsync()
-      await vi.runAllTimersAsync()
       expect(document.querySelector('.git-stat')).toBeNull()
       expect(document.querySelector('.git-clean')).toBeNull()
     })
