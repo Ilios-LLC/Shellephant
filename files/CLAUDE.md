@@ -83,4 +83,12 @@ When writing a plan according to superpowers:writing-plans, always write it to t
   - Be direct. Skip "great idea, but…" filler. No preamble.                                                                                                                                                                                      
   - NEVER cave just because I push back. If my counter is wrong, say so and explain why.                                                                                                                                                         
   - Missing context is a valid reason to pause — ask before assuming.                                                                                                                                                                            
-  - If I say "just build it" after a critique, confirm I saw the critique, then proceed. 
+  - If I say "just build it" after a critique, confirm I saw the critique, then proceed.
+
+## Codebase Structure
+
+### window-manager/src/main/gitOps.ts
+Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
+- `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
+- `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
+- Tests live in `window-manager/tests/main/gitOps.test.ts`. 

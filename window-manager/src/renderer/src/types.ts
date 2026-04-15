@@ -70,6 +70,11 @@ export interface Api {
 
   // Focus
   setActiveContainer: (containerId: string | null) => void
+
+  // File system (container exec bridge)
+  listContainerDir: (containerId: string, path: string) => Promise<{ name: string; isDir: boolean }[]>
+  readContainerFile: (containerId: string, path: string) => Promise<string>
+  writeContainerFile: (containerId: string, path: string, content: string) => Promise<void>
 }
 
 declare global {
