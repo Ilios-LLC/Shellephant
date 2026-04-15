@@ -1,10 +1,17 @@
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
+export interface ProjectGroupRecord {
+  id: number
+  name: string
+  created_at: string
+}
+
 export interface ProjectRecord {
   id: number
   name: string
   git_url: string
   ports?: string
+  group_id?: number | null
   created_at: string
 }
 
@@ -28,6 +35,9 @@ export interface Api {
   createProject: (name: string, gitUrl: string, ports?: number[]) => Promise<ProjectRecord>
   listProjects: () => Promise<ProjectRecord[]>
   deleteProject: (id: number) => Promise<void>
+  updateProject: (id: number, patch: { groupId: number | null }) => Promise<ProjectRecord>
+  createGroup: (name: string) => Promise<ProjectGroupRecord>
+  listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
   createWindow: (name: string, projectId: number) => Promise<WindowRecord>

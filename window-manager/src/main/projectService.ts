@@ -9,6 +9,7 @@ export interface ProjectRecord {
   name: string
   git_url: string
   ports?: string
+  group_id?: number | null
   created_at: string
 }
 
