@@ -42,6 +42,10 @@
     alive = false
     if (timer) clearInterval(timer)
   })
+
+  function injectClaude(): void {
+    window.api.sendTerminalInput(win.container_id, '\x15claude --dangerously-skip-permissions\n')
+  }
 </script>
 
 <footer class="detail-pane">
@@ -57,6 +61,7 @@
   <div class="actions">
     <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
     <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+    <button type="button" disabled={win.status !== 'running'} onclick={injectClaude}>Claude</button>
   </div>
 </footer>
 

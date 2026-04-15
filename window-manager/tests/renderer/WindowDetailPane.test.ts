@@ -3,12 +3,14 @@ import { render, screen, fireEvent } from '@testing-library/svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 
 const getCurrentBranch = vi.fn()
+const sendTerminalInput = vi.fn()
 
 beforeEach(() => {
   vi.useFakeTimers()
   getCurrentBranch.mockReset()
+  sendTerminalInput.mockReset()
   // @ts-expect-error test bridge
-  globalThis.window.api = { getCurrentBranch }
+  globalThis.window.api = { getCurrentBranch, sendTerminalInput }
 })
 afterEach(() => vi.useRealTimers())
 
@@ -92,5 +94,34 @@ describe('WindowDetailPane', () => {
     render(WindowDetailPane, { props: { win, project, commitDisabled: true, pushDisabled: true } })
     expect(screen.getByRole('button', { name: /commit/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /push/i })).toBeDisabled()
+  })
+
+  it('renders a Claude button', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeInTheDocument()
+  })
+
+  it('Claude button is disabled when container is not running', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const stoppedWin = { ...win, status: 'stopped' as const }
+    render(WindowDetailPane, { props: { win: stoppedWin, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
+  })
+
+  it('Claude button is enabled when container is running', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).not.toBeDisabled()
+  })
+
+  it('clicking Claude button sends the inject command to the terminal', async () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    await fireEvent.click(screen.getByRole('button', { name: /claude/i }))
+    expect(sendTerminalInput).toHaveBeenCalledWith(
+      'abc123def456',
+      '\x15claude --dangerously-skip-permissions\n'
+    )
   })
 })
