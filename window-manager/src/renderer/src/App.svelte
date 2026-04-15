@@ -73,11 +73,6 @@
     view = 'settings'
   }
 
-  function handleRequestAssetTesting(): void {
-    settingsRequiredFor = null
-    view = 'asset-testing'
-  }
-
   function handleWizardCancel(): void {
     settingsRequiredFor = null
     view = 'default'
@@ -165,8 +160,6 @@
     onProjectSelect={handleProjectSelect}
     onRequestNewProject={handleRequestNewProject}
     onRequestSettings={handleRequestSettings}
-    onRequestAssetTesting={handleRequestAssetTesting}
-    assetTestingActive={view === 'asset-testing'}
     onWaitingWindowSelect={handleWaitingWindowSelect}
   />
   <MainPane
@@ -193,7 +186,7 @@
 <style>
   .app {
     display: grid;
-    grid-template-columns: 220px 1fr;
+    grid-template-columns: 260px 1fr;
     height: 100vh;
     width: 100vw;
     background: var(--bg-0);

@@ -9,8 +9,6 @@
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
-    onRequestAssetTesting: () => void
-    assetTestingActive: boolean
     onWaitingWindowSelect: (entry: WaitingEntry) => void
   }
 
@@ -20,8 +18,6 @@
     onProjectSelect,
     onRequestNewProject,
     onRequestSettings,
-    onRequestAssetTesting,
-    assetTestingActive,
     onWaitingWindowSelect
   }: Props = $props()
 </script>
@@ -90,16 +86,6 @@
       {/each}
     </div>
   {/if}
-  <footer class="sidebar-footer">
-    <button
-      type="button"
-      class="tab-link"
-      class:active={assetTestingActive}
-      onclick={onRequestAssetTesting}
-    >
-      Asset Testing
-    </button>
-  </footer>
 </aside>
 
 <style>
@@ -214,12 +200,6 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .sidebar-footer {
-    margin-top: auto;
-    padding: 0.5rem 0.65rem;
-    border-top: 1px solid var(--border);
   }
 
   .tab-link {
