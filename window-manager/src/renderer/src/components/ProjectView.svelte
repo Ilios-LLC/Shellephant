@@ -1,23 +1,27 @@
 <!-- src/renderer/src/components/ProjectView.svelte -->
 <script lang="ts">
-  import type { ProjectRecord, WindowRecord } from '../types'
+  import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
 
   interface Props {
     project: ProjectRecord
     windows: WindowRecord[]
+    groups: ProjectGroupRecord[]
     onWindowSelect: (win: WindowRecord) => void
     onRequestNewWindow: () => void
     onProjectDeleted: (id: number) => void
     onWindowDeleted: (id: number) => void
+    onProjectUpdated: (project: ProjectRecord) => void
   }
 
   let {
     project,
     windows,
+    groups,
     onWindowSelect,
     onRequestNewWindow,
     onProjectDeleted,
-    onWindowDeleted
+    onWindowDeleted,
+    onProjectUpdated
   }: Props = $props()
 
   let confirmingDelete = $state(false)
@@ -46,6 +50,13 @@
   function handleCancelDelete(): void {
     if (deleteTimeout) clearTimeout(deleteTimeout)
     confirmingDelete = false
+  }
+
+  async function handleGroupChange(e: Event): Promise<void> {
+    const val = (e.target as HTMLSelectElement).value
+    const groupId = val === '' ? null : Number(val)
+    const updated = await window.api.updateProject(project.id, { groupId })
+    onProjectUpdated(updated)
   }
 
   function armWindowDelete(id: number): void {
@@ -82,6 +93,19 @@
       <span class="project-url">{project.git_url}</span>
     </div>
     <div class="project-actions">
+      <label class="group-label" for="project-group">Group</label>
+      <select
+        id="project-group"
+        class="group-select"
+        aria-label="group"
+        value={project.group_id ?? ''}
+        onchange={handleGroupChange}
+      >
+        <option value="">No group</option>
+        {#each groups as g (g.id)}
+          <option value={g.id}>{g.name}</option>
+        {/each}
+      </select>
       {#if confirmingDelete}
         <button type="button" class="confirm-delete" onclick={handleConfirmDelete}>Delete?</button>
         <button type="button" class="cancel-delete" onclick={handleCancelDelete}>×</button>
@@ -187,6 +211,29 @@
   .project-actions {
     display: flex;
     gap: 0.25rem;
+    align-items: center;
+  }
+
+  .group-label {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    color: var(--fg-2);
+    align-self: center;
+  }
+
+  .group-select {
+    font-family: var(--font-ui);
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
+    border: 1px solid var(--border);
+    background: var(--bg-1);
+    color: var(--fg-1);
+    border-radius: 4px;
+    cursor: pointer;
+  }
+
+  .group-select:hover {
+    border-color: var(--accent);
   }
 
   .delete-btn,
