@@ -1,8 +1,7 @@
 import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sidebar from '../../src/renderer/src/components/Sidebar.svelte'
-import type { ProjectRecord } from '../../src/renderer/src/types'
-import type { ProjectGroupRecord } from '../../src/renderer/src/types'
+import type { ProjectRecord, ProjectGroupRecord } from '../../src/renderer/src/types'
 import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
 import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 

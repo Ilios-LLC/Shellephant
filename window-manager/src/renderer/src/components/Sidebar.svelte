@@ -80,7 +80,7 @@
     {/each}
   </nav>
   {#if projects.length === 0}
-    <p class="empty-hint">No projects yet.</p>
+    <p class="empty-hint">{activeGroupId !== null ? 'No projects in this group.' : 'No projects yet.'}</p>
   {/if}
   {#if $waitingWindows.length > 0}
     <div class="waiting-section">
