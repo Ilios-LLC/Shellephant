@@ -8,6 +8,8 @@
   }
   let { onSubmit, onCancel, busy, initialSubject = '', initialBody = '' }: Props = $props()
 
+  // One-time capture from props is intentional: component is always mounted fresh
+  // inside {#if commitOpen}, so the latest store values are read on each open.
   let subject = $state(initialSubject)
   let body = $state(initialBody)
   let canSubmit = $derived(subject.trim().length > 0 && !busy)
