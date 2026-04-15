@@ -8,6 +8,7 @@
   import WindowDetailPane from './WindowDetailPane.svelte'
   import CommitModal from './CommitModal.svelte'
   import { pushToast } from '../lib/toasts'
+  import { waitingWindows } from '../lib/waitingWindows'
 
   interface Props {
     win: WindowRecord
@@ -85,14 +86,12 @@
 
     term.open(terminalEl)
     fitAddon.fit()
-    // Clear any mode/charset state from xterm's own boot sequence so the
-    // first thing the remote shell paints starts from a known blank slate.
     term.reset()
 
     resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(terminalEl)
 
-    window.api.openTerminal(win.container_id, term.cols, term.rows)
+    window.api.openTerminal(win.container_id, term.cols, term.rows, win.name)
 
     window.api.onTerminalData((containerId: string, data: string) => {
       if (containerId === win.container_id) {
@@ -100,8 +99,22 @@
       }
     })
 
+    window.api.onTerminalWaiting((containerId: string) => {
+      if (containerId === win.container_id) {
+        waitingWindows.add({
+          containerId: win.container_id,
+          windowId: win.id,
+          windowName: win.name,
+          projectId: project.id,
+          projectName: project.name
+        })
+        pushToast({ level: 'info', title: 'Claude is waiting', body: win.name })
+      }
+    })
+
     term.onData((data: string) => {
       window.api.sendTerminalInput(win.container_id, data)
+      waitingWindows.remove(win.container_id)
     })
 
     term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
@@ -112,7 +125,9 @@
   onDestroy(() => {
     resizeObserver?.disconnect()
     window.api.offTerminalData()
+    window.api.offTerminalWaiting()
     window.api.closeTerminal(win.container_id)
+    waitingWindows.remove(win.container_id)
     term?.dispose()
   })
 </script>
