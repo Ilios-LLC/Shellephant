@@ -5,13 +5,16 @@ import type { ConversationSummary } from '../../src/renderer/src/lib/conversatio
 
 const getCurrentBranch = vi.fn()
 const sendTerminalInput = vi.fn()
+const getGitStatus = vi.fn()
 
 beforeEach(() => {
   vi.useFakeTimers()
   getCurrentBranch.mockReset()
   sendTerminalInput.mockReset()
+  getGitStatus.mockReset()
+  getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
   // @ts-expect-error test bridge
-  globalThis.window.api = { getCurrentBranch, sendTerminalInput }
+  globalThis.window.api = { getCurrentBranch, sendTerminalInput, getGitStatus }
 })
 afterEach(() => vi.useRealTimers())
 
@@ -204,5 +207,51 @@ describe('WindowDetailPane', () => {
     expect(screen.getByText('added endpoint')).toBeInTheDocument()
     expect(screen.getByText('wrote tests')).toBeInTheDocument()
     expect(screen.getByText('updated docs')).toBeInTheDocument()
+  })
+
+  describe('git status display', () => {
+
+    it('shows nothing extra before first poll resolves', () => {
+      getCurrentBranch.mockResolvedValue('main')
+      getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
+      render(WindowDetailPane, { props: { win, project } })
+      expect(document.querySelector('.git-stat')).toBeNull()
+      expect(document.querySelector('.git-clean')).toBeNull()
+    })
+
+    it('shows (clean) when isDirty is false after poll', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
+      render(WindowDetailPane, { props: { win, project } })
+      await vi.runOnlyPendingTimersAsync()
+      expect(await screen.findByText('(clean)')).toBeInTheDocument()
+    })
+
+    it('shows +N −N when isDirty with counts', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      getGitStatus.mockResolvedValue({ isDirty: true, added: 12, deleted: 5 })
+      render(WindowDetailPane, { props: { win, project } })
+      await vi.runOnlyPendingTimersAsync()
+      expect(await screen.findByText('+12 −5')).toBeInTheDocument()
+    })
+
+    it('shows nothing extra when isDirty with 0/0 counts', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      getGitStatus.mockResolvedValue({ isDirty: true, added: 0, deleted: 0 })
+      render(WindowDetailPane, { props: { win, project } })
+      await vi.runOnlyPendingTimersAsync()
+      expect(document.querySelector('.git-stat')).toBeNull()
+      expect(document.querySelector('.git-clean')).toBeNull()
+    })
+
+    it('fires onGitStatus callback with status after each poll', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const status = { isDirty: true, added: 3, deleted: 1 }
+      getGitStatus.mockResolvedValue(status)
+      const onGitStatus = vi.fn()
+      render(WindowDetailPane, { props: { win, project, onGitStatus } })
+      await vi.runOnlyPendingTimersAsync()
+      expect(onGitStatus).toHaveBeenCalledWith(status)
+    })
   })
 })

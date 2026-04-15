@@ -539,6 +539,98 @@ describe('readContainerFile', () => {
   })
 })
 
+function makeGitStatusContainer(
+  porcelainOutput: string,
+  porcelainExitCode: number,
+  shortstatOutput: string,
+  shortstatExitCode: number
+) {
+  let callCount = 0
+  const responses = [
+    { stdout: porcelainOutput, exitCode: porcelainExitCode },
+    { stdout: shortstatOutput, exitCode: shortstatExitCode }
+  ]
+  const exec = vi.fn().mockImplementation(async () => {
+    const resp = responses[callCount++] ?? { stdout: '', exitCode: 0 }
+    return {
+      start: vi.fn().mockResolvedValue({
+        on(event: string, cb: (data?: Buffer) => void) {
+          if (event === 'data' && resp.stdout) setImmediate(() => cb(Buffer.from(resp.stdout)))
+          if (event === 'end') setImmediate(() => cb())
+          return this
+        }
+      }),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: resp.exitCode })
+    }
+  })
+  return { id: 'c', exec }
+}
+
+describe('getGitStatus', () => {
+  it('returns isDirty=false with 0/0 when working tree is clean', async () => {
+    const container = makeGitStatusContainer('', 0, '', 0)
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await getGitStatus(container, '/workspace/r')
+    expect(result).toEqual({ isDirty: false, added: 0, deleted: 0 })
+  })
+
+  it('returns isDirty=true with parsed counts when tracked files are modified', async () => {
+    const container = makeGitStatusContainer(
+      ' M src/foo.ts\n',
+      0,
+      ' 1 file changed, 12 insertions(+), 5 deletions(-)\n',
+      0
+    )
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await getGitStatus(container, '/workspace/r')
+    expect(result).toEqual({ isDirty: true, added: 12, deleted: 5 })
+  })
+
+  it('returns isDirty=true with 0/0 when only untracked files exist', async () => {
+    const container = makeGitStatusContainer('?? newfile.ts\n', 0, '', 0)
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await getGitStatus(container, '/workspace/r')
+    expect(result).toEqual({ isDirty: true, added: 0, deleted: 0 })
+  })
+
+  it('returns isDirty=false with 0/0 when not a git repo (status fails)', async () => {
+    const container = makeGitStatusContainer('', 128, '', 128)
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await getGitStatus(container, '/workspace/r')
+    expect(result).toEqual({ isDirty: false, added: 0, deleted: 0 })
+  })
+
+  it('handles shortstat with only insertions (no deletions line)', async () => {
+    const container = makeGitStatusContainer(
+      'M  README.md\n',
+      0,
+      ' 1 file changed, 3 insertions(+)\n',
+      0
+    )
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await getGitStatus(container, '/workspace/r')
+    expect(result).toEqual({ isDirty: true, added: 3, deleted: 0 })
+  })
+
+  it('passes git -C clonePath for both commands', async () => {
+    const container = makeGitStatusContainer('', 0, '', 0)
+    const { getGitStatus } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await getGitStatus(container, '/workspace/myrepo')
+    const cmds = container.exec.mock.calls.map((c: [{ Cmd: string[] }]) => c[0].Cmd)
+    expect(cmds[0]).toContain('-C')
+    expect(cmds[0]).toContain('/workspace/myrepo')
+    expect(cmds[0]).toContain('--porcelain')
+    expect(cmds[1]).toContain('--shortstat')
+    expect(cmds[1]).toContain('HEAD')
+  })
+})
+
 describe('writeFileInContainer', () => {
   it('execs tee with the target path and AttachStdin: true', async () => {
     const mockStream = {

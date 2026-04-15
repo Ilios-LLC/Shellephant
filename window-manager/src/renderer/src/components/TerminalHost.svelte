@@ -31,6 +31,7 @@
   let commitBusy = $state(false)
   let pushBusy = $state(false)
   let deleteBusy = $state(false)
+  let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let viewMode = $state<'terminal' | 'editor' | 'both'>('terminal')
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
@@ -170,7 +171,8 @@
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
     onDelete={runDelete}
-    commitDisabled={commitBusy || pushBusy || deleteBusy}
+    onGitStatus={(s) => (gitStatus = s)}
+    commitDisabled={commitBusy || pushBusy || deleteBusy || !gitStatus?.isDirty}
     pushDisabled={commitBusy || pushBusy || deleteBusy}
     deleteDisabled={deleteBusy}
   />

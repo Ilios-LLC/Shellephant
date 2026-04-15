@@ -16,7 +16,7 @@ import {
 import { getDb } from './db'
 import { extractRepoName, buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 
@@ -101,6 +101,11 @@ export function registerIpcHandlers(): void {
       ...result,
       prUrl: result.ok ? buildPrUrl(ctx.gitUrl, branch) : undefined
     }
+  })
+
+  ipcMain.handle('git:status', async (_, windowId: number) => {
+    const ctx = resolveWindowGitContext(windowId)
+    return getGitStatus(ctx.container, ctx.clonePath)
   })
 
   // Shell handlers

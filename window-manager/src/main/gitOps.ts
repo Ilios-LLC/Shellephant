@@ -187,6 +187,35 @@ export async function getCurrentBranch(container: Container, clonePath: string):
   return result.stdout.trim()
 }
 
+export interface GitStatus {
+  isDirty: boolean
+  added: number
+  deleted: number
+}
+
+export async function getGitStatus(container: Container, clonePath: string): Promise<GitStatus> {
+  const porcelainResult = await execInContainer(container, [
+    'git', '-C', clonePath, 'status', '--porcelain'
+  ])
+  const isDirty = porcelainResult.ok && porcelainResult.stdout.trim().length > 0
+
+  // added/deleted only count tracked-file diffs; untracked files make isDirty=true but contribute 0 here
+  const shortstatResult = await execInContainer(container, [
+    'git', '-C', clonePath, 'diff', '--shortstat', 'HEAD'
+  ])
+
+  let added = 0
+  let deleted = 0
+  if (shortstatResult.ok && shortstatResult.stdout.trim().length > 0) {
+    const addedMatch = shortstatResult.stdout.match(/(\d+) insertion/)
+    const deletedMatch = shortstatResult.stdout.match(/(\d+) deletion/)
+    if (addedMatch) added = parseInt(addedMatch[1], 10)
+    if (deletedMatch) deleted = parseInt(deletedMatch[1], 10)
+  }
+
+  return { isDirty, added, deleted }
+}
+
 export interface CommitInput {
   subject: string
   body?: string
