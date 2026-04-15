@@ -130,9 +130,10 @@
 
   async function handleWaitingWindowSelect(entry: WaitingEntry): Promise<void> {
     selectedProjectId = entry.projectId
-    selectedWindowId = entry.windowId
+    selectedWindowId = null
     view = 'default'
     windows = await window.api.listWindows(entry.projectId)
+    selectedWindowId = entry.windowId
   }
 
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
