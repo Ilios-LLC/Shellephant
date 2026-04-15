@@ -24,6 +24,17 @@
   let timer: ReturnType<typeof setInterval> | undefined
   let alive = true
 
+  function parsePortsJson(raw: string | undefined): [string, string][] {
+    if (!raw) return []
+    try {
+      return Object.entries(JSON.parse(raw)) as [string, string][]
+    } catch {
+      return []
+    }
+  }
+
+  let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
+
   async function refreshBranch(): Promise<void> {
     let next: string | null = null
     try {
@@ -42,6 +53,10 @@
     alive = false
     if (timer) clearInterval(timer)
   })
+
+  function injectClaude(): void {
+    window.api.sendTerminalInput(win.container_id, '\x15claude --dangerously-skip-permissions\n')
+  }
 </script>
 
 <footer class="detail-pane">
@@ -53,10 +68,15 @@
     <span class="branch" title="current branch">{branch}</span>
     <span class="sep">·</span>
     <span class="status {win.status}">{win.status}</span>
+    {#each parsedPorts as [container, host]}
+      <span class="sep">·</span>
+      <span class="port">:{container}→:{host}</span>
+    {/each}
   </div>
   <div class="actions">
     <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
     <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+    <button type="button" disabled={win.status !== 'running'} onclick={injectClaude}>Claude</button>
   </div>
 </footer>
 
@@ -87,6 +107,11 @@
   }
   .branch {
     font-family: var(--font-mono);
+  }
+  .port {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--fg-2);
   }
   .status.running {
     color: var(--success, #4ade80);

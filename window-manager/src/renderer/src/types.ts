@@ -4,6 +4,7 @@ export interface ProjectRecord {
   id: number
   name: string
   git_url: string
+  ports?: string
   created_at: string
 }
 
@@ -12,6 +13,7 @@ export interface WindowRecord {
   name: string
   project_id: number
   container_id: string
+  ports?: string
   created_at: string
   status: WindowStatus
 }
@@ -23,7 +25,7 @@ export interface TokenStatus {
 
 export interface Api {
   // Projects
-  createProject: (name: string, gitUrl: string) => Promise<ProjectRecord>
+  createProject: (name: string, gitUrl: string, ports?: number[]) => Promise<ProjectRecord>
   listProjects: () => Promise<ProjectRecord[]>
   deleteProject: (id: number) => Promise<void>
 

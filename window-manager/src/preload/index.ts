@@ -2,8 +2,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 contextBridge.exposeInMainWorld('api', {
   // Project API
-  createProject: (name: string, gitUrl: string) =>
-    ipcRenderer.invoke('project:create', name, gitUrl),
+  createProject: (name: string, gitUrl: string, ports?: number[]) =>
+    ipcRenderer.invoke('project:create', name, gitUrl, ports),
   listProjects: () => ipcRenderer.invoke('project:list'),
   deleteProject: (id: number) => ipcRenderer.invoke('project:delete', id),
 
