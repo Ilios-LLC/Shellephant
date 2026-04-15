@@ -109,6 +109,13 @@ describe('WindowDetailPane', () => {
     expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
   })
 
+  it('Claude button is disabled when container status is unknown', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const unknownWin = { ...win, status: 'unknown' as const }
+    render(WindowDetailPane, { props: { win: unknownWin, project } })
+    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
+  })
+
   it('Claude button is enabled when container is running', () => {
     getCurrentBranch.mockResolvedValue('x')
     render(WindowDetailPane, { props: { win, project } })
