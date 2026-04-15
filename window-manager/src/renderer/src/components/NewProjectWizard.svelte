@@ -12,6 +12,7 @@
   let name = $state('')
   let loading = $state(false)
   let error = $state('')
+  let ports = $state('')
 
   async function handleSubmit(): Promise<void> {
     const trimmedUrl = gitUrl.trim()
@@ -19,7 +20,18 @@
     loading = true
     error = ''
     try {
-      const record = await window.api.createProject(name.trim(), trimmedUrl)
+      const parsedPorts = ports
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0)
+        .map((s) => parseInt(s, 10))
+        .filter((n) => !isNaN(n))
+
+      const record = await window.api.createProject(
+        name.trim(),
+        trimmedUrl,
+        parsedPorts.length > 0 ? parsedPorts : undefined
+      )
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -61,6 +73,18 @@
         type="text"
         placeholder="my-project"
         bind:value={name}
+        disabled={loading}
+        onkeydown={handleKey}
+      />
+    </div>
+
+    <div class="field">
+      <label for="ports">Ports <span class="muted">(optional)</span></label>
+      <input
+        id="ports"
+        type="text"
+        placeholder="3000, 8080"
+        bind:value={ports}
         disabled={loading}
         onkeydown={handleKey}
       />
