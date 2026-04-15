@@ -9,6 +9,7 @@
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
+    onRequestHome: () => void
     onWaitingWindowSelect: (entry: WaitingEntry) => void
   }
 
@@ -18,13 +19,14 @@
     onProjectSelect,
     onRequestNewProject,
     onRequestSettings,
+    onRequestHome,
     onWaitingWindowSelect
   }: Props = $props()
 </script>
 
 <aside class="sidebar">
   <header class="sidebar-header">
-    <h1>Projects</h1>
+    <button type="button" class="home-link" onclick={onRequestHome}>Shellephant</button>
     <div class="header-actions">
       <button
         type="button"
@@ -107,13 +109,22 @@
     border-bottom: 1px solid var(--border);
   }
 
-  h1 {
+  .home-link {
     font-size: 0.78rem;
     font-weight: 600;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--fg-2);
     margin: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font-family: var(--font-ui);
+  }
+
+  .home-link:hover {
+    color: var(--accent-hi);
   }
 
   .header-actions {
@@ -200,31 +211,5 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-  }
-
-  .tab-link {
-    width: 100%;
-    text-align: left;
-    padding: 0.45rem 0.55rem;
-    font-family: var(--font-ui);
-    font-size: 0.78rem;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
-    background: transparent;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    color: var(--fg-2);
-    cursor: pointer;
-  }
-
-  .tab-link:hover {
-    color: var(--fg-0);
-    border-color: var(--border);
-  }
-
-  .tab-link.active {
-    color: var(--accent-hi);
-    border-color: var(--accent);
-    background: rgba(139, 92, 246, 0.08);
   }
 </style>

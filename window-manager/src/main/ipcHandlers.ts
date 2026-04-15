@@ -115,7 +115,14 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error('No window found for terminal:open')
-    return openTerminal(containerId, win, cols, rows, displayName)
+    const row = getDb()
+      .prepare(
+        `SELECT p.git_url FROM windows w JOIN projects p ON p.id = w.project_id
+         WHERE w.container_id = ? AND w.deleted_at IS NULL LIMIT 1`
+      )
+      .get(containerId) as { git_url: string } | undefined
+    const workDir = row ? `/workspace/${extractRepoName(row.git_url)}` : undefined
+    return openTerminal(containerId, win, cols, rows, displayName, workDir)
   })
   ipcMain.on('terminal:input', (_, containerId: string, data: string) =>
     writeInput(containerId, data)

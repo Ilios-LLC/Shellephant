@@ -21,7 +21,9 @@ const configured: TokenStatus = { configured: true, hint: 'abcd' }
 function baseProps(overrides = {}) {
   return {
     project: null as ProjectRecord | null,
+    projects: [] as ProjectRecord[],
     windows: [],
+    allWindows: [],
     selectedWindow: null,
     view: 'default' as const,
     patStatus: configured,
@@ -37,6 +39,7 @@ function baseProps(overrides = {}) {
     onPatStatusChange: vi.fn(),
     onClaudeStatusChange: vi.fn(),
     onWizardCancel: vi.fn(),
+    onNavigateToWindow: vi.fn(),
     ...overrides
   }
 }
@@ -49,7 +52,7 @@ describe('MainPane', () => {
 
   it('renders EmptyState when no project selected', () => {
     render(MainPane, baseProps())
-    expect(screen.getByText(/no project selected/i)).toBeDefined()
+    expect(screen.getByText(/no windows running/i)).toBeDefined()
   })
 
   it('renders ProjectView when project selected but no window', () => {
@@ -105,11 +108,6 @@ describe('MainPane', () => {
       })
     )
     expect(screen.getByText(/required before you can create a project/i)).toBeDefined()
-  })
-
-  it('renders AssetTesting when view=asset-testing', () => {
-    render(MainPane, baseProps({ view: 'asset-testing' }))
-    expect(screen.getByRole('heading', { name: /asset testing/i })).toBeDefined()
   })
 
   it('shows window-required banner when settingsRequiredFor=window', () => {

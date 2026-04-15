@@ -172,15 +172,24 @@ describe('registerIpcHandlers', () => {
   it('registers terminal:open handler that calls openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    // mockDbGet returns undefined → workDir resolves to undefined
     await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined)
   })
 
   it('terminal:open passes displayName as 5th arg to openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
     await getHandler('terminal:open')({ sender: {} }, 'ctr-1', 80, 24, 'my-display-name')
-    expect(openTerminal).toHaveBeenCalledWith('ctr-1', mockWin, 80, 24, 'my-display-name')
+    expect(openTerminal).toHaveBeenCalledWith('ctr-1', mockWin, 80, 24, 'my-display-name', undefined)
+  })
+
+  it('terminal:open resolves workDir from DB and passes to openTerminal', async () => {
+    vi.mocked(openTerminal).mockResolvedValue(undefined)
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    mockDbGet.mockReturnValue({ git_url: 'git@github.com:org/my-repo.git' })
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 80, 24, 'win')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 80, 24, 'win', '/workspace/my-repo')
   })
 
   it('registers terminal:input listener that calls writeInput', () => {

@@ -18,12 +18,14 @@ describe('Sidebar', () => {
   let onProjectSelect: ReturnType<typeof vi.fn>
   let onRequestNewProject: ReturnType<typeof vi.fn>
   let onRequestSettings: ReturnType<typeof vi.fn>
+  let onRequestHome: ReturnType<typeof vi.fn>
   let onWaitingWindowSelect: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     onProjectSelect = vi.fn()
     onRequestNewProject = vi.fn()
     onRequestSettings = vi.fn()
+    onRequestHome = vi.fn()
     onWaitingWindowSelect = vi.fn()
   })
 
@@ -36,6 +38,7 @@ describe('Sidebar', () => {
       onProjectSelect,
       onRequestNewProject,
       onRequestSettings,
+      onRequestHome,
       onWaitingWindowSelect,
       ...overrides
     }
@@ -66,6 +69,14 @@ describe('Sidebar', () => {
     const items = container.querySelectorAll('[data-testid="project-item"]')
     expect(items[0].classList.contains('selected')).toBe(false)
     expect(items[1].classList.contains('selected')).toBe(true)
+  })
+
+  it('renders Shellephant home link and calls onRequestHome when clicked', async () => {
+    render(Sidebar, baseProps())
+    const homeBtn = screen.getByRole('button', { name: /shellephant/i })
+    expect(homeBtn).toBeDefined()
+    await fireEvent.click(homeBtn)
+    expect(onRequestHome).toHaveBeenCalled()
   })
 
   it('clicking the new-project button calls onRequestNewProject', async () => {
