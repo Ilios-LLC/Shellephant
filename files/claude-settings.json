@@ -16,5 +16,17 @@
         "repo": "obra/superpowers-marketplace"
       }
     }
+  },
+  "hooks": {
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "printf '\\033]9999;claude-waiting\\007' >/dev/tty"
+          }
+        ]
+      }
+    ]
   }
 }

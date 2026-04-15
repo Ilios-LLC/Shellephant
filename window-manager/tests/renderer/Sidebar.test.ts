@@ -2,6 +2,8 @@ import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sidebar from '../../src/renderer/src/components/Sidebar.svelte'
 import type { ProjectRecord } from '../../src/renderer/src/types'
+import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
+import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 
 function makeProject(id: number, name: string): ProjectRecord {
   return {
@@ -17,12 +19,14 @@ describe('Sidebar', () => {
   let onRequestNewProject: ReturnType<typeof vi.fn>
   let onRequestSettings: ReturnType<typeof vi.fn>
   let onRequestAssetTesting: ReturnType<typeof vi.fn>
+  let onWaitingWindowSelect: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     onProjectSelect = vi.fn()
     onRequestNewProject = vi.fn()
     onRequestSettings = vi.fn()
     onRequestAssetTesting = vi.fn()
+    onWaitingWindowSelect = vi.fn()
   })
 
   afterEach(() => cleanup())
@@ -36,6 +40,7 @@ describe('Sidebar', () => {
       onRequestSettings,
       onRequestAssetTesting,
       assetTestingActive: false,
+      onWaitingWindowSelect,
       ...overrides
     }
   }
@@ -89,5 +94,42 @@ describe('Sidebar', () => {
     render(Sidebar, baseProps({ assetTestingActive: true }))
     const btn = screen.getByRole('button', { name: /asset testing/i })
     expect(btn.classList.contains('active')).toBe(true)
+  })
+
+  describe('waiting section', () => {
+    beforeEach(() => waitingWindows._resetForTest())
+
+    it('does not render the waiting section when no windows are waiting', () => {
+      render(Sidebar, baseProps())
+      expect(screen.queryByText(/waiting/i)).toBeNull()
+    })
+
+    it('renders the waiting section when a window is waiting', () => {
+      const entry: WaitingEntry = {
+        containerId: 'c1',
+        windowId: 1,
+        windowName: 'my-window',
+        projectId: 1,
+        projectName: 'my-project'
+      }
+      waitingWindows.add(entry)
+      render(Sidebar, baseProps())
+      expect(screen.getByText(/waiting/i)).toBeDefined()
+      expect(screen.getByText('my-project / my-window')).toBeDefined()
+    })
+
+    it('clicking a waiting item calls onWaitingWindowSelect with the entry', async () => {
+      const entry: WaitingEntry = {
+        containerId: 'c1',
+        windowId: 1,
+        windowName: 'my-window',
+        projectId: 1,
+        projectName: 'my-project'
+      }
+      waitingWindows.add(entry)
+      render(Sidebar, baseProps())
+      await fireEvent.click(screen.getByText('my-project / my-window'))
+      expect(onWaitingWindowSelect).toHaveBeenCalledWith(entry)
+    })
   })
 })

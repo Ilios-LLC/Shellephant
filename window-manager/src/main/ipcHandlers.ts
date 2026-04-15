@@ -111,10 +111,10 @@ export function registerIpcHandlers(): void {
   })
 
   // Terminal handlers
-  ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number) => {
+  ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error('No window found for terminal:open')
-    return openTerminal(containerId, win, cols, rows)
+    return openTerminal(containerId, win, cols, rows, displayName)
   })
   ipcMain.on('terminal:input', (_, containerId: string, data: string) =>
     writeInput(containerId, data)

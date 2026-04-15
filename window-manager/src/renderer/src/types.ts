@@ -51,12 +51,14 @@ export interface Api {
   clearClaudeToken: () => Promise<TokenStatus>
 
   // Terminal
-  openTerminal: (containerId: string, cols: number, rows: number) => Promise<void>
+  openTerminal: (containerId: string, cols: number, rows: number, displayName: string) => Promise<void>
   sendTerminalInput: (containerId: string, data: string) => void
   resizeTerminal: (containerId: string, cols: number, rows: number) => void
   closeTerminal: (containerId: string) => void
   onTerminalData: (callback: (containerId: string, data: string) => void) => void
   offTerminalData: () => void
+  onTerminalWaiting: (callback: (containerId: string) => void) => void
+  offTerminalWaiting: () => void
 }
 
 declare global {
