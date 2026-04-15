@@ -13,6 +13,7 @@
   let { onRequestNewProject, allWindows = [], projects = [], onNavigateToWindow }: Props = $props()
 
   let logoEl: SVGSVGElement | undefined = $state()
+  let pathEl: SVGPathElement | undefined = $state()
   let eyeEl: SVGCircleElement | undefined = $state()
   let tweens: Array<{ kill: () => void }> = []
 
@@ -24,12 +25,39 @@
 
   onMount(() => {
     try {
-      if (!logoEl) return
-      gsap.set(logoEl, { transformOrigin: '50% 50%' })
-      tweens.push(gsap.from(logoEl, { opacity: 0, scale: 0.85, duration: 0.9, ease: 'power3.out' }))
-      tweens.push(gsap.to(logoEl, { y: -10, duration: 2.6, ease: 'sine.inOut', yoyo: true, repeat: -1 }))
+      if (!logoEl || !pathEl) return
+      // Vanilla GSAP draw-on: animate stroke-dashoffset from full path length to
+      // 0, then crossfade the fill in. Avoids the paid DrawSVGPlugin.
+      const length = pathEl.getTotalLength()
+      gsap.set(pathEl, {
+        attr: { 'stroke-dasharray': length, 'stroke-dashoffset': length },
+        fillOpacity: 0,
+        strokeOpacity: 1
+      })
+      if (eyeEl) gsap.set(eyeEl, { attr: { r: 0 } })
+
+      const tl = gsap.timeline()
+      // Step 1: draw the outline. `power2.in` accelerates toward the end so
+      // the line lands decisively right where the fade-in begins.
+      tl.to(pathEl, {
+        attr: { 'stroke-dashoffset': 0 },
+        duration: 1.6,
+        ease: 'power2.in'
+      })
+      // Step 2: crossfade — stroke fades out as fill fades in over the same
+      // window. Same gradient on both, so the shape stays continuously
+      // visible (no empty frame, no halo).
+      tl.to(pathEl, { fillOpacity: 1, strokeOpacity: 0, duration: 0.5, ease: 'none' })
       if (eyeEl) {
-        tweens.push(gsap.to(eyeEl, { attr: { r: 80 }, duration: 1.8, ease: 'sine.inOut', yoyo: true, repeat: -1 }))
+        tl.to(eyeEl, { attr: { r: 60 }, duration: 0.45, ease: 'back.out(2)' }, '-=0.2')
+      }
+      tweens.push(tl)
+
+      // Idle bob + blink, started after the draw + fill + eye reveal complete.
+      const idleStart = 2.6
+      tweens.push(gsap.to(logoEl, { y: -10, duration: 2.6, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: idleStart }))
+      if (eyeEl) {
+        tweens.push(gsap.to(eyeEl, { attr: { r: 80 }, duration: 1.8, ease: 'sine.inOut', yoyo: true, repeat: -1, delay: idleStart }))
       }
     } catch {
       // animation not available (e.g. in headless test env)
@@ -65,8 +93,13 @@
     </defs>
     <g transform="translate(4688 0) scale(-1 1)">
       <path
+        bind:this={pathEl}
         fill="url(#ele-purple-empty)"
         fill-rule="evenodd"
+        stroke="url(#ele-purple-empty)"
+        stroke-width="14"
+        stroke-linejoin="round"
+        stroke-linecap="round"
         d="M 2937.660156 2054.851562 C 2937.660156 2207.878906 2849.660156 2344.238281 2716.210938 2408.941406 L 2716.210938 2250.351562 L 2459.25 2250.351562 C 2337.851562 2250.351562 2235.839844 2334.980469 2209.109375 2448.328125 L 1954.730469 2448.328125 L 1954.730469 2228.199219 C 2051.21875 2224.890625 2234.851562 2198.03125 2367.96875 2053.648438 C 2498.261719 1912.328125 2544.058594 1698.730469 2504.570312 1418.171875 L 2937.660156 1418.171875 Z M 1750.210938 1811.648438 C 1750.210938 1594.679688 1926.730469 1418.171875 2143.699219 1418.171875 L 2385.410156 1418.171875 C 2423.730469 1669.671875 2389 1856.179688 2281.921875 1972.949219 C 2137.941406 2129.96875 1903.820312 2109.730469 1901.628906 2109.539062 L 1836.769531 2103.03125 L 1836.769531 2448.328125 L 1750.210938 2448.328125 Z M 2992.289062 1300.210938 L 2143.699219 1300.210938 C 1861.691406 1300.210938 1632.261719 1529.640625 1632.261719 1811.648438 L 1632.261719 2502.960938 C 1632.261719 2537.878906 1660.671875 2566.289062 1695.589844 2566.289062 L 2320.238281 2566.289062 L 2320.238281 2507.308594 C 2320.238281 2430.660156 2382.601562 2368.300781 2459.25 2368.300781 L 2598.25 2368.300781 L 2598.25 2569.148438 L 2671.929688 2550.191406 C 2897.839844 2492.078125 3055.621094 2288.390625 3055.621094 2054.851562 L 3055.621094 1363.539062 C 3055.621094 1328.621094 3027.210938 1300.210938 2992.289062 1300.210938 Z"
       />
     </g>
@@ -74,7 +107,6 @@
   </svg>
 
   {#if runningWindows.length > 0}
-    <h2 class="heading">Running Windows</h2>
     <div class="window-grid">
       {#each runningWindows as win (win.id)}
         <button
@@ -91,12 +123,8 @@
         </button>
       {/each}
     </div>
-  {:else}
-    <h2 class="heading">No windows running</h2>
-    <p class="hint">Create a project to get started.</p>
-    {#if onRequestNewProject}
-      <button type="button" class="cta" onclick={onRequestNewProject}>+ New Project</button>
-    {/if}
+  {:else if onRequestNewProject}
+    <button type="button" class="cta" onclick={onRequestNewProject}>+ New Project</button>
   {/if}
 </div>
 

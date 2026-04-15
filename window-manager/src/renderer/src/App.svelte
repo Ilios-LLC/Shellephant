@@ -24,10 +24,6 @@
     ])
     projects = await window.api.listProjects()
     allWindows = await window.api.listWindows()
-    if (projects.length > 0) {
-      selectedProjectId = projects[0].id
-      windows = await window.api.listWindows(projects[0].id)
-    }
     // Global waiting listener: main has already gated this on the user
     // NOT currently watching the window, so anything that arrives here
     // should mark the sidebar and show a toast.

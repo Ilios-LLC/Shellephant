@@ -419,6 +419,31 @@ describe('listContainerDir', () => {
     ])
   })
 
+  it('detects directories correctly when output uses CRLF (Docker TTY mode)', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data')
+              setImmediate(() => cb(Buffer.from('do-chat-interface/\r\nterraform/\r\ntasks.md\r\n')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/chorale')
+    expect(entries).toEqual([
+      { name: 'do-chat-interface', isDir: true },
+      { name: 'terraform', isDir: true },
+      { name: 'tasks.md', isDir: false }
+    ])
+  })
+
   it('filters out blocked directories', async () => {
     const blocked = 'node_modules/\n.venv/\nvenv/\n__pycache__/\n.git/\ndist/\nbuild/\n.next/\n.nuxt/\ntarget/\ncoverage/\nout/\n'
     const container = {
