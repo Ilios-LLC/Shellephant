@@ -464,3 +464,76 @@ describe('listContainerDir', () => {
     expect(entries).toEqual([])
   })
 })
+
+describe('readContainerFile', () => {
+  it('returns the file content as a string', async () => {
+    const content = 'console.log("hello")\n'
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from(content)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const result = await readContainerFile(container, '/workspace/r/index.ts')
+    expect(result).toBe(content)
+  })
+
+  it('issues cat with the exact file path', async () => {
+    const container = makeContainer()
+    const { readContainerFile } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await readContainerFile(container, '/workspace/r/src/app.ts')
+    expect(container.exec.mock.calls[0][0].Cmd).toEqual(['cat', '/workspace/r/src/app.ts'])
+  })
+})
+
+describe('writeFileInContainer', () => {
+  it('execs tee with the target path and AttachStdin: true', async () => {
+    const mockStream = {
+      on: vi.fn().mockReturnThis(),
+      write: vi.fn(),
+      end: vi.fn()
+    }
+    // Simulate 'finish' event firing after end()
+    mockStream.on.mockImplementation(function (
+      this: typeof mockStream,
+      event: string,
+      cb: () => void
+    ) {
+      if (event === 'finish') setImmediate(() => cb())
+      return this
+    })
+
+    const execInstance = {
+      start: vi.fn().mockResolvedValue(mockStream)
+    }
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue(execInstance)
+    }
+
+    const { writeFileInContainer } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await writeFileInContainer(container, '/workspace/r/file.ts', 'content here')
+
+    expect(container.exec).toHaveBeenCalledWith(
+      expect.objectContaining({
+        Cmd: ['tee', '/workspace/r/file.ts'],
+        AttachStdin: true,
+        Tty: false
+      })
+    )
+    expect(execInstance.start).toHaveBeenCalledWith({ hijack: true, stdin: true })
+    expect(mockStream.write).toHaveBeenCalledWith(Buffer.from('content here', 'utf8'))
+    expect(mockStream.end).toHaveBeenCalled()
+  })
+})

@@ -33,6 +33,35 @@ export async function listContainerDir(
     .filter(({ name, isDir }) => !(isDir && BLOCKED_DIRS.has(name)))
 }
 
+export async function readContainerFile(
+  container: Container,
+  filePath: string
+): Promise<string> {
+  const result = await execInContainer(container, ['cat', filePath])
+  return result.stdout
+}
+
+export async function writeFileInContainer(
+  container: Container,
+  filePath: string,
+  content: string
+): Promise<void> {
+  const execInstance = await container.exec({
+    Cmd: ['tee', filePath],
+    AttachStdin: true,
+    AttachStdout: true,
+    AttachStderr: true,
+    Tty: false
+  })
+  const stream = await execInstance.start({ hijack: true, stdin: true })
+  await new Promise<void>((resolve, reject) => {
+    stream.on('error', reject)
+    stream.on('finish', resolve)
+    stream.write(Buffer.from(content, 'utf8'))
+    stream.end()
+  })
+}
+
 export async function execInContainer(
   container: Container,
   cmd: string[],
