@@ -24,6 +24,12 @@
   let timer: ReturnType<typeof setInterval> | undefined
   let alive = true
 
+  let parsedPorts: [string, string][] = $derived(
+    win.ports
+      ? (Object.entries(JSON.parse(win.ports)) as [string, string][])
+      : []
+  )
+
   async function refreshBranch(): Promise<void> {
     let next: string | null = null
     try {
@@ -57,6 +63,10 @@
     <span class="branch" title="current branch">{branch}</span>
     <span class="sep">·</span>
     <span class="status {win.status}">{win.status}</span>
+    {#each parsedPorts as [container, host]}
+      <span class="sep">·</span>
+      <span class="port">:{container}→:{host}</span>
+    {/each}
   </div>
   <div class="actions">
     <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
@@ -92,6 +102,11 @@
   }
   .branch {
     font-family: var(--font-mono);
+  }
+  .port {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--fg-2);
   }
   .status.running {
     color: var(--success, #4ade80);

@@ -22,6 +22,11 @@ const win = {
   created_at: '2026-04-14T00:00:00Z',
   status: 'running' as const
 }
+
+const winWithPorts = {
+  ...win,
+  ports: JSON.stringify({ '3000': '54321', '8080': '54322' })
+}
 const project = {
   id: 7,
   name: 'my-project',
@@ -130,5 +135,18 @@ describe('WindowDetailPane', () => {
       'abc123def456',
       '\x15claude --dangerously-skip-permissions\n'
     )
+  })
+
+  it('does not render port arrows when window has no ports', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument()
+  })
+
+  it('renders port mappings when window has ports', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    render(WindowDetailPane, { props: { win: winWithPorts, project } })
+    expect(screen.getByText(':3000→:54321')).toBeInTheDocument()
+    expect(screen.getByText(':8080→:54322')).toBeInTheDocument()
   })
 })
