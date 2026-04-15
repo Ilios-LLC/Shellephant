@@ -94,7 +94,7 @@ export function updateProject(id: number, patch: { groupId: number | null }): Pr
   )
   const record = db
     .prepare(
-      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE id = ?'
+      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
     )
     .get(id) as ProjectRecord | undefined
   if (!record) throw new Error(`Project ${id} not found`)
