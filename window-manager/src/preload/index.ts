@@ -6,6 +6,12 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('project:create', name, gitUrl, ports),
   listProjects: () => ipcRenderer.invoke('project:list'),
   deleteProject: (id: number) => ipcRenderer.invoke('project:delete', id),
+  updateProject: (id: number, patch: { groupId: number | null }) =>
+    ipcRenderer.invoke('project:update', id, patch),
+
+  // Group API
+  createGroup: (name: string) => ipcRenderer.invoke('group:create', name),
+  listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
   createWindow: (name: string, projectId: number) =>

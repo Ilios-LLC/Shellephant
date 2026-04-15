@@ -51,6 +51,22 @@ export function initDb(dbPath: string): void {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS project_groups (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      name       TEXT NOT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Migrate: add group_id to projects for databases created before this feature
+  const projGroupCols = _db.pragma('table_info(projects)') as { name: string }[]
+  if (!projGroupCols.some((c) => c.name === 'group_id')) {
+    _db.exec(
+      'ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) DEFAULT NULL'
+    )
+  }
 }
 
 export function getDb(): Database.Database {

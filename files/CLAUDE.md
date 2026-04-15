@@ -110,3 +110,19 @@ Monaco editor wrapper for Svelte 5 runes mode.
 - Poll uses `pushEditOperations` to update model content while preserving cursor position.
 - Disposes editor and clears poll timer on destroy.
 - Tests live in `window-manager/tests/renderer/MonacoEditor.test.ts` (7 tests). Mocks use `vi.hoisted()` to avoid hoisting issues with `vi.mock` factory references.
+
+### window-manager/src/renderer/src/components/GroupStrip.svelte
+Svelte 5 runes-mode component that renders a horizontal strip of group icon buttons plus inline group creation.
+- Props: `groups: ProjectGroupRecord[]`, `activeGroupId: number | null`, `onGroupSelect: (id) => void`, `onGroupCreated: (group) => void`
+- Shows one circle button per group (first letter, full name as aria-label/title); active group gets `.active` class.
+- "new group" (`+`) button toggles `adding` state, replacing itself with a text input (placeholder "Name…").
+- Enter submits: calls `window.api.createGroup(name)` then `onGroupCreated`; Escape or blur cancels.
+- Empty-name Enter cancels without calling the API.
+- Tests live in `window-manager/tests/renderer/GroupStrip.test.ts` (8 tests).
+
+### window-manager/src/renderer/src/components/ProjectView.svelte
+Displays a single project's details and its windows list.
+- Props: `project: ProjectRecord`, `windows: WindowRecord[]`, `groups: ProjectGroupRecord[]`, `onWindowSelect`, `onRequestNewWindow`, `onProjectDeleted`, `onWindowDeleted`, `onProjectUpdated`
+- Group label + `<select id="project-group">` in `.project-actions` — lists all groups with "No group" default; onchange calls `window.api.updateProject(project.id, { groupId })` then `onProjectUpdated`.
+- Two-click delete pattern for both project and individual windows (arms on first click, auto-cancels after 3s timeout).
+- Tests live in `window-manager/tests/renderer/ProjectView.test.ts` (11 tests).

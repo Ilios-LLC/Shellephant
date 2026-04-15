@@ -9,6 +9,7 @@ export interface ProjectRecord {
   name: string
   git_url: string
   ports?: string
+  group_id?: number | null
   created_at: string
 }
 
@@ -66,6 +67,7 @@ export async function createProject(
       name: resolvedName,
       git_url: gitUrl,
       ports: portsJson ?? undefined,
+      group_id: null,
       created_at: new Date().toISOString()
     }
   } catch (err) {
@@ -79,9 +81,24 @@ export async function createProject(
 export function listProjects(): ProjectRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, ports, created_at FROM projects WHERE deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE deleted_at IS NULL'
     )
     .all() as ProjectRecord[]
+}
+
+export function updateProject(id: number, patch: { groupId: number | null }): ProjectRecord {
+  const db = getDb()
+  db.prepare('UPDATE projects SET group_id = ? WHERE id = ? AND deleted_at IS NULL').run(
+    patch.groupId,
+    id
+  )
+  const record = db
+    .prepare(
+      'SELECT id, name, git_url, ports, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
+    )
+    .get(id) as ProjectRecord | undefined
+  if (!record) throw new Error(`Project ${id} not found`)
+  return record
 }
 
 export async function deleteProject(id: number): Promise<void> {

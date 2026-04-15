@@ -26,7 +26,13 @@ vi.mock('../../src/main/terminalService', () => ({
 vi.mock('../../src/main/projectService', () => ({
   createProject: vi.fn(),
   listProjects: vi.fn(),
-  deleteProject: vi.fn()
+  deleteProject: vi.fn(),
+  updateProject: vi.fn()
+}))
+
+vi.mock('../../src/main/projectGroupService', () => ({
+  createGroup: vi.fn(),
+  listGroups: vi.fn()
 }))
 
 vi.mock('../../src/main/gitOps', () => ({
@@ -67,7 +73,8 @@ vi.mock('../../src/main/db', () => ({
 
 import { ipcMain, BrowserWindow } from 'electron'
 import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
-import { createProject, listProjects, deleteProject } from '../../src/main/projectService'
+import { createProject, listProjects, deleteProject, updateProject } from '../../src/main/projectService'
+import { createGroup, listGroups } from '../../src/main/projectGroupService'
 import {
   openTerminal,
   writeInput,
@@ -390,5 +397,29 @@ describe('registerIpcHandlers', () => {
     await getHandler('fs:write-file')({}, 'container-xyz', '/workspace/r/file.ts', 'new content')
     expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
     expect(writeFileInContainer).toHaveBeenCalledWith(mockContainer, '/workspace/r/file.ts', 'new content')
+  })
+
+  it('registers project:update handler that calls updateProject', async () => {
+    const updated = { id: 1, name: 'p', git_url: 'git@github.com:org/r.git', group_id: 2, created_at: '2026-01-01' }
+    vi.mocked(updateProject).mockReturnValue(updated)
+    const result = await getHandler('project:update')({}, 1, { groupId: 2 })
+    expect(updateProject).toHaveBeenCalledWith(1, { groupId: 2 })
+    expect(result).toEqual(updated)
+  })
+
+  it('registers group:create handler that calls createGroup', async () => {
+    const group = { id: 1, name: 'frontend', created_at: '2026-01-01' }
+    vi.mocked(createGroup).mockReturnValue(group)
+    const result = await getHandler('group:create')({}, 'frontend')
+    expect(createGroup).toHaveBeenCalledWith('frontend')
+    expect(result).toEqual(group)
+  })
+
+  it('registers group:list handler that calls listGroups', async () => {
+    const groups = [{ id: 1, name: 'frontend', created_at: '2026-01-01' }]
+    vi.mocked(listGroups).mockReturnValue(groups)
+    const result = await getHandler('group:list')({})
+    expect(listGroups).toHaveBeenCalled()
+    expect(result).toEqual(groups)
   })
 })

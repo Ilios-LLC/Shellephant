@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { ProjectRecord, TokenStatus, WindowRecord } from './types'
+  import type { ProjectRecord, ProjectGroupRecord, TokenStatus, WindowRecord } from './types'
   import { waitingWindows, type WaitingEntry } from './lib/waitingWindows'
   import { pushToast } from './lib/toasts'
   import Sidebar from './components/Sidebar.svelte'
@@ -16,17 +16,19 @@
   let patStatus = $state<TokenStatus>({ configured: false, hint: null })
   let claudeStatus = $state<TokenStatus>({ configured: false, hint: null })
   let settingsRequiredFor = $state<SettingsRequirement>(null)
+  let groups = $state<ProjectGroupRecord[]>([])
+  let activeGroupId = $state<number | null>(null)
 
   onMount(async () => {
     ;[patStatus, claudeStatus] = await Promise.all([
       window.api.getGitHubPatStatus(),
       window.api.getClaudeTokenStatus()
     ])
-    projects = await window.api.listProjects()
-    allWindows = await window.api.listWindows()
-    // Global waiting listener: main has already gated this on the user
-    // NOT currently watching the window, so anything that arrives here
-    // should mark the sidebar and show a toast.
+    ;[projects, allWindows, groups] = await Promise.all([
+      window.api.listProjects(),
+      window.api.listWindows(),
+      window.api.listGroups()
+    ])
     window.api.onTerminalWaiting((info) => {
       waitingWindows.add(info)
       pushToast({ level: 'info', title: 'Claude is waiting', body: info.windowName })
@@ -158,8 +160,23 @@
     selectedWindowId = entry.windowId
   }
 
+  function handleGroupSelect(id: number): void {
+    activeGroupId = activeGroupId === id ? null : id
+  }
+
+  function handleGroupCreated(group: ProjectGroupRecord): void {
+    groups = [...groups, group]
+  }
+
+  function handleProjectUpdated(project: ProjectRecord): void {
+    projects = projects.map((p) => (p.id === project.id ? project : p))
+  }
+
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
   let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
+  let filteredProjects = $derived(
+    activeGroupId !== null ? projects.filter((p) => p.group_id === activeGroupId) : projects
+  )
 
   // Keep main in sync with the container the user is currently viewing, so
   // the waiting-notification logic can suppress OS alerts for the focused window.
@@ -170,13 +187,17 @@
 
 <div class="app">
   <Sidebar
-    {projects}
+    projects={filteredProjects}
     {selectedProjectId}
+    {groups}
+    {activeGroupId}
     onProjectSelect={handleProjectSelect}
     onRequestNewProject={handleRequestNewProject}
     onRequestSettings={handleRequestSettings}
     onRequestHome={handleRequestHome}
     onWaitingWindowSelect={handleWaitingWindowSelect}
+    onGroupSelect={handleGroupSelect}
+    onGroupCreated={handleGroupCreated}
   />
   <MainPane
     project={selectedProject}
@@ -188,6 +209,7 @@
     {patStatus}
     {claudeStatus}
     {settingsRequiredFor}
+    {groups}
     onWindowSelect={handleWindowSelect}
     onRequestNewProject={handleRequestNewProject}
     onRequestNewWindow={handleRequestNewWindow}
@@ -199,6 +221,7 @@
     onClaudeStatusChange={handleClaudeStatusChange}
     onWizardCancel={handleWizardCancel}
     onNavigateToWindow={handleNavigateToWindow}
+    onProjectUpdated={handleProjectUpdated}
   />
 </div>
 

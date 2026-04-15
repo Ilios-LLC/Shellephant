@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ProjectRecord, TokenStatus, WindowRecord } from '../types'
+  import type { ProjectRecord, ProjectGroupRecord, TokenStatus, WindowRecord } from '../types'
   import EmptyState from './EmptyState.svelte'
   import ProjectView from './ProjectView.svelte'
   import TerminalHost from './TerminalHost.svelte'
@@ -30,6 +30,8 @@
     onClaudeStatusChange: (status: TokenStatus) => void
     onWizardCancel: () => void
     onNavigateToWindow: (projectId: number, windowId: number) => void
+    groups: ProjectGroupRecord[]
+    onProjectUpdated: (project: ProjectRecord) => void
   }
 
   let {
@@ -52,7 +54,9 @@
     onPatStatusChange,
     onClaudeStatusChange,
     onWizardCancel,
-    onNavigateToWindow
+    onNavigateToWindow,
+    groups,
+    onProjectUpdated
   }: Props = $props()
 </script>
 
@@ -78,10 +82,12 @@
     <ProjectView
       {project}
       {windows}
+      {groups}
       {onWindowSelect}
       {onRequestNewWindow}
       {onProjectDeleted}
       {onWindowDeleted}
+      {onProjectUpdated}
     />
   {:else}
     <EmptyState {onRequestNewProject} {allWindows} {projects} {onNavigateToWindow} />
