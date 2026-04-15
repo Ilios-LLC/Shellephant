@@ -11,8 +11,10 @@
     onViewChange?: (mode: ViewMode) => void
     onCommit?: () => void
     onPush?: () => void
+    onDelete?: () => void
     commitDisabled?: boolean
     pushDisabled?: boolean
+    deleteDisabled?: boolean
   }
 
   let {
@@ -22,9 +24,34 @@
     onViewChange = () => {},
     onCommit = () => {},
     onPush = () => {},
+    onDelete,
     commitDisabled = true,
-    pushDisabled = true
+    pushDisabled = true,
+    deleteDisabled = false
   }: Props = $props()
+
+  let deleteArmed = $state(false)
+  let armTimer: ReturnType<typeof setTimeout> | undefined
+
+  function handleDelete(): void {
+    if (!deleteArmed) {
+      deleteArmed = true
+      if (armTimer) clearTimeout(armTimer)
+      armTimer = setTimeout(() => {
+        deleteArmed = false
+        armTimer = undefined
+      }, 3000)
+      return
+    }
+    clearTimeout(armTimer)
+    armTimer = undefined
+    deleteArmed = false
+    onDelete?.()
+  }
+
+  onDestroy(() => {
+    if (armTimer) clearTimeout(armTimer)
+  })
 
   let branch = $state('…')
   let timer: ReturnType<typeof setInterval> | undefined
@@ -107,6 +134,15 @@
       <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
       <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
       <button type="button" disabled={win.status !== 'running'} onclick={injectClaude}>Claude</button>
+      {#if onDelete}
+        <button
+          type="button"
+          class="delete-btn"
+          class:armed={deleteArmed}
+          disabled={deleteDisabled}
+          onclick={handleDelete}
+        >{deleteArmed ? 'Confirm?' : 'Delete'}</button>
+      {/if}
     </div>
   </div>
 </footer>
@@ -195,5 +231,14 @@
   button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .delete-btn {
+    border-color: var(--danger-border, #7f1d1d);
+    color: var(--danger, #f87171);
+  }
+  .delete-btn.armed {
+    background: var(--danger, #f87171);
+    border-color: var(--danger, #f87171);
+    color: #09090b;
   }
 </style>

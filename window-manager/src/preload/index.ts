@@ -64,4 +64,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:read-file', containerId, path),
   writeContainerFile: (containerId: string, path: string, content: string) =>
     ipcRenderer.invoke('fs:write-file', containerId, path, content),
+
+  // Shell
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
 })

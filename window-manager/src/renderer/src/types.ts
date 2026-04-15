@@ -42,7 +42,7 @@ export interface Api {
     windowId: number,
     payload: { subject: string; body?: string }
   ) => Promise<{ ok: boolean; code: number; stdout: string }>
-  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string }>
+  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string; prUrl?: string }>
 
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>
@@ -77,6 +77,9 @@ export interface Api {
   listContainerDir: (containerId: string, path: string) => Promise<{ name: string; isDir: boolean }[]>
   readContainerFile: (containerId: string, path: string) => Promise<string>
   writeContainerFile: (containerId: string, path: string, content: string) => Promise<void>
+
+  // Shell
+  openExternal: (url: string) => Promise<void>
 }
 
 declare global {
