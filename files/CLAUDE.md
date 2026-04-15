@@ -91,4 +91,12 @@ When writing a plan according to superpowers:writing-plans, always write it to t
 Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
 - `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
-- Tests live in `window-manager/tests/main/gitOps.test.ts`. 
+- Tests live in `window-manager/tests/main/gitOps.test.ts`.
+
+### window-manager/src/renderer/src/components/FileTree.svelte
+Lazy-loaded directory tree component for Svelte 5 runes mode.
+- Props: `containerId: string`, `rootPath: string`, `onFileSelect: (path) => void`
+- Fetches children via `window.api.listContainerDir(containerId, dirPath)` only on first expand (caches in `childrenMap` Map).
+- State: `childrenMap` (Map of loaded entries), `expanded` (Set of expanded dir paths, root pre-expanded), `loading` (Set), `selectedPath`.
+- `flatList` derived state from `flattenVisible(rootPath, 0)` recurses into expanded dirs.
+- Tests live in `window-manager/tests/renderer/FileTree.test.ts` (5 tests).

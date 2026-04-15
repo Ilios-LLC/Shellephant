@@ -16,12 +16,12 @@
 
   // childrenMap: dirPath → loaded entries (undefined = not yet loaded)
   let childrenMap = $state(new Map<string, FileEntry[]>())
-  let expanded = $state(new Set<string>([rootPath]))
+  let expanded = $state(new Set<string>())
   let loading = $state(new Set<string>())
   let selectedPath = $state<string | null>(null)
 
   async function loadDir(dirPath: string): Promise<void> {
-    if (childrenMap.has(dirPath)) return
+    if (childrenMap.has(dirPath) || loading.has(dirPath)) return
     loading = new Set([...loading, dirPath])
     try {
       const entries = await window.api.listContainerDir(containerId, dirPath)
@@ -68,6 +68,7 @@
   const flatList = $derived(flattenVisible(rootPath, 0))
 
   onMount(() => {
+    expanded = new Set([rootPath])
     void loadDir(rootPath)
   })
 </script>
