@@ -138,4 +138,21 @@ describe('NewProjectWizard', () => {
       expect(mockCreateProject).not.toHaveBeenCalled()
     })
   })
+
+  it('shows error when port token has trailing non-numeric characters', async () => {
+    render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
+
+    await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
+      target: { value: 'git@github.com:org/alpha.git' }
+    })
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+      target: { value: '3000abc' }
+    })
+    await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/ports must be comma-separated numbers/i)).toBeInTheDocument()
+      expect(mockCreateProject).not.toHaveBeenCalled()
+    })
+  })
 })

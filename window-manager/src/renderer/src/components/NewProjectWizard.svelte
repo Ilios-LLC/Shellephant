@@ -27,7 +27,7 @@
 
       let parsedPorts: number[] | undefined
       if (rawTokens.length > 0) {
-        const nums = rawTokens.map((s) => parseInt(s, 10))
+        const nums = rawTokens.map((s) => (/^\d+$/.test(s) ? parseInt(s, 10) : NaN))
         if (nums.some((n) => isNaN(n))) {
           error = 'Ports must be comma-separated numbers (e.g. 3000, 8080)'
           loading = false
