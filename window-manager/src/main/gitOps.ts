@@ -199,6 +199,7 @@ export async function getGitStatus(container: Container, clonePath: string): Pro
   ])
   const isDirty = porcelainResult.ok && porcelainResult.stdout.trim().length > 0
 
+  // added/deleted only count tracked-file diffs; untracked files make isDirty=true but contribute 0 here
   const shortstatResult = await execInContainer(container, [
     'git', '-C', clonePath, 'diff', '--shortstat', 'HEAD'
   ])
