@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
-import { createProject, listProjects, deleteProject, updateProject } from './projectService'
+import { createProject, listProjects, deleteProject, updateProject, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
 import { setActiveContainer } from './focusState'
@@ -44,7 +44,7 @@ function resolveWindowGitContext(windowId: number): WindowGitContext {
 
 export function registerIpcHandlers(): void {
   // Project handlers
-  ipcMain.handle('project:create', (_, name: string, gitUrl: string, ports?: number[]) => createProject(name, gitUrl, ports))
+  ipcMain.handle('project:create', (_, name: string, gitUrl: string, ports?: PortMapping[]) => createProject(name, gitUrl, ports))
   ipcMain.handle('project:list', () => listProjects())
   ipcMain.handle('project:delete', (_, id: number) => deleteProject(id))
   ipcMain.handle('project:update', (_, id: number, patch: { groupId: number | null }) =>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { ProjectRecord } from '../types'
+  import type { ProjectRecord, PortMapping } from '../types'
 
   interface Props {
     onCreated: (project: ProjectRecord) => void
@@ -25,20 +25,47 @@
         .map((s) => s.trim())
         .filter((s) => s.length > 0)
 
-      let parsedPorts: number[] | undefined
+      let parsedPorts: PortMapping[] | undefined
       if (rawTokens.length > 0) {
-        const nums = rawTokens.map((s) => (/^\d+$/.test(s) ? parseInt(s, 10) : NaN))
-        if (nums.some((n) => isNaN(n))) {
-          error = 'Ports must be comma-separated numbers (e.g. 3000, 8080)'
-          loading = false
-          return
+        const mappings: PortMapping[] = []
+        for (const token of rawTokens) {
+          const parts = token.split(':')
+          if (parts.length > 2) {
+            error = 'Use format: 3000 or 3000:8080 (container:host)'
+            loading = false
+            return
+          }
+          const containerStr = parts[0]
+          const hostStr = parts[1]
+          if (!/^\d+$/.test(containerStr)) {
+            error = 'Port must be a number (e.g. 3000 or 3000:8080)'
+            loading = false
+            return
+          }
+          const container = parseInt(containerStr, 10)
+          if (container < 1 || container > 65535) {
+            error = 'Ports must be between 1 and 65535'
+            loading = false
+            return
+          }
+          if (hostStr !== undefined) {
+            if (!/^\d+$/.test(hostStr)) {
+              error = 'Host port must be a number (e.g. 3000:8080)'
+              loading = false
+              return
+            }
+            const host = parseInt(hostStr, 10)
+            if (host < 1 || host > 65535) {
+              error = 'Ports must be between 1 and 65535'
+              loading = false
+              return
+            }
+            mappings.push({ container, host })
+          } else {
+            mappings.push({ container })
+          }
         }
-        if (nums.some((n) => n < 1 || n > 65535)) {
-          error = 'Ports must be between 1 and 65535'
-          loading = false
-          return
-        }
-        parsedPorts = nums
+        parsedPorts = mappings
       }
 
       const record = await window.api.createProject(name.trim(), trimmedUrl, parsedPorts)
@@ -93,7 +120,7 @@
       <input
         id="ports"
         type="text"
-        placeholder="3000, 8080"
+        placeholder="3000, 8080:9000"
         bind:value={ports}
         disabled={loading}
         onkeydown={handleKey}

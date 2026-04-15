@@ -115,9 +115,12 @@ describe('projectService', () => {
       expect(listProjects()).toHaveLength(0)
     })
 
-    it('stores ports when provided', async () => {
-      const result = await createProject('with-ports', 'git@github.com:org/repo2.git', [3000, 8080])
-      expect(result.ports).toBe(JSON.stringify([3000, 8080]))
+    it('stores port mappings when provided', async () => {
+      const result = await createProject('with-ports', 'git@github.com:org/repo2.git', [
+        { container: 3000 },
+        { container: 8080, host: 9000 }
+      ])
+      expect(result.ports).toBe(JSON.stringify([{ container: 3000 }, { container: 8080, host: 9000 }]))
     })
 
     it('stores no ports when omitted', async () => {
@@ -125,22 +128,33 @@ describe('projectService', () => {
       expect(result.ports).toBeUndefined()
     })
 
-    it('rejects port value 0', async () => {
+    it('rejects container port value 0', async () => {
       await expect(
-        createProject('bad-ports', 'git@github.com:org/repo4.git', [0])
-      ).rejects.toThrow(/Invalid port/)
+        createProject('bad-ports', 'git@github.com:org/repo4.git', [{ container: 0 }])
+      ).rejects.toThrow(/Invalid container port/)
     })
 
-    it('rejects port value 65536', async () => {
+    it('rejects container port value 65536', async () => {
       await expect(
-        createProject('bad-ports2', 'git@github.com:org/repo5.git', [65536])
-      ).rejects.toThrow(/Invalid port/)
+        createProject('bad-ports2', 'git@github.com:org/repo5.git', [{ container: 65536 }])
+      ).rejects.toThrow(/Invalid container port/)
     })
 
-    it('rejects non-integer port value', async () => {
+    it('rejects non-integer container port value', async () => {
       await expect(
-        createProject('bad-ports3', 'git@github.com:org/repo6.git', [NaN])
-      ).rejects.toThrow(/Invalid port/)
+        createProject('bad-ports3', 'git@github.com:org/repo6.git', [{ container: NaN }])
+      ).rejects.toThrow(/Invalid container port/)
+    })
+
+    it('rejects invalid host port value', async () => {
+      await expect(
+        createProject('bad-host-port', 'git@github.com:org/repo7.git', [{ container: 3000, host: 0 }])
+      ).rejects.toThrow(/Invalid host port/)
+    })
+
+    it('accepts mapping with only container port (ephemeral host)', async () => {
+      const result = await createProject('ephemeral', 'git@github.com:org/repo8.git', [{ container: 3000 }])
+      expect(result.ports).toBe(JSON.stringify([{ container: 3000 }]))
     })
   })
 
@@ -160,9 +174,9 @@ describe('projectService', () => {
     })
 
     it('listProjects includes ports field', async () => {
-      await createProject('list-ports', 'git@github.com:org/list-ports.git', [5432])
+      await createProject('list-ports', 'git@github.com:org/list-ports.git', [{ container: 5432 }])
       const projects = listProjects()
-      expect(projects[0].ports).toBe(JSON.stringify([5432]))
+      expect(projects[0].ports).toBe(JSON.stringify([{ container: 5432 }]))
     })
 
     it('includes group_id in returned records', async () => {

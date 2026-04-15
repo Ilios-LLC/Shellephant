@@ -6,6 +6,7 @@ import { closeTerminalSessionFor } from './terminalService'
 import { toSlug } from './slug'
 import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug } from './gitOps'
 import { getDocker } from './docker'
+import type { PortMapping } from './projectService'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -50,12 +51,12 @@ export async function createWindow(
   const repoName = extractRepoName(project.git_url)
   const clonePath = `/workspace/${repoName}`
 
-  const projectPorts: number[] = project.ports ? (JSON.parse(project.ports) as number[]) : []
+  const projectPorts: PortMapping[] = project.ports ? (JSON.parse(project.ports) as PortMapping[]) : []
   const exposedPorts: Record<string, Record<string, never>> = {}
   const portBindings: Record<string, { HostPort: string }[]> = {}
-  for (const p of projectPorts) {
-    exposedPorts[`${p}/tcp`] = {}
-    portBindings[`${p}/tcp`] = [{ HostPort: '' }]
+  for (const pm of projectPorts) {
+    exposedPorts[`${pm.container}/tcp`] = {}
+    portBindings[`${pm.container}/tcp`] = [{ HostPort: pm.host !== undefined ? String(pm.host) : '' }]
   }
 
   onProgress('Probing remote for branch…')
