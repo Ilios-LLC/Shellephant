@@ -8,6 +8,7 @@ export interface ProjectRecord {
   id: number
   name: string
   git_url: string
+  ports?: string
   created_at: string
 }
 
@@ -67,7 +68,7 @@ export async function createProject(
 export function listProjects(): ProjectRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, created_at FROM projects WHERE deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, created_at FROM projects WHERE deleted_at IS NULL'
     )
     .all() as ProjectRecord[]
 }

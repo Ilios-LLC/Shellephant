@@ -14,6 +14,7 @@ export interface WindowRecord {
   name: string
   project_id: number
   container_id: string
+  ports?: string
   created_at: string
   status: WindowStatus
 }
@@ -129,7 +130,7 @@ export async function reconcileWindows(): Promise<void> {
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
   let query =
-    'SELECT id, name, project_id, container_id, created_at FROM windows WHERE deleted_at IS NULL'
+    'SELECT id, name, project_id, container_id, ports, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {
