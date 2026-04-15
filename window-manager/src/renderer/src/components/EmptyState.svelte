@@ -1,16 +1,26 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import gsap from 'gsap'
+  import type { ProjectRecord, WindowRecord } from '../types'
 
   interface Props {
     onRequestNewProject?: () => void
+    allWindows?: WindowRecord[]
+    projects?: ProjectRecord[]
+    onNavigateToWindow?: (projectId: number, windowId: number) => void
   }
 
-  let { onRequestNewProject }: Props = $props()
+  let { onRequestNewProject, allWindows = [], projects = [], onNavigateToWindow }: Props = $props()
 
   let logoEl: SVGSVGElement | undefined = $state()
   let eyeEl: SVGCircleElement | undefined = $state()
   let tweens: Array<{ kill: () => void }> = []
+
+  let runningWindows = $derived(allWindows.filter((w) => w.status === 'running'))
+
+  function projectName(projectId: number): string {
+    return projects.find((p) => p.id === projectId)?.name ?? 'Unknown'
+  }
 
   onMount(() => {
     try {
@@ -62,10 +72,31 @@
     </g>
     <circle bind:this={eyeEl} cx="2660" cy="1640" r="60" fill="#ffffff" />
   </svg>
-  <h2 class="heading">No project selected</h2>
-  <p class="hint">Create a project to get started.</p>
-  {#if onRequestNewProject}
-    <button type="button" class="cta" onclick={onRequestNewProject}>+ New Project</button>
+
+  {#if runningWindows.length > 0}
+    <h2 class="heading">Running Windows</h2>
+    <div class="window-grid">
+      {#each runningWindows as win (win.id)}
+        <button
+          type="button"
+          class="window-card"
+          onclick={() => onNavigateToWindow?.(win.project_id, win.id)}
+        >
+          <span class="card-project">{projectName(win.project_id)}</span>
+          <span class="card-name">{win.name}</span>
+          <span class="card-status">
+            <span class="status-dot" aria-hidden="true"></span>
+            running
+          </span>
+        </button>
+      {/each}
+    </div>
+  {:else}
+    <h2 class="heading">No windows running</h2>
+    <p class="hint">Create a project to get started.</p>
+    {#if onRequestNewProject}
+      <button type="button" class="cta" onclick={onRequestNewProject}>+ New Project</button>
+    {/if}
   {/if}
 </div>
 
@@ -77,15 +108,18 @@
     justify-content: center;
     height: 100%;
     gap: 0.75rem;
+    padding: 2rem;
     background: radial-gradient(circle at 50% 40%, var(--bg-1), var(--bg-0) 70%);
     color: var(--fg-1);
+    overflow-y: auto;
   }
 
   .logo {
-    width: min(260px, 40vw);
+    width: min(180px, 30vw);
     height: auto;
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     filter: drop-shadow(0 8px 24px rgba(168, 85, 247, 0.25));
+    flex-shrink: 0;
   }
 
   .heading {
@@ -116,5 +150,70 @@
   .cta:hover {
     background: var(--accent-hi);
     border-color: var(--accent-hi);
+  }
+
+  .window-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 0.75rem;
+    width: 100%;
+    max-width: 700px;
+    margin-top: 0.25rem;
+  }
+
+  .window-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.85rem 1rem;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--font-ui);
+    transition: border-color 0.15s, background 0.15s;
+  }
+
+  .window-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-2);
+  }
+
+  .card-project {
+    font-size: 0.7rem;
+    font-weight: 500;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-name {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--fg-0);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .card-status {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.72rem;
+    color: var(--fg-2);
+    margin-top: 0.1rem;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #4ade80;
+    flex-shrink: 0;
   }
 </style>

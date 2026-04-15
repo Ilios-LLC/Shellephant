@@ -9,6 +9,7 @@
 
   let projects = $state<ProjectRecord[]>([])
   let windows = $state<WindowRecord[]>([])
+  let allWindows = $state<WindowRecord[]>([])
   let selectedProjectId = $state<number | null>(null)
   let selectedWindowId = $state<number | null>(null)
   let view = $state<MainPaneView>('default')
@@ -22,6 +23,7 @@
       window.api.getClaudeTokenStatus()
     ])
     projects = await window.api.listProjects()
+    allWindows = await window.api.listWindows()
     if (projects.length > 0) {
       selectedProjectId = projects[0].id
       windows = await window.api.listWindows(projects[0].id)
@@ -38,6 +40,20 @@
   onDestroy(() => {
     window.api.offTerminalWaiting()
   })
+
+  function handleRequestHome(): void {
+    selectedProjectId = null
+    selectedWindowId = null
+    view = 'default'
+  }
+
+  async function handleNavigateToWindow(projectId: number, windowId: number): Promise<void> {
+    selectedProjectId = projectId
+    selectedWindowId = null
+    view = 'default'
+    windows = await window.api.listWindows(projectId)
+    selectedWindowId = windowId
+  }
 
   function handleProjectSelect(project: ProjectRecord): void {
     selectedProjectId = project.id
@@ -114,6 +130,7 @@
 
   async function handleProjectDeleted(id: number): Promise<void> {
     projects = projects.filter((p) => p.id !== id)
+    allWindows = allWindows.filter((w) => w.project_id !== id)
     if (selectedProjectId === id) {
       selectedProjectId = projects[0]?.id ?? null
       selectedWindowId = null
@@ -131,12 +148,14 @@
 
   function handleWindowCreated(win: WindowRecord): void {
     windows = [...windows, win]
+    allWindows = [...allWindows, win]
     selectedWindowId = win.id
     view = 'default'
   }
 
   function handleWindowDeleted(id: number): void {
     windows = windows.filter((w) => w.id !== id)
+    allWindows = allWindows.filter((w) => w.id !== id)
     if (selectedWindowId === id) selectedWindowId = null
   }
 
@@ -166,12 +185,15 @@
     onRequestNewProject={handleRequestNewProject}
     onRequestSettings={handleRequestSettings}
     onRequestAssetTesting={handleRequestAssetTesting}
+    onRequestHome={handleRequestHome}
     assetTestingActive={view === 'asset-testing'}
     onWaitingWindowSelect={handleWaitingWindowSelect}
   />
   <MainPane
     project={selectedProject}
     {windows}
+    {allWindows}
+    {projects}
     {selectedWindow}
     {view}
     {patStatus}
@@ -187,6 +209,7 @@
     onPatStatusChange={handlePatStatusChange}
     onClaudeStatusChange={handleClaudeStatusChange}
     onWizardCancel={handleWizardCancel}
+    onNavigateToWindow={handleNavigateToWindow}
   />
 </div>
 

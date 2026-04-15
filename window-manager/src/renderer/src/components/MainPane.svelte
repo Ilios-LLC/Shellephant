@@ -12,7 +12,9 @@
 
   interface Props {
     project: ProjectRecord | null
+    projects: ProjectRecord[]
     windows: WindowRecord[]
+    allWindows: WindowRecord[]
     selectedWindow: WindowRecord | null
     view: MainPaneView
     patStatus: TokenStatus
@@ -28,11 +30,14 @@
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
     onWizardCancel: () => void
+    onNavigateToWindow: (projectId: number, windowId: number) => void
   }
 
   let {
     project,
+    projects,
     windows,
+    allWindows,
     selectedWindow,
     view,
     patStatus,
@@ -47,7 +52,8 @@
     onWindowDeleted,
     onPatStatusChange,
     onClaudeStatusChange,
-    onWizardCancel
+    onWizardCancel,
+    onNavigateToWindow
   }: Props = $props()
 </script>
 
@@ -81,7 +87,7 @@
       {onWindowDeleted}
     />
   {:else}
-    <EmptyState {onRequestNewProject} />
+    <EmptyState {onRequestNewProject} {allWindows} {projects} {onNavigateToWindow} />
   {/if}
 </main>
 

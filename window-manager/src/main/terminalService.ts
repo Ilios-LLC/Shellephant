@@ -34,7 +34,8 @@ export function openTerminal(
   win: BrowserWindow,
   cols: number,
   rows: number,
-  displayName: string = ''
+  displayName: string = '',
+  workDir?: string
 ): Promise<void> {
   // Idempotent: tear down any existing session for this container first.
   if (sessions.has(containerId)) {
@@ -59,7 +60,10 @@ export function openTerminal(
   if (claudeToken) {
     args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`)
   }
-  args.push(containerId, 'sh', '-c', 'exec tmux -u new-session -A -s cw')
+  const tmuxCmd = workDir
+    ? `exec tmux -u new-session -A -s cw -c '${workDir}'`
+    : 'exec tmux -u new-session -A -s cw'
+  args.push(containerId, 'sh', '-c', tmuxCmd)
 
   const child = pty.spawn('docker', args, {
     name: 'xterm-256color',
