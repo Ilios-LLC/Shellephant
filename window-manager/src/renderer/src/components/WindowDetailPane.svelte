@@ -17,6 +17,7 @@
     pushDisabled?: boolean
     deleteDisabled?: boolean
     summary?: ConversationSummary
+    onGitStatus?: (status: { isDirty: boolean; added: number; deleted: number } | null) => void
   }
 
   let {
@@ -30,7 +31,8 @@
     commitDisabled = true,
     pushDisabled = true,
     deleteDisabled = false,
-    summary = undefined
+    summary = undefined,
+    onGitStatus = () => {}
   }: Props = $props()
 
   let deleteArmed = $state(false)
@@ -57,6 +59,7 @@
   })
 
   let branch = $state('…')
+  let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let timer: ReturnType<typeof setInterval> | undefined
   let alive = true
 
@@ -79,6 +82,16 @@
       // keep last-known branch on error; do not toast
     }
     if (alive && next) branch = next
+
+    try {
+      const status = await window.api.getGitStatus(win.id)
+      if (alive) {
+        gitStatus = status
+        onGitStatus(status)
+      }
+    } catch {
+      // keep last-known status on error
+    }
   }
 
   onMount(() => {
@@ -126,6 +139,14 @@
       <span class="project">{project.name}</span>
       <span class="sep">·</span>
       <span class="branch" title="current branch">{branch}</span>
+      {#if gitStatus !== null}
+        {#if gitStatus.isDirty && (gitStatus.added > 0 || gitStatus.deleted > 0)}
+          <span class="sep">·</span>
+          <span class="git-stat">+{gitStatus.added} −{gitStatus.deleted}</span>
+        {:else if !gitStatus.isDirty}
+          <span class="git-clean">(clean)</span>
+        {/if}
+      {/if}
       <span class="sep">·</span>
       <span class="status {win.status}">{win.status}</span>
       {#each parsedPorts as [container, host]}
@@ -210,6 +231,15 @@
   }
   .branch {
     font-family: var(--font-mono);
+  }
+  .git-stat {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    color: var(--warning, #facc15);
+  }
+  .git-clean {
+    font-size: 0.78rem;
+    color: var(--fg-3);
   }
   .port {
     font-family: var(--font-mono);
