@@ -69,6 +69,10 @@ export interface Api {
     }) => void
   ) => void
   offTerminalWaiting: () => void
+  onTerminalSummary: (
+    callback: (data: { containerId: string; title: string; bullets: string[] }) => void
+  ) => void
+  offTerminalSummary: () => void
 
   // Focus
   setActiveContainer: (containerId: string | null) => void
