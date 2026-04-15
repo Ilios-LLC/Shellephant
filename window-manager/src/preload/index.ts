@@ -43,5 +43,8 @@ contextBridge.exposeInMainWorld('api', {
   offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data'),
   onTerminalWaiting: (callback: (containerId: string) => void) =>
     ipcRenderer.on('terminal:waiting', (_, containerId) => callback(containerId)),
-  offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting')
+  offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting'),
+
+  // Shell
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
 })

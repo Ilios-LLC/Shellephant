@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject } from './projectService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
@@ -12,7 +12,7 @@ import {
   clearClaudeToken
 } from './settingsService'
 import { getDb } from './db'
-import { extractRepoName } from './gitUrl'
+import { extractRepoName, buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
 import { getCurrentBranch, stageAndCommit, push as gitPush } from './gitOps'
 import { getIdentity } from './githubIdentity'
@@ -87,8 +87,15 @@ export function registerIpcHandlers(): void {
     if (!branch || branch === 'HEAD') {
       throw new Error('Cannot push: detached HEAD or branch unknown')
     }
-    return gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+    const result = await gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+    return {
+      ...result,
+      prUrl: result.ok ? buildPrUrl(ctx.gitUrl, branch) : undefined
+    }
   })
+
+  // Shell handlers
+  ipcMain.handle('shell:openExternal', (_, url: string) => shell.openExternal(url))
 
   // Settings handlers
   ipcMain.handle('settings:get-github-pat-status', () => getGitHubPatStatus())

@@ -23,3 +23,11 @@ export function sshUrlToHttps(sshUrl: string, pat: string): string {
   const path = match[2]
   return `https://${pat}@${host}/${path}`
 }
+
+export function buildPrUrl(sshUrl: string, branch: string): string {
+  const match = sshUrl.match(SSH_URL_RE)
+  if (!match) return ''
+  const host = match[1]
+  const repoPath = match[2].replace(/\.git$/, '')
+  return `https://${host}/${repoPath}/compare/${encodeURIComponent(branch)}?expand=1`
+}

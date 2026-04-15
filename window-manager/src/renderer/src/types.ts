@@ -40,7 +40,7 @@ export interface Api {
     windowId: number,
     payload: { subject: string; body?: string }
   ) => Promise<{ ok: boolean; code: number; stdout: string }>
-  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string }>
+  push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string; prUrl?: string }>
 
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>
@@ -59,6 +59,9 @@ export interface Api {
   offTerminalData: () => void
   onTerminalWaiting: (callback: (containerId: string) => void) => void
   offTerminalWaiting: () => void
+
+  // Shell
+  openExternal: (url: string) => Promise<void>
 }
 
 declare global {

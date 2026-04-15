@@ -7,15 +7,16 @@
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
   import CommitModal from './CommitModal.svelte'
-  import { pushToast } from '../lib/toasts'
+  import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
 
   interface Props {
     win: WindowRecord
     project: ProjectRecord
+    onWindowDeleted?: (id: number) => void
   }
 
-  let { win, project }: Props = $props()
+  let { win, project, onWindowDeleted = () => {} }: Props = $props()
 
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
@@ -24,6 +25,7 @@
   let commitOpen = $state(false)
   let commitBusy = $state(false)
   let pushBusy = $state(false)
+  let deleteBusy = $state(false)
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
@@ -55,15 +57,27 @@
     pushBusy = true
     try {
       const res = await window.api.push(win.id)
-      pushToast({
-        level: res.ok ? 'success' : 'error',
-        title: res.ok ? 'Pushed' : 'Push failed',
-        body: res.stdout || undefined
-      })
+      if (res.ok) {
+        pushSuccessModal(res.prUrl)
+      } else {
+        pushToast({ level: 'error', title: 'Push failed', body: res.stdout || undefined })
+      }
     } catch (err) {
       pushToast({ level: 'error', title: 'Push error', body: (err as Error).message })
     } finally {
       pushBusy = false
+    }
+  }
+
+  async function runDelete(): Promise<void> {
+    if (deleteBusy) return
+    deleteBusy = true
+    try {
+      await window.api.deleteWindow(win.id)
+      onWindowDeleted(win.id)
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Delete failed', body: (err as Error).message })
+      deleteBusy = false
     }
   }
 
@@ -139,8 +153,10 @@
     {project}
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
-    commitDisabled={commitBusy || pushBusy}
-    pushDisabled={commitBusy || pushBusy}
+    onDelete={runDelete}
+    commitDisabled={commitBusy || pushBusy || deleteBusy}
+    pushDisabled={commitBusy || pushBusy || deleteBusy}
+    deleteDisabled={deleteBusy}
   />
   {#if commitOpen}
     <CommitModal onSubmit={runCommit} onCancel={() => (commitOpen = false)} busy={commitBusy} />
