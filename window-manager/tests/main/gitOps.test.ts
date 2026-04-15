@@ -532,7 +532,8 @@ describe('writeFileInContainer', () => {
     })
 
     const execInstance = {
-      start: vi.fn().mockResolvedValue(mockStream)
+      start: vi.fn().mockResolvedValue(mockStream),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
     }
     const container = {
       id: 'c',
@@ -553,5 +554,27 @@ describe('writeFileInContainer', () => {
     expect(execInstance.start).toHaveBeenCalledWith({ hijack: true, stdin: true })
     expect(mockStream.write).toHaveBeenCalledWith(Buffer.from('content here', 'utf8'))
     expect(mockStream.end).toHaveBeenCalled()
+  })
+
+  it('throws when tee exits with non-zero code', async () => {
+    const execInstance = {
+      start: vi.fn().mockResolvedValue({
+        on(event: string, cb: (d?: Buffer) => void) {
+          if (event === 'finish') setImmediate(() => cb())
+          return this
+        },
+        write: vi.fn(),
+        end: vi.fn()
+      }),
+      inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+    }
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue(execInstance)
+    }
+    const { writeFileInContainer } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    await expect(writeFileInContainer(container, '/workspace/r/file.ts', 'content'))
+      .rejects.toThrow(/writeFileInContainer failed/)
   })
 })

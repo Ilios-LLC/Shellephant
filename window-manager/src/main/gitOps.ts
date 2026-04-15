@@ -61,6 +61,10 @@ export async function writeFileInContainer(
     stream.write(Buffer.from(content, 'utf8'))
     stream.end()
   })
+  const info = await execInstance.inspect()
+  if (info.ExitCode !== 0) {
+    throw new Error(`writeFileInContainer failed (exit ${info.ExitCode}): ${filePath}`)
+  }
 }
 
 export async function execInContainer(
