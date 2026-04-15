@@ -1,6 +1,6 @@
 import Swal from 'sweetalert2'
 
-export type ToastLevel = 'success' | 'error'
+export type ToastLevel = 'success' | 'error' | 'info'
 
 export interface ToastInput {
   level: ToastLevel

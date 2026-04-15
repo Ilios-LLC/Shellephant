@@ -42,4 +42,11 @@ describe('pushToast', () => {
     pushToast({ level: 'success', title: 'clean' })
     expect(fire.mock.calls[0][0].html).toBeUndefined()
   })
+
+  it('fires an info toast with the given title', () => {
+    pushToast({ level: 'info', title: 'Claude is waiting' })
+    expect(fire).toHaveBeenCalledWith(
+      expect.objectContaining({ icon: 'info', title: 'Claude is waiting' })
+    )
+  })
 })
