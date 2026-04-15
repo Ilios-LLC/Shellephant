@@ -35,8 +35,8 @@ export async function createWindow(
 ): Promise<WindowRecord> {
   const db = getDb()
   const project = db
-    .prepare('SELECT git_url FROM projects WHERE id = ? AND deleted_at IS NULL')
-    .get(projectId) as { git_url: string } | undefined
+    .prepare('SELECT git_url, ports FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .get(projectId) as { git_url: string; ports: string | null } | undefined
   if (!project) throw new Error('Project not found')
 
   const pat = getGitHubPat()
@@ -50,6 +50,14 @@ export async function createWindow(
   const repoName = extractRepoName(project.git_url)
   const clonePath = `/workspace/${repoName}`
 
+  const projectPorts: number[] = project.ports ? (JSON.parse(project.ports) as number[]) : []
+  const exposedPorts: Record<string, Record<string, never>> = {}
+  const portBindings: Record<string, { HostPort: string }[]> = {}
+  for (const p of projectPorts) {
+    exposedPorts[`${p}/tcp`] = {}
+    portBindings[`${p}/tcp`] = [{ HostPort: '' }]
+  }
+
   onProgress('Probing remote for branch…')
   const remoteHasSlug = await remoteBranchExists(project.git_url, slug, pat)
 
@@ -61,9 +69,29 @@ export async function createWindow(
       Tty: true,
       OpenStdin: true,
       StdinOnce: false,
-      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`]
+      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`],
+      ...(projectPorts.length > 0 && {
+        ExposedPorts: exposedPorts,
+        HostConfig: { PortBindings: portBindings }
+      })
     })
     await container.start()
+
+    let portsJson: string | null = null
+    if (projectPorts.length > 0) {
+      const containerInfo = await container.inspect()
+      const portMap: Record<string, string> = {}
+      const netPorts = (containerInfo.NetworkSettings?.Ports ?? {}) as Record<
+        string,
+        { HostPort: string }[] | null
+      >
+      for (const [key, bindings] of Object.entries(netPorts)) {
+        if (bindings && bindings.length > 0) {
+          portMap[key.replace('/tcp', '')] = bindings[0].HostPort
+        }
+      }
+      portsJson = JSON.stringify(portMap)
+    }
 
     onProgress('Preparing workspace…')
     const mkdir = await execInContainer(container, ['mkdir', '-p', clonePath])
@@ -77,8 +105,8 @@ export async function createWindow(
 
     onProgress('Finalizing…')
     const result = db
-      .prepare('INSERT INTO windows (name, project_id, container_id) VALUES (?, ?, ?)')
-      .run(name, projectId, container.id)
+      .prepare('INSERT INTO windows (name, project_id, container_id, ports) VALUES (?, ?, ?, ?)')
+      .run(name, projectId, container.id, portsJson)
 
     const id = result.lastInsertRowid as number
     statusMap.set(id, 'running')
@@ -88,6 +116,7 @@ export async function createWindow(
       name,
       project_id: projectId,
       container_id: container.id,
+      ports: portsJson ?? undefined,
       created_at: new Date().toISOString(),
       status: 'running' as WindowStatus
     }

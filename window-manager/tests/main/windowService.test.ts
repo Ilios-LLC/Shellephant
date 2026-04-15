@@ -64,10 +64,10 @@ import {
   __resetStatusMapForTests
 } from '../../src/main/windowService'
 
-function seedProject(gitUrl: string, name = 'test'): number {
+function seedProject(gitUrl: string, name = 'test', ports?: number[]): number {
   const result = getDb()
-    .prepare('INSERT INTO projects (name, git_url) VALUES (?, ?)')
-    .run(name, gitUrl)
+    .prepare('INSERT INTO projects (name, git_url, ports) VALUES (?, ?, ?)')
+    .run(name, gitUrl, ports ? JSON.stringify(ports) : null)
   return result.lastInsertRowid as number
 }
 
@@ -324,6 +324,72 @@ describe('windowService', () => {
         expect.stringMatching(/checking out/i),
         expect.stringMatching(/finaliz/i)
       ])
+    })
+
+    it('passes ExposedPorts and PortBindings when project has ports', async () => {
+      const projectId = seedProject('git@github.com:org/ports-repo.git', 'ports', [3000, 8080])
+      mockInspect.mockResolvedValueOnce({
+        State: { Status: 'running' },
+        NetworkSettings: {
+          Ports: {
+            '3000/tcp': [{ HostPort: '54321' }],
+            '8080/tcp': [{ HostPort: '54322' }]
+          }
+        }
+      })
+
+      await createWindow('port-window', projectId)
+
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ExposedPorts: { '3000/tcp': {}, '8080/tcp': {} },
+          HostConfig: {
+            PortBindings: {
+              '3000/tcp': [{ HostPort: '' }],
+              '8080/tcp': [{ HostPort: '' }]
+            }
+          }
+        })
+      )
+    })
+
+    it('stores the host port mapping on the window record', async () => {
+      const projectId = seedProject('git@github.com:org/ports-repo2.git', 'ports2', [3000])
+      mockInspect.mockResolvedValueOnce({
+        State: { Status: 'running' },
+        NetworkSettings: {
+          Ports: {
+            '3000/tcp': [{ HostPort: '54321' }]
+          }
+        }
+      })
+
+      const win = await createWindow('port-window2', projectId)
+
+      expect(win.ports).toBe(JSON.stringify({ '3000': '54321' }))
+      const row = getDb()
+        .prepare('SELECT ports FROM windows WHERE id = ?')
+        .get(win.id) as { ports: string | null }
+      expect(row.ports).toBe(JSON.stringify({ '3000': '54321' }))
+    })
+
+    it('does not set ExposedPorts when project has no ports', async () => {
+      const projectId = seedProject('git@github.com:org/no-ports-repo.git')
+      await createWindow('no-ports-window', projectId)
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.not.objectContaining({ ExposedPorts: expect.anything() })
+      )
+    })
+
+    it('listWindows includes ports from the database', async () => {
+      const projectId = seedProject('git@github.com:org/list-ports-repo.git', 'lp', [4000])
+      mockInspect.mockResolvedValueOnce({
+        State: { Status: 'running' },
+        NetworkSettings: { Ports: { '4000/tcp': [{ HostPort: '55000' }] } }
+      })
+      await createWindow('list-ports-win', projectId)
+      const windows = listWindows()
+      expect(windows[0].ports).toBe(JSON.stringify({ '4000': '55000' }))
     })
   })
 
