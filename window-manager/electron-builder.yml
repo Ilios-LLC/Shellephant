@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: window-manager
+appId: com.shellephant.app
+productName: Shellephant
 directories:
   buildResources: build
 files:
@@ -13,7 +13,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: window-manager
+  executableName: shellephant
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
