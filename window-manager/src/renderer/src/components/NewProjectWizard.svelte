@@ -20,18 +20,23 @@
     loading = true
     error = ''
     try {
-      const parsedPorts = ports
+      const rawTokens = ports
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s.length > 0)
-        .map((s) => parseInt(s, 10))
-        .filter((n) => !isNaN(n))
 
-      const record = await window.api.createProject(
-        name.trim(),
-        trimmedUrl,
-        parsedPorts.length > 0 ? parsedPorts : undefined
-      )
+      let parsedPorts: number[] | undefined
+      if (rawTokens.length > 0) {
+        const nums = rawTokens.map((s) => parseInt(s, 10))
+        if (nums.some((n) => isNaN(n))) {
+          error = 'Ports must be comma-separated numbers (e.g. 3000, 8080)'
+          loading = false
+          return
+        }
+        parsedPorts = nums
+      }
+
+      const record = await window.api.createProject(name.trim(), trimmedUrl, parsedPorts)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
