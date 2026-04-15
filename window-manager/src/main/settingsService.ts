@@ -36,7 +36,16 @@ function getSecret(key: string): string | null {
   if (!safeStorage.isEncryptionAvailable()) {
     throw new Error('Stored secret cannot be decrypted: OS secure storage unavailable')
   }
-  return safeStorage.decryptString(cipher)
+  // Ciphertext is bound to the OS keychain entry for this app. If the app is
+  // renamed (or the keychain entry is removed/rotated), decryption fails
+  // permanently. Drop the unreadable row so the user is prompted to re-enter
+  // the secret instead of seeing repeated decrypt errors.
+  try {
+    return safeStorage.decryptString(cipher)
+  } catch {
+    deleteRow(key)
+    return null
+  }
 }
 
 function setSecret(key: string, value: string): void {

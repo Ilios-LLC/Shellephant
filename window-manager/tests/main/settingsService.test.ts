@@ -79,6 +79,19 @@ describe('settingsService', () => {
       expect(() => getGitHubPat()).toThrow(/secure storage unavailable/i)
     })
 
+    it('returns null and drops the row when decryption fails (e.g. after rename)', () => {
+      setGitHubPat('ghp_abcdefgh')
+      mockDecrypt.mockImplementationOnce(() => {
+        throw new Error('Error while decrypting the ciphertext provided to safeStorage.decryptString.')
+      })
+      expect(getGitHubPat()).toBeNull()
+      expect(getGitHubPatStatus()).toEqual({ configured: false, hint: null })
+      const row = getDb()
+        .prepare('SELECT value FROM settings WHERE key = ?')
+        .get('github_pat')
+      expect(row).toBeUndefined()
+    })
+
     it('setGitHubPat replaces an existing PAT', () => {
       setGitHubPat('ghp_aaaaaaaaaa')
       setGitHubPat('ghp_bbbbbbbbbb')
