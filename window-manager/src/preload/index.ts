@@ -31,8 +31,8 @@ contextBridge.exposeInMainWorld('api', {
   clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
 
   // Terminal API
-  openTerminal: (containerId: string, cols: number, rows: number) =>
-    ipcRenderer.invoke('terminal:open', containerId, cols, rows),
+  openTerminal: (containerId: string, cols: number, rows: number, displayName: string) =>
+    ipcRenderer.invoke('terminal:open', containerId, cols, rows, displayName),
   sendTerminalInput: (containerId: string, data: string) =>
     ipcRenderer.send('terminal:input', containerId, data),
   resizeTerminal: (containerId: string, cols: number, rows: number) =>
@@ -40,5 +40,8 @@ contextBridge.exposeInMainWorld('api', {
   closeTerminal: (containerId: string) => ipcRenderer.send('terminal:close', containerId),
   onTerminalData: (callback: (containerId: string, data: string) => void) =>
     ipcRenderer.on('terminal:data', (_, containerId, data) => callback(containerId, data)),
-  offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data')
+  offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data'),
+  onTerminalWaiting: (callback: (containerId: string) => void) =>
+    ipcRenderer.on('terminal:waiting', (_, containerId) => callback(containerId)),
+  offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting')
 })

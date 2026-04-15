@@ -169,8 +169,15 @@ describe('registerIpcHandlers', () => {
   it('registers terminal:open handler that calls openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
-    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40)
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40)
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window')
+  })
+
+  it('terminal:open passes displayName as 5th arg to openTerminal', async () => {
+    vi.mocked(openTerminal).mockResolvedValue(undefined)
+    vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    await getHandler('terminal:open')({ sender: {} }, 'ctr-1', 80, 24, 'my-display-name')
+    expect(openTerminal).toHaveBeenCalledWith('ctr-1', mockWin, 80, 24, 'my-display-name')
   })
 
   it('registers terminal:input listener that calls writeInput', () => {
