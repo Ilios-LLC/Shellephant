@@ -9,21 +9,19 @@ export interface ProjectGroupRecord {
 export function createGroup(name: string): ProjectGroupRecord {
   const trimmed = name.trim()
   const db = getDb()
-  const result = db
+  const { lastInsertRowid } = db
     .prepare('INSERT INTO project_groups (name) VALUES (?)')
     .run(trimmed)
 
-  return {
-    id: result.lastInsertRowid as number,
-    name: trimmed,
-    created_at: new Date().toISOString()
-  }
+  return db
+    .prepare('SELECT id, name, created_at FROM project_groups WHERE id = ?')
+    .get(lastInsertRowid) as ProjectGroupRecord
 }
 
 export function listGroups(): ProjectGroupRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, created_at FROM project_groups ORDER BY created_at ASC'
+      'SELECT id, name, created_at FROM project_groups ORDER BY created_at ASC, id ASC'
     )
     .all() as ProjectGroupRecord[]
 }
