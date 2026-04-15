@@ -24,11 +24,16 @@
   let timer: ReturnType<typeof setInterval> | undefined
   let alive = true
 
-  let parsedPorts: [string, string][] = $derived(
-    win.ports
-      ? (Object.entries(JSON.parse(win.ports)) as [string, string][])
-      : []
-  )
+  function parsePortsJson(raw: string | undefined): [string, string][] {
+    if (!raw) return []
+    try {
+      return Object.entries(JSON.parse(raw)) as [string, string][]
+    } catch {
+      return []
+    }
+  }
+
+  let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
 
   async function refreshBranch(): Promise<void> {
     let next: string | null = null

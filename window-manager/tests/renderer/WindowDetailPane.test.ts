@@ -149,4 +149,11 @@ describe('WindowDetailPane', () => {
     expect(screen.getByText(':3000→:54321')).toBeInTheDocument()
     expect(screen.getByText(':8080→:54322')).toBeInTheDocument()
   })
+
+  it('renders nothing for malformed ports JSON', () => {
+    getCurrentBranch.mockResolvedValue('x')
+    const badWin = { ...win, ports: 'not-valid-json' }
+    render(WindowDetailPane, { props: { win: badWin, project } })
+    expect(screen.queryByText(/→/)).not.toBeInTheDocument()
+  })
 })
