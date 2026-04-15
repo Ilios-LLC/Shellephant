@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // Git API
   getCurrentBranch: (windowId: number) => ipcRenderer.invoke('git:current-branch', windowId),
+  getGitStatus: (windowId: number) => ipcRenderer.invoke('git:status', windowId),
   commit: (windowId: number, payload: { subject: string; body?: string }) =>
     ipcRenderer.invoke('git:commit', windowId, payload),
   push: (windowId: number) => ipcRenderer.invoke('git:push', windowId),
