@@ -11,6 +11,28 @@ export interface GitResult {
 
 type Container = ReturnType<Dockerode['getContainer']>
 
+const BLOCKED_DIRS = new Set([
+  'node_modules', '.venv', 'venv', '__pycache__', '.git',
+  'dist', 'build', '.next', '.nuxt', 'target', 'coverage', 'out'
+])
+
+export async function listContainerDir(
+  container: Container,
+  dirPath: string
+): Promise<{ name: string; isDir: boolean }[]> {
+  const result = await execInContainer(container, ['ls', '-1p', dirPath])
+  if (!result.ok) return []
+  return result.stdout
+    .split('\n')
+    .filter(Boolean)
+    .map((entry) => {
+      const isDir = entry.endsWith('/')
+      const name = isDir ? entry.slice(0, -1) : entry
+      return { name, isDir }
+    })
+    .filter(({ name, isDir }) => !(isDir && BLOCKED_DIRS.has(name)))
+}
+
 export async function execInContainer(
   container: Container,
   cmd: string[],

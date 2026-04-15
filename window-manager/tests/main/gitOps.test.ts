@@ -392,3 +392,75 @@ describe('push', () => {
     expect(res.stdout).not.toContain('PAT')
   })
 })
+
+describe('listContainerDir', () => {
+  it('parses ls -1p output into name/isDir pairs', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data')
+              setImmediate(() => cb(Buffer.from('src/\nREADME.md\npackage.json\n')))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    expect(entries).toEqual([
+      { name: 'src', isDir: true },
+      { name: 'README.md', isDir: false },
+      { name: 'package.json', isDir: false }
+    ])
+  })
+
+  it('filters out blocked directories', async () => {
+    const blocked = 'node_modules/\n.venv/\nvenv/\n__pycache__/\n.git/\ndist/\nbuild/\n.next/\n.nuxt/\ntarget/\ncoverage/\nout/\n'
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'data') setImmediate(() => cb(Buffer.from(`src/\n${blocked}index.ts\n`)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 0 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    const names = entries.map((e: { name: string }) => e.name)
+    expect(names).toContain('src')
+    expect(names).toContain('index.ts')
+    expect(names).not.toContain('node_modules')
+    expect(names).not.toContain('.venv')
+    expect(names).not.toContain('dist')
+  })
+
+  it('returns empty array when exec fails', async () => {
+    const container = {
+      id: 'c',
+      exec: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (d?: Buffer) => void) {
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: 1 })
+      })
+    }
+    const { listContainerDir } = await import('../../src/main/gitOps')
+    // @ts-expect-error mock
+    const entries = await listContainerDir(container, '/workspace/r')
+    expect(entries).toEqual([])
+  })
+})
