@@ -143,6 +143,27 @@ export function listWindows(projectId?: number): WindowRecord[] {
   }))
 }
 
+export interface WaitingWindowInfo {
+  containerId: string
+  windowId: number
+  windowName: string
+  projectId: number
+  projectName: string
+}
+
+export function getWaitingInfoByContainerId(containerId: string): WaitingWindowInfo | null {
+  const row = getDb()
+    .prepare(
+      `SELECT w.id AS windowId, w.name AS windowName, p.id AS projectId, p.name AS projectName
+       FROM windows w JOIN projects p ON p.id = w.project_id
+       WHERE w.container_id = ? AND w.deleted_at IS NULL
+       LIMIT 1`
+    )
+    .get(containerId) as Omit<WaitingWindowInfo, 'containerId'> | undefined
+  if (!row) return null
+  return { containerId, ...row }
+}
+
 export async function deleteWindow(id: number): Promise<void> {
   const db = getDb()
   const row = db

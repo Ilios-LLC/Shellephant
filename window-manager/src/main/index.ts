@@ -3,6 +3,7 @@ import path from 'path'
 import { initDb } from './db'
 import { registerIpcHandlers } from './ipcHandlers'
 import { reconcileWindows } from './windowService'
+import { startWaitingPoller } from './waitingPoller'
 
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
@@ -27,6 +28,7 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
+  startWaitingPoller()
 
   try {
     await reconcileWindows()

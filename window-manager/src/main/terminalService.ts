@@ -1,14 +1,16 @@
 import * as pty from 'node-pty'
 import type { IPty } from 'node-pty'
-import { Notification, type BrowserWindow } from 'electron'
+import type { BrowserWindow } from 'electron'
 import { getClaudeToken } from './settingsService'
+import { getDocker } from './docker'
+import { execInContainer } from './gitOps'
 
-interface TerminalSession {
+export interface TerminalSession {
   pty: IPty
   resizeTimer: ReturnType<typeof setTimeout> | null
   pendingResize: { cols: number; rows: number } | null
   displayName: string
-  waitingDebounceTimer: ReturnType<typeof setTimeout> | null
+  win: BrowserWindow
 }
 
 // Collapse bursts of resize events into a single pty.resize call. During
@@ -21,18 +23,11 @@ const RESIZE_DEBOUNCE_MS = 80
 // the persistent-session prompt the user expects to see on re-open.
 const REFRESH_KICK_MS = 120
 
-// OSC sequence emitted by the Claude Code Stop hook inside the container.
-// Stripped before forwarding to xterm; invisible to the user.
-// Assumption: node-pty delivers this 22-byte sequence in a single chunk.
-// If it ever split across two chunks the signal would be missed (notification
-// silently dropped), which is acceptable — no correctness damage.
-const WAITING_SIGNAL = '\x1b]9999;claude-waiting\x07'
-// First signal within a turn fires; subsequent signals within this window are
-// dropped. This means a second rapid Stop (e.g. two agent turns < 2s apart)
-// will not produce a second notification. Acceptable for the expected use case.
-const WAITING_DEBOUNCE_MS = 2000
-
 const sessions = new Map<string, TerminalSession>()
+
+export function getSession(containerId: string): TerminalSession | undefined {
+  return sessions.get(containerId)
+}
 
 export function openTerminal(
   containerId: string,
@@ -79,35 +74,20 @@ export function openTerminal(
     resizeTimer: null,
     pendingResize: null,
     displayName,
-    waitingDebounceTimer: null
+    win
   }
   sessions.set(containerId, session)
 
+  // Fire-and-forget: clear any stale Stop-hook marker left from a
+  // previous session so the first poll tick doesn't spuriously notify.
+  void clearStaleMarker(containerId)
+
   child.onData((data: string) => {
     if (win.isDestroyed()) return
-
-    if (data.includes(WAITING_SIGNAL)) {
-      const stripped = data.replaceAll(WAITING_SIGNAL, '')
-      if (stripped) {
-        win.webContents.send('terminal:data', containerId, stripped)
-      }
-      if (!session.waitingDebounceTimer) {
-        win.webContents.send('terminal:waiting', containerId)
-        new Notification({
-          title: 'Claude is waiting',
-          body: session.displayName || containerId.slice(0, 12)
-        }).show()
-        session.waitingDebounceTimer = setTimeout(() => {
-          session.waitingDebounceTimer = null
-        }, WAITING_DEBOUNCE_MS)
-      }
-    } else {
-      win.webContents.send('terminal:data', containerId, data)
-    }
+    win.webContents.send('terminal:data', containerId, data)
   })
 
   child.onExit(() => {
-    if (session.waitingDebounceTimer) clearTimeout(session.waitingDebounceTimer)
     sessions.delete(containerId)
     if (!win.isDestroyed()) {
       win.webContents.send('terminal:data', containerId, '\r\n[detached]\r\n')
@@ -156,7 +136,6 @@ export function closeTerminal(containerId: string): void {
   const session = sessions.get(containerId)
   if (!session) return
   if (session.resizeTimer) clearTimeout(session.resizeTimer)
-  if (session.waitingDebounceTimer) clearTimeout(session.waitingDebounceTimer)
   try {
     session.pty.kill()
   } catch {
@@ -167,4 +146,13 @@ export function closeTerminal(containerId: string): void {
 
 export function closeTerminalSessionFor(containerId: string): void {
   closeTerminal(containerId)
+}
+
+async function clearStaleMarker(containerId: string): Promise<void> {
+  try {
+    const container = getDocker().getContainer(containerId)
+    await execInContainer(container, ['rm', '-f', '/tmp/claude-waiting'])
+  } catch {
+    // Docker unreachable or container gone; harmless.
+  }
 }

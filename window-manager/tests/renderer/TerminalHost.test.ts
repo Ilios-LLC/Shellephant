@@ -158,14 +158,13 @@ describe('TerminalHost', () => {
     expect(mockWrite).not.toHaveBeenCalled()
   })
 
-  it('calls api.offTerminalData, api.offTerminalWaiting, and api.closeTerminal on unmount', async () => {
+  it('calls api.offTerminalData and api.closeTerminal on unmount', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => {
       expect(mockApi.openTerminal).toHaveBeenCalled()
     })
     unmount()
     expect(mockApi.offTerminalData).toHaveBeenCalled()
-    expect(mockApi.offTerminalWaiting).toHaveBeenCalled()
     expect(mockApi.closeTerminal).toHaveBeenCalledWith('container123abc')
     expect(mockDispose).toHaveBeenCalled()
   })
@@ -191,38 +190,6 @@ describe('TerminalHost', () => {
     }) => void
     resizeHandler({ cols: 120, rows: 40 })
     expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 120, 40)
-  })
-
-  it('on terminal:waiting for matching container, adds to waitingWindows and shows toast', async () => {
-    render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.onTerminalWaiting).toHaveBeenCalled())
-
-    const waitingCb = mockApi.onTerminalWaiting.mock.calls[0][0] as (c: string) => void
-    waitingCb('container123abc')
-
-    expect(mockWaitingAdd).toHaveBeenCalledWith({
-      containerId: 'container123abc',
-      windowId: 1,
-      windowName: 'host-test',
-      projectId: 7,
-      projectName: 'host-project'
-    })
-    expect(mockPushToast).toHaveBeenCalledWith({
-      level: 'info',
-      title: 'Claude is waiting',
-      body: 'host-test'
-    })
-  })
-
-  it('ignores terminal:waiting for a different container', async () => {
-    render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.onTerminalWaiting).toHaveBeenCalled())
-
-    const waitingCb = mockApi.onTerminalWaiting.mock.calls[0][0] as (c: string) => void
-    waitingCb('different-container')
-
-    expect(mockWaitingAdd).not.toHaveBeenCalled()
-    expect(mockPushToast).not.toHaveBeenCalled()
   })
 
   it('removes from waitingWindows when user types', async () => {

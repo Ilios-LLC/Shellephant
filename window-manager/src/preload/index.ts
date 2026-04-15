@@ -41,7 +41,19 @@ contextBridge.exposeInMainWorld('api', {
   onTerminalData: (callback: (containerId: string, data: string) => void) =>
     ipcRenderer.on('terminal:data', (_, containerId, data) => callback(containerId, data)),
   offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data'),
-  onTerminalWaiting: (callback: (containerId: string) => void) =>
-    ipcRenderer.on('terminal:waiting', (_, containerId) => callback(containerId)),
-  offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting')
+  onTerminalWaiting: (
+    callback: (info: {
+      containerId: string
+      windowId: number
+      windowName: string
+      projectId: number
+      projectName: string
+    }) => void
+  ) => ipcRenderer.on('terminal:waiting', (_, info) => callback(info)),
+  offTerminalWaiting: () => ipcRenderer.removeAllListeners('terminal:waiting'),
+
+  // Focus API — tells main which container the user is currently viewing,
+  // so OS notifications are suppressed for the window already on screen.
+  setActiveContainer: (containerId: string | null) =>
+    ipcRenderer.send('focus:active-container', containerId)
 })

@@ -57,8 +57,19 @@ export interface Api {
   closeTerminal: (containerId: string) => void
   onTerminalData: (callback: (containerId: string, data: string) => void) => void
   offTerminalData: () => void
-  onTerminalWaiting: (callback: (containerId: string) => void) => void
+  onTerminalWaiting: (
+    callback: (info: {
+      containerId: string
+      windowId: number
+      windowName: string
+      projectId: number
+      projectName: string
+    }) => void
+  ) => void
   offTerminalWaiting: () => void
+
+  // Focus
+  setActiveContainer: (containerId: string | null) => void
 }
 
 declare global {

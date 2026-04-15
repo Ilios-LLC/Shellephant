@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject } from './projectService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
+import { setActiveContainer } from './focusState'
 import {
   getGitHubPat,
   getGitHubPatStatus,
@@ -123,4 +124,9 @@ export function registerIpcHandlers(): void {
     resizeTerminal(containerId, cols, rows)
   )
   ipcMain.on('terminal:close', (_, containerId: string) => closeTerminal(containerId))
+
+  // Focus handlers
+  ipcMain.on('focus:active-container', (_, containerId: string | null) =>
+    setActiveContainer(containerId)
+  )
 }

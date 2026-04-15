@@ -7,7 +7,6 @@
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
   import CommitModal from './CommitModal.svelte'
-  import { pushToast } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
 
   interface Props {
@@ -99,19 +98,6 @@
       }
     })
 
-    window.api.onTerminalWaiting((containerId: string) => {
-      if (containerId === win.container_id) {
-        waitingWindows.add({
-          containerId: win.container_id,
-          windowId: win.id,
-          windowName: win.name,
-          projectId: project.id,
-          projectName: project.name
-        })
-        pushToast({ level: 'info', title: 'Claude is waiting', body: win.name })
-      }
-    })
-
     term.onData((data: string) => {
       window.api.sendTerminalInput(win.container_id, data)
       waitingWindows.remove(win.container_id)
@@ -125,7 +111,6 @@
   onDestroy(() => {
     resizeObserver?.disconnect()
     window.api.offTerminalData()
-    window.api.offTerminalWaiting()
     window.api.closeTerminal(win.container_id)
     waitingWindows.remove(win.container_id)
     term?.dispose()

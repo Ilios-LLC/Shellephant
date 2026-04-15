@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, TokenStatus, WindowRecord } from './types'
-  import type { WaitingEntry } from './lib/waitingWindows'
+  import { waitingWindows, type WaitingEntry } from './lib/waitingWindows'
+  import { pushToast } from './lib/toasts'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane, { type MainPaneView } from './components/MainPane.svelte'
   import type { SettingsRequirement } from './components/SettingsView.svelte'
@@ -25,6 +26,17 @@
       selectedProjectId = projects[0].id
       windows = await window.api.listWindows(projects[0].id)
     }
+    // Global waiting listener: main has already gated this on the user
+    // NOT currently watching the window, so anything that arrives here
+    // should mark the sidebar and show a toast.
+    window.api.onTerminalWaiting((info) => {
+      waitingWindows.add(info)
+      pushToast({ level: 'info', title: 'Claude is waiting', body: info.windowName })
+    })
+  })
+
+  onDestroy(() => {
+    window.api.offTerminalWaiting()
   })
 
   function handleProjectSelect(project: ProjectRecord): void {
@@ -138,6 +150,12 @@
 
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
   let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
+
+  // Keep main in sync with the container the user is currently viewing, so
+  // the waiting-notification logic can suppress OS alerts for the focused window.
+  $effect(() => {
+    window.api.setActiveContainer(selectedWindow?.container_id ?? null)
+  })
 </script>
 
 <div class="app">
