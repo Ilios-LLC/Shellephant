@@ -26,6 +26,15 @@
             "command": "touch /tmp/claude-waiting 2>/dev/null; exit 0"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /usr/local/bin/claude-summarize.sh",
+            "async": true
+          }
+        ]
       }
     ]
   }
