@@ -93,4 +93,27 @@ describe('WindowDetailPane', () => {
     expect(screen.getByRole('button', { name: /commit/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /push/i })).toBeDisabled()
   })
+
+  it('renders Terminal, Editor, and Both toggle buttons', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /terminal/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /editor/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /both/i })).toBeInTheDocument()
+  })
+
+  it('marks the active viewMode button with aria-pressed', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    render(WindowDetailPane, { props: { win, project, viewMode: 'editor' } })
+    expect(screen.getByRole('button', { name: /editor/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /terminal/i })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('calls onViewChange with the clicked mode', async () => {
+    getCurrentBranch.mockResolvedValue('main')
+    const onViewChange = vi.fn()
+    render(WindowDetailPane, { props: { win, project, viewMode: 'terminal', onViewChange } })
+    await fireEvent.click(screen.getByRole('button', { name: /editor/i }))
+    expect(onViewChange).toHaveBeenCalledWith('editor')
+  })
 })

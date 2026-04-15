@@ -2,9 +2,13 @@
   import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, WindowRecord } from '../types'
 
+  type ViewMode = 'terminal' | 'editor' | 'both'
+
   interface Props {
     win: WindowRecord
     project: ProjectRecord
+    viewMode?: ViewMode
+    onViewChange?: (mode: ViewMode) => void
     onCommit?: () => void
     onPush?: () => void
     commitDisabled?: boolean
@@ -14,6 +18,8 @@
   let {
     win,
     project,
+    viewMode = 'terminal',
+    onViewChange = () => {},
     onCommit = () => {},
     onPush = () => {},
     commitDisabled = true,
@@ -45,33 +51,83 @@
 </script>
 
 <footer class="detail-pane">
-  <div class="info">
-    <span class="name">{win.name}</span>
-    <span class="sep">·</span>
-    <span class="project">{project.name}</span>
-    <span class="sep">·</span>
-    <span class="branch" title="current branch">{branch}</span>
-    <span class="sep">·</span>
-    <span class="status {win.status}">{win.status}</span>
+  <div class="toggle-row">
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={viewMode === 'terminal'}
+      aria-pressed={viewMode === 'terminal'}
+      onclick={() => onViewChange('terminal')}
+    >Terminal</button>
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={viewMode === 'editor'}
+      aria-pressed={viewMode === 'editor'}
+      onclick={() => onViewChange('editor')}
+    >Editor</button>
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={viewMode === 'both'}
+      aria-pressed={viewMode === 'both'}
+      onclick={() => onViewChange('both')}
+    >Both</button>
   </div>
-  <div class="actions">
-    <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
-    <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+  <div class="info-row">
+    <div class="info">
+      <span class="name">{win.name}</span>
+      <span class="sep">·</span>
+      <span class="project">{project.name}</span>
+      <span class="sep">·</span>
+      <span class="branch" title="current branch">{branch}</span>
+      <span class="sep">·</span>
+      <span class="status {win.status}">{win.status}</span>
+    </div>
+    <div class="actions">
+      <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
+      <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+    </div>
   </div>
 </footer>
 
 <style>
   .detail-pane {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 0.5rem 0.9rem;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 0.45rem 0.9rem 0.5rem;
     background: var(--bg-1);
     border-top: 1px solid var(--border);
     font-family: var(--font-ui);
     font-size: 0.82rem;
     color: var(--fg-1);
+  }
+  .toggle-row {
+    display: flex;
+    gap: 0.3rem;
+  }
+  .toggle-btn {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    padding: 0.18rem 0.55rem;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--fg-2);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.1s, color 0.1s, border-color 0.1s;
+  }
+  .toggle-btn.active {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .info-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
   }
   .info {
     display: flex;
@@ -101,7 +157,7 @@
     display: flex;
     gap: 0.4rem;
   }
-  button {
+  button:not(.toggle-btn) {
     font-family: var(--font-ui);
     font-size: 0.82rem;
     padding: 0.25rem 0.7rem;
