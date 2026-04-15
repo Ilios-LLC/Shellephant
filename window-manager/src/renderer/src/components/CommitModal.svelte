@@ -3,11 +3,13 @@
     onSubmit: (v: { subject: string; body: string }) => void
     onCancel: () => void
     busy: boolean
+    initialSubject?: string
+    initialBody?: string
   }
-  let { onSubmit, onCancel, busy }: Props = $props()
+  let { onSubmit, onCancel, busy, initialSubject = '', initialBody = '' }: Props = $props()
 
-  let subject = $state('')
-  let body = $state('')
+  let subject = $state(initialSubject)
+  let body = $state(initialBody)
   let canSubmit = $derived(subject.trim().length > 0 && !busy)
 
   function handleSubmit(e: Event): void {
