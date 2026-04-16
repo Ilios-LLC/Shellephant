@@ -98,7 +98,7 @@ RUN mkdir -p /home/node/.ssh && \
   chmod 600 /home/node/.ssh/config
 
 # Install Claude
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Install Playwright MCP server and download Chromium for headless browsing
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
