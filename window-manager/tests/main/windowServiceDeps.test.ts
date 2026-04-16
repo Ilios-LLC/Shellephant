@@ -48,7 +48,8 @@ function makeNetwork(id = 'net-id') {
   return {
     id,
     remove: vi.fn(async () => {}),
-    connect: vi.fn(async () => {})
+    connect: vi.fn(async () => {}),
+    disconnect: vi.fn(async () => {})
   }
 }
 
@@ -177,7 +178,7 @@ describe('deleteWindow with deps', () => {
 
     const depCtr = { stop: vi.fn(async () => {}), remove: vi.fn(async () => {}) }
     const mainCtr = { stop: vi.fn(async () => {}) }
-    const net = { remove: vi.fn(async () => {}) }
+    const net = { remove: vi.fn(async () => {}), disconnect: vi.fn(async () => {}) }
     vi.mocked(getDocker).mockReturnValue({
       getContainer: vi.fn((id: string) => (id === 'dep-ctr' ? depCtr : mainCtr)),
       getNetwork: vi.fn(() => net)
@@ -190,6 +191,7 @@ describe('deleteWindow with deps', () => {
 
     expect(depCtr.stop).toHaveBeenCalled()
     expect(depCtr.remove).toHaveBeenCalled()
+    expect(net.disconnect).toHaveBeenCalledWith({ Container: 'main-ctr', Force: true })
     expect(net.remove).toHaveBeenCalled()
     expect(mainCtr.stop).toHaveBeenCalled()
   })
