@@ -66,10 +66,10 @@ import {
 
 interface PortMapping { container: number; host?: number }
 
-function seedProject(gitUrl: string, name = 'test', ports?: PortMapping[]): number {
+function seedProject(gitUrl: string, name = 'test', ports?: PortMapping[], envVars?: Record<string, string>): number {
   const result = getDb()
-    .prepare('INSERT INTO projects (name, git_url, ports) VALUES (?, ?, ?)')
-    .run(name, gitUrl, ports ? JSON.stringify(ports) : null)
+    .prepare('INSERT INTO projects (name, git_url, ports, env_vars) VALUES (?, ?, ?, ?)')
+    .run(name, gitUrl, ports ? JSON.stringify(ports) : null, envVars ? JSON.stringify(envVars) : null)
   return result.lastInsertRowid as number
 }
 
@@ -411,6 +411,35 @@ describe('windowService', () => {
       )
     })
 
+    it('injects project env vars into container Env array', async () => {
+      const projectId = seedProject(
+        'git@github.com:org/env-repo.git',
+        'env-test',
+        undefined,
+        { MY_VAR: 'hello', ANOTHER: 'world' }
+      )
+      await createWindow('test', projectId)
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: expect.arrayContaining([
+            'CLAUDE_CODE_OAUTH_TOKEN=claude-oauth-token',
+            'MY_VAR=hello',
+            'ANOTHER=world'
+          ])
+        })
+      )
+    })
+
+    it('creates container with only CLAUDE_CODE_OAUTH_TOKEN when no env vars set', async () => {
+      const projectId = seedProject('git@github.com:org/no-env.git')
+      await createWindow('test', projectId)
+      expect(mockCreateContainer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          Env: ['CLAUDE_CODE_OAUTH_TOKEN=claude-oauth-token']
+        })
+      )
+    })
+
     it('listWindows includes ports from the database', async () => {
       const projectId = seedProject('git@github.com:org/list-ports-repo.git', 'lp', [{ container: 4000 }])
       mockInspect.mockResolvedValueOnce({
@@ -450,6 +479,12 @@ describe('windowService', () => {
         .prepare('SELECT ports FROM windows WHERE id = ?')
         .get(win.id) as { ports: string | null }
       expect(row.ports).toBeNull()
+    })
+
+    it('throws a descriptive error when env_vars JSON is malformed', async () => {
+      const projectId = seedProject('git@github.com:org/bad-env.git')
+      getDb().prepare('UPDATE projects SET env_vars = ? WHERE id = ?').run('not-json', projectId)
+      await expect(createWindow('test', projectId)).rejects.toThrow('malformed env_vars JSON')
     })
   })
 

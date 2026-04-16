@@ -36,8 +36,8 @@ export async function createWindow(
 ): Promise<WindowRecord> {
   const db = getDb()
   const project = db
-    .prepare('SELECT git_url, ports FROM projects WHERE id = ? AND deleted_at IS NULL')
-    .get(projectId) as { git_url: string; ports: string | null } | undefined
+    .prepare('SELECT git_url, ports, env_vars FROM projects WHERE id = ? AND deleted_at IS NULL')
+    .get(projectId) as { git_url: string; ports: string | null; env_vars: string | null } | undefined
   if (!project) throw new Error('Project not found')
 
   const pat = getGitHubPat()
@@ -59,6 +59,17 @@ export async function createWindow(
     portBindings[`${pm.container}/tcp`] = [{ HostPort: pm.host !== undefined ? String(pm.host) : '' }]
   }
 
+  let projectEnvVars: string[] = []
+  if (project.env_vars) {
+    try {
+      projectEnvVars = Object.entries(JSON.parse(project.env_vars) as Record<string, string>).map(
+        ([k, v]) => `${k}=${v}`
+      )
+    } catch {
+      throw new Error(`Project ${projectId} has malformed env_vars JSON`)
+    }
+  }
+
   onProgress('Probing remote for branch…')
   const remoteHasSlug = await remoteBranchExists(project.git_url, slug, pat)
 
@@ -70,7 +81,7 @@ export async function createWindow(
       Tty: true,
       OpenStdin: true,
       StdinOnce: false,
-      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`],
+      Env: [`CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`, ...projectEnvVars],
       ...(projectPorts.length > 0 && {
         ExposedPorts: exposedPorts,
         HostConfig: { PortBindings: portBindings }
