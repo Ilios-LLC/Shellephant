@@ -377,3 +377,20 @@ describe('db migrations', () => {
     fs.rmSync(tmpPath, { force: true })
   })
 })
+
+describe('db migrations — docker dependencies', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('tag column defaults to latest', () => {
+    getDb().prepare("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:o/r.git')").run()
+    getDb().prepare("INSERT INTO project_dependencies (project_id, image) VALUES (1, 'postgres')").run()
+    const row = getDb().prepare('SELECT tag FROM project_dependencies WHERE id = 1').get() as { tag: string }
+    expect(row.tag).toBe('latest')
+  })
+})
