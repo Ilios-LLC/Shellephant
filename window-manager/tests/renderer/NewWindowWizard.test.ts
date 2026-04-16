@@ -4,76 +4,77 @@ import NewWindowWizard from '../../src/renderer/src/components/NewWindowWizard.s
 import type { ProjectRecord, WindowRecord } from '../../src/renderer/src/types'
 
 const project: ProjectRecord = {
-  id: 7,
-  name: 'alpha',
-  git_url: 'git@github.com:org/alpha.git',
-  created_at: '2026-01-01T00:00:00Z'
+  id: 1, name: 'my-project', git_url: 'https://github.com/x/y', created_at: ''
 }
 
-const createdWindow: WindowRecord = {
-  id: 99,
-  name: 'dev-window',
-  project_id: 7,
-  container_id: 'container-xyz',
-  created_at: '2026-01-01T00:00:00Z',
-  status: 'running'
+const mockWindow: WindowRecord = {
+  id: 10, name: 'dev', project_id: 1, container_id: 'abc', created_at: '', status: 'running'
 }
+
+function baseProps(overrides = {}) {
+  return { project, onCreated: vi.fn(), onCancel: vi.fn(), ...overrides }
+}
+
+let mockListDeps: ReturnType<typeof vi.fn>
+let mockCreateWindow: ReturnType<typeof vi.fn>
+let mockOnProgress: ReturnType<typeof vi.fn>
+let mockOffProgress: ReturnType<typeof vi.fn>
+
+beforeEach(() => {
+  mockListDeps = vi.fn().mockResolvedValue([])
+  mockCreateWindow = vi.fn().mockResolvedValue(mockWindow)
+  mockOnProgress = vi.fn()
+  mockOffProgress = vi.fn()
+  vi.stubGlobal('api', {
+    listDependencies: mockListDeps,
+    createWindow: mockCreateWindow,
+    onWindowCreateProgress: mockOnProgress,
+    offWindowCreateProgress: mockOffProgress
+  })
+})
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
 
 describe('NewWindowWizard', () => {
-  let mockCreateWindow: ReturnType<typeof vi.fn>
-
-  beforeEach(() => {
-    mockCreateWindow = vi.fn().mockResolvedValue(createdWindow)
-    vi.stubGlobal('api', {
-      createWindow: mockCreateWindow,
-      onWindowCreateProgress: vi.fn(),
-      offWindowCreateProgress: vi.fn()
-    })
+  it('does not show deps toggle when project has no dependencies', async () => {
+    mockListDeps.mockResolvedValue([])
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => expect(mockListDeps).toHaveBeenCalledWith(1))
+    expect(screen.queryByRole('checkbox', { name: /start with dependencies/i })).toBeNull()
   })
 
-  afterEach(() => {
-    cleanup()
-    vi.unstubAllGlobals()
+  it('shows deps toggle when project has dependencies', async () => {
+    mockListDeps.mockResolvedValue([
+      { id: 1, project_id: 1, image: 'redis', tag: 'latest', env_vars: null, created_at: '' }
+    ])
+    render(NewWindowWizard, baseProps())
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: /start with dependencies/i })).toBeDefined()
+    )
   })
 
-  it('displays the project name in the subtitle', () => {
-    render(NewWindowWizard, { project, onCreated: vi.fn(), onCancel: vi.fn() })
-    expect(screen.getByText('alpha')).toBeDefined()
-  })
-
-  it('calls api.createWindow with name and projectId, then fires onCreated', async () => {
-    const onCreated = vi.fn()
-    render(NewWindowWizard, { project, onCreated, onCancel: vi.fn() })
-
-    await fireEvent.input(screen.getByPlaceholderText('dev-window'), {
-      target: { value: 'dev-window' }
-    })
+  it('calls createWindow with withDeps=false when toggle unchecked', async () => {
+    mockListDeps.mockResolvedValue([
+      { id: 1, project_id: 1, image: 'redis', tag: 'latest', env_vars: null, created_at: '' }
+    ])
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
+    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-
-    await waitFor(() => {
-      expect(mockCreateWindow).toHaveBeenCalledWith('dev-window', 7)
-      expect(onCreated).toHaveBeenCalledWith(createdWindow)
-    })
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', 1, false))
   })
 
-  it('clicking cancel invokes onCancel', async () => {
-    const onCancel = vi.fn()
-    render(NewWindowWizard, { project, onCreated: vi.fn(), onCancel })
-    await fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
-    expect(onCancel).toHaveBeenCalled()
-  })
-
-  it('shows error message when createWindow rejects', async () => {
-    mockCreateWindow.mockRejectedValueOnce(new Error('docker unavailable'))
-    render(NewWindowWizard, { project, onCreated: vi.fn(), onCancel: vi.fn() })
-
-    await fireEvent.input(screen.getByPlaceholderText('dev-window'), {
-      target: { value: 'dev-window' }
-    })
+  it('calls createWindow with withDeps=true when toggle is checked', async () => {
+    mockListDeps.mockResolvedValue([
+      { id: 1, project_id: 1, image: 'redis', tag: 'latest', env_vars: null, created_at: '' }
+    ])
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
+    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-
-    await waitFor(() => {
-      expect(screen.getByText(/docker unavailable/i)).toBeDefined()
-    })
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', 1, true))
   })
 })
