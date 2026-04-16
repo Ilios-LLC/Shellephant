@@ -98,6 +98,15 @@ When writing a plan according to superpowers:writing-plans, always write it to t
 
 ## Codebase Structure
 
+### window-manager/src/main/windowService.ts
+Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `getWaitingInfoByContainerId`, `__resetStatusMapForTests`, types `WindowRecord`, `WindowStatus`, `ProgressReporter`.
+- `createWindow(name, projectId, withDeps?, onProgress?)` — creates a dev container for a project window. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
+- `deleteWindow(id)` — soft-deletes window, stops/removes dep containers via `listWindowDepContainers`, removes bridge network, stops main container, closes terminal session.
+- `listWindows(projectId?)` — queries including `network_id` column; merges `statusMap` for status field.
+- `WindowRecord` includes optional `network_id` field.
+- Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`. All functions under 100 lines.
+- Tests: `window-manager/tests/main/windowService.test.ts` (45 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific).
+
 ### window-manager/src/main/gitOps.ts
 Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.

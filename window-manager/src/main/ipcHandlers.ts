@@ -63,8 +63,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectId: number) =>
-    createWindow(name, projectId, (step) => event.sender.send('window:create-progress', step))
+  ipcMain.handle('window:create', (event, name: string, projectId: number, withDeps = false) =>
+    createWindow(name, projectId, withDeps, (step) => event.sender.send('window:create-progress', step))
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
