@@ -167,4 +167,69 @@ describe('ProjectView', () => {
       })
     })
   })
+
+  describe('dependencies tab', () => {
+    let mockListDeps: ReturnType<typeof vi.fn>
+    let mockCreateDep: ReturnType<typeof vi.fn>
+    let mockDeleteDep: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      mockListDeps = vi.fn().mockResolvedValue([])
+      mockCreateDep = vi.fn().mockResolvedValue({
+        id: 99, project_id: 1, image: 'redis', tag: 'alpine', env_vars: null, created_at: ''
+      })
+      mockDeleteDep = vi.fn().mockResolvedValue(undefined)
+      vi.stubGlobal('api', {
+        deleteProject: vi.fn(),
+        deleteWindow: vi.fn(),
+        updateProject: vi.fn().mockResolvedValue({ ...project, group_id: null }),
+        listDependencies: mockListDeps,
+        createDependency: mockCreateDep,
+        deleteDependency: mockDeleteDep
+      })
+    })
+
+    it('shows a Dependencies tab button', async () => {
+      render(ProjectView, baseProjectViewProps())
+      expect(screen.getByRole('button', { name: /dependencies/i })).toBeDefined()
+    })
+
+    it('clicking Dependencies tab shows the deps section', async () => {
+      render(ProjectView, baseProjectViewProps())
+      await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => expect(screen.getByRole('button', { name: /save dependency/i })).toBeDefined())
+    })
+
+    it('lists saved dependencies when tab is active', async () => {
+      mockListDeps.mockResolvedValue([
+        { id: 1, project_id: 1, image: 'redis', tag: 'alpine', env_vars: null, created_at: '' }
+      ])
+      render(ProjectView, baseProjectViewProps())
+      await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => expect(screen.getByText('redis:alpine')).toBeDefined())
+    })
+
+    it('shows validation error when image save fails', async () => {
+      mockCreateDep.mockRejectedValue(new Error('not found on Docker Hub'))
+      render(ProjectView, baseProjectViewProps())
+      await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => screen.getByPlaceholderText(/postgres/i))
+      await fireEvent.input(screen.getByPlaceholderText(/postgres/i), { target: { value: 'badimg' } })
+      await fireEvent.click(screen.getByRole('button', { name: /save dependency/i }))
+      await waitFor(() => expect(screen.getByText(/not found on docker hub/i)).toBeDefined())
+    })
+
+    it('deletes a dependency with two-click pattern', async () => {
+      mockListDeps.mockResolvedValue([
+        { id: 5, project_id: 1, image: 'postgres', tag: 'latest', env_vars: null, created_at: '' }
+      ])
+      render(ProjectView, baseProjectViewProps())
+      await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => screen.getByRole('button', { name: /delete postgres:latest/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /delete postgres:latest/i }))
+      expect(mockDeleteDep).not.toHaveBeenCalled()
+      await fireEvent.click(screen.getByRole('button', { name: /confirm delete postgres:latest/i }))
+      await waitFor(() => expect(mockDeleteDep).toHaveBeenCalledWith(5))
+    })
+  })
 })
