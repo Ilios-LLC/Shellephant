@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { ProjectRecord } from '../types'
+  import type { ProjectRecord, PortMapping } from '../types'
 
   interface EnvRow {
     id: number
@@ -8,7 +8,14 @@
     value: string
   }
 
+  interface PortRow {
+    id: number
+    container: string
+    host: string
+  }
+
   let nextId = 0
+  let nextPortId = 0
 
   interface Props {
     project: ProjectRecord
@@ -19,6 +26,7 @@
   let { project, onSave, onCancel }: Props = $props()
 
   let rows = $state<EnvRow[]>([])
+  let portRows = $state<PortRow[]>([])
   let busy = $state(false)
   let error = $state('')
 
@@ -28,6 +36,14 @@
       if (record?.env_vars) {
         const parsed = JSON.parse(record.env_vars) as Record<string, string>
         rows = Object.entries(parsed).map(([key, value]) => ({ id: nextId++, key, value }))
+      }
+      if (record?.ports) {
+        const parsedPorts = JSON.parse(record.ports) as PortMapping[]
+        portRows = parsedPorts.map((pm) => ({
+          id: nextPortId++,
+          container: String(pm.container),
+          host: pm.host !== undefined ? String(pm.host) : ''
+        }))
       }
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -42,16 +58,56 @@
     rows = rows.filter((_, i) => i !== index)
   }
 
+  function addPortRow(): void {
+    portRows = [...portRows, { id: nextPortId++, container: '', host: '' }]
+  }
+
+  function removePortRow(index: number): void {
+    portRows = portRows.filter((_, i) => i !== index)
+  }
+
+  function isDigits(s: string): boolean {
+    if (s.length === 0) return false
+    for (let i = 0; i < s.length; i++) {
+      const ch = s.charCodeAt(i)
+      if (ch < 48 || ch > 57) return false
+    }
+    return true
+  }
+
+  function parsePorts(): PortMapping[] {
+    const out: PortMapping[] = []
+    for (const row of portRows) {
+      const c = row.container.trim()
+      const h = row.host.trim()
+      if (!c && !h) continue
+      if (!isDigits(c)) throw new Error('Container port must be a number')
+      const container = parseInt(c, 10)
+      if (container < 1 || container > 65535) throw new Error('Ports must be between 1 and 65535')
+      if (h) {
+        if (!isDigits(h)) throw new Error('Host port must be a number')
+        const host = parseInt(h, 10)
+        if (host < 1 || host > 65535) throw new Error('Ports must be between 1 and 65535')
+        out.push({ container, host })
+      } else {
+        out.push({ container })
+      }
+    }
+    return out
+  }
+
   async function save(): Promise<void> {
     if (busy) return
     busy = true
     error = ''
     try {
+      const parsed = parsePorts()
       const envVars: Record<string, string> = {}
       for (const row of rows) {
         if (row.key.trim()) envVars[row.key.trim()] = row.value
       }
       await window.api.updateProjectEnvVars(project.id, envVars)
+      await window.api.updateProjectPorts(project.id, parsed)
       onSave()
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -99,6 +155,42 @@
       </div>
       <button type="button" class="add-btn" onclick={addRow} disabled={busy}>
         + Add Variable
+      </button>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Port Mappings</div>
+      <p class="hint">Format: container[:host]. Applies to new windows only.</p>
+      <div class="env-table">
+        {#each portRows as row, i (row.id)}
+          <div class="env-row">
+            <input
+              type="text"
+              placeholder="container"
+              bind:value={row.container}
+              disabled={busy}
+              aria-label={`container port ${i + 1}`}
+            />
+            <span class="eq">:</span>
+            <input
+              type="text"
+              placeholder="host (optional)"
+              bind:value={row.host}
+              disabled={busy}
+              aria-label={`host port ${i + 1}`}
+            />
+            <button
+              type="button"
+              class="remove-btn"
+              aria-label={`remove port ${i + 1}`}
+              onclick={() => removePortRow(i)}
+              disabled={busy}
+            >×</button>
+          </div>
+        {/each}
+      </div>
+      <button type="button" class="add-btn" onclick={addPortRow} disabled={busy}>
+        + Add Port
       </button>
     </section>
 
@@ -159,6 +251,13 @@
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--fg-2);
+  }
+
+  .hint {
+    font-size: 0.72rem;
+    color: var(--fg-2);
+    margin: 0;
+    opacity: 0.8;
   }
 
   .env-table {

@@ -145,3 +145,23 @@ export function updateProjectEnvVars(id: number, envVars: Record<string, string>
     .run(JSON.stringify(envVars), id)
   if (result.changes === 0) throw new Error(`Project ${id} not found`)
 }
+
+export function updateProjectPorts(id: number, ports: PortMapping[]): void {
+  for (const pm of ports) {
+    if (!Number.isInteger(pm.container) || pm.container < 1 || pm.container > 65535) {
+      throw new Error(
+        `Invalid container port: ${pm.container}. Must be integer between 1 and 65535.`
+      )
+    }
+    if (pm.host !== undefined) {
+      if (!Number.isInteger(pm.host) || pm.host < 1 || pm.host > 65535) {
+        throw new Error(`Invalid host port: ${pm.host}. Must be integer between 1 and 65535.`)
+      }
+    }
+  }
+  const portsJson = ports.length > 0 ? JSON.stringify(ports) : null
+  const result = getDb()
+    .prepare('UPDATE projects SET ports = ? WHERE id = ? AND deleted_at IS NULL')
+    .run(portsJson, id)
+  if (result.changes === 0) throw new Error(`Project ${id} not found`)
+}

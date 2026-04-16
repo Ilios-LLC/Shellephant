@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('api', {
   getProject: (id: number) => ipcRenderer.invoke('project:get', id),
   updateProjectEnvVars: (id: number, envVars: Record<string, string>) =>
     ipcRenderer.invoke('project:update-env-vars', id, envVars),
+  updateProjectPorts: (id: number, ports: { container: number; host?: number }[]) =>
+    ipcRenderer.invoke('project:update-ports', id, ports),
 
   // Group API
   createGroup: (name: string) => ipcRenderer.invoke('group:create', name),

@@ -44,6 +44,7 @@ export interface Api {
   updateProject: (id: number, patch: { groupId: number | null }) => Promise<ProjectRecord>
   getProject: (id: number) => Promise<ProjectRecord | undefined>
   updateProjectEnvVars: (id: number, envVars: Record<string, string>) => Promise<void>
+  updateProjectPorts: (id: number, ports: PortMapping[]) => Promise<void>
   createGroup: (name: string) => Promise<ProjectGroupRecord>
   listGroups: () => Promise<ProjectGroupRecord[]>
 

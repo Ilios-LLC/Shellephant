@@ -27,7 +27,8 @@ import {
   deleteProject,
   updateProject,
   getProject,
-  updateProjectEnvVars
+  updateProjectEnvVars,
+  updateProjectPorts
 } from '../../src/main/projectService'
 
 describe('projectService', () => {
@@ -286,6 +287,48 @@ describe('projectService', () => {
 
     it('throws when the project does not exist', () => {
       expect(() => updateProjectEnvVars(99999, { FOO: 'bar' })).toThrow('Project 99999 not found')
+    })
+  })
+
+  describe('updateProjectPorts', () => {
+    it('saves port mappings as JSON and returns them on next getProject', async () => {
+      const created = await createProject('p', 'git@github.com:org/p.git')
+      updateProjectPorts(created.id, [{ container: 3000 }, { container: 8080, host: 9000 }])
+      const found = getProject(created.id)
+      expect(found!.ports).toBe(
+        JSON.stringify([{ container: 3000 }, { container: 8080, host: 9000 }])
+      )
+    })
+
+    it('clears ports when empty array passed', async () => {
+      const created = await createProject('p2', 'git@github.com:org/p2.git', [{ container: 3000 }])
+      updateProjectPorts(created.id, [])
+      const found = getProject(created.id)
+      expect(found!.ports).toBeNull()
+    })
+
+    it('overwrites existing ports', async () => {
+      const created = await createProject('p3', 'git@github.com:org/p3.git', [{ container: 3000 }])
+      updateProjectPorts(created.id, [{ container: 5432 }])
+      const found = getProject(created.id)
+      expect(found!.ports).toBe(JSON.stringify([{ container: 5432 }]))
+    })
+
+    it('rejects invalid container port', () => {
+      expect(() => updateProjectPorts(1, [{ container: 0 }])).toThrow(/Invalid container port/)
+    })
+
+    it('rejects invalid host port', async () => {
+      const created = await createProject('p4', 'git@github.com:org/p4.git')
+      expect(() =>
+        updateProjectPorts(created.id, [{ container: 3000, host: 70000 }])
+      ).toThrow(/Invalid host port/)
+    })
+
+    it('throws when the project does not exist', () => {
+      expect(() => updateProjectPorts(99999, [{ container: 3000 }])).toThrow(
+        'Project 99999 not found'
+      )
     })
   })
 })
