@@ -18,6 +18,19 @@ export interface WindowDepContainer {
   tag: string
 }
 
+interface RawDep {
+  id: number
+  project_id: number
+  image: string
+  tag: string
+  env_vars: string | null
+  created_at: string
+}
+
+function parseDep(raw: RawDep): ProjectDependency {
+  return { ...raw, env_vars: raw.env_vars ? (JSON.parse(raw.env_vars) as Record<string, string>) : null }
+}
+
 function parseImageRef(image: string): {
   isHub: boolean
   registry: string
@@ -47,75 +60,73 @@ export async function validateImage(image: string, tag: string): Promise<void> {
     return
   }
 
-  // OCI registry: try anonymous token exchange, then check manifest
-  const authRes = await fetch(`https://${ref.registry}/v2/`)
-  let token: string | null = null
-  if (authRes.status === 401) {
-    const wwwAuth =
-      (authRes.headers as unknown as { get(k: string): string | null }).get('www-authenticate') ??
-      ''
+  // OCI registry: try manifest directly, handle 401 with token exchange
+  const manifestUrl = `https://${ref.registry}/v2/${ref.repoPath}/manifests/${tag}`
+  let res = await fetch(manifestUrl, {
+    headers: { Accept: 'application/vnd.docker.distribution.manifest.v2+json' }
+  })
+
+  if (res.status === 401) {
+    const wwwAuth = (res.headers as unknown as { get(k: string): string | null }).get('Www-Authenticate') ?? ''
     const realmMatch = wwwAuth.match(/realm="([^"]+)"/)
     const serviceMatch = wwwAuth.match(/service="([^"]+)"/)
+    const scopeMatch = wwwAuth.match(/scope="([^"]+)"/)
     if (realmMatch) {
-      const tokenUrl = `${realmMatch[1]}?service=${serviceMatch?.[1] ?? ''}&scope=repository:${ref.repoPath}:pull`
-      const tokenRes = await fetch(tokenUrl)
+      const tokenUrl = new URL(realmMatch[1])
+      if (serviceMatch) tokenUrl.searchParams.set('service', serviceMatch[1])
+      if (scopeMatch) tokenUrl.searchParams.set('scope', scopeMatch[1])
+      const tokenRes = await fetch(tokenUrl.toString())
       if (tokenRes.ok) {
         const body = (await tokenRes.json()) as { token?: string; access_token?: string }
-        token = body.token ?? body.access_token ?? null
+        const token = body.token ?? body.access_token
+        if (token) {
+          res = await fetch(manifestUrl, {
+            headers: {
+              Accept: 'application/vnd.docker.distribution.manifest.v2+json',
+              Authorization: `Bearer ${token}`
+            }
+          })
+        }
       }
     }
   }
 
-  const headers: Record<string, string> = {
-    Accept: 'application/vnd.docker.distribution.manifest.v2+json'
-  }
-  if (token) headers.Authorization = `Bearer ${token}`
-
-  const mRes = await fetch(`https://${ref.registry}/v2/${ref.repoPath}/manifests/${tag}`, {
-    headers
-  })
-  if (mRes.status === 404) throw new Error(`Image ${image}:${tag} not found`)
-  if (mRes.status === 401 || mRes.status === 403) throw new Error('Image must be public')
-  if (!mRes.ok) throw new Error(`Registry error: ${mRes.status}`)
+  if (res.status === 404) throw new Error(`Image ${image}:${tag} not found`)
+  if (res.status === 401 || res.status === 403) throw new Error(`Image ${image}:${tag} is private or requires authentication`)
+  if (!res.ok) throw new Error(`Registry error: ${res.status}`)
 }
 
 export function listDependencies(projectId: number): ProjectDependency[] {
-  const rows = getDb()
-    .prepare('SELECT * FROM project_dependencies WHERE project_id = ? ORDER BY created_at')
-    .all(projectId) as Array<Omit<ProjectDependency, 'env_vars'> & { env_vars: string | null }>
-  return rows.map((r) => ({
-    ...r,
-    env_vars: r.env_vars ? (JSON.parse(r.env_vars) as Record<string, string>) : null
-  }))
+  return (
+    getDb()
+      .prepare('SELECT id, project_id, image, tag, env_vars, created_at FROM project_dependencies WHERE project_id = ? ORDER BY created_at')
+      .all(projectId) as RawDep[]
+  ).map(parseDep)
 }
 
 export async function createDependency(
   projectId: number,
-  data: { image: string; tag: string; envVars?: Record<string, string> }
+  image: string,
+  tag: string,
+  envVars: Record<string, string>
 ): Promise<ProjectDependency> {
-  await validateImage(data.image, data.tag)
-  const envJson =
-    data.envVars && Object.keys(data.envVars).length > 0 ? JSON.stringify(data.envVars) : null
+  await validateImage(image, tag)
+  const envJson = Object.keys(envVars).length > 0 ? JSON.stringify(envVars) : null
   const result = getDb()
-    .prepare(
-      'INSERT INTO project_dependencies (project_id, image, tag, env_vars) VALUES (?, ?, ?, ?)'
-    )
-    .run(projectId, data.image, data.tag, envJson)
-  return {
-    id: result.lastInsertRowid as number,
-    project_id: projectId,
-    image: data.image,
-    tag: data.tag,
-    env_vars: data.envVars ?? null,
-    created_at: new Date().toISOString()
-  }
+    .prepare('INSERT INTO project_dependencies (project_id, image, tag, env_vars) VALUES (?, ?, ?, ?)')
+    .run(projectId, image, tag, envJson)
+  return parseDep(
+    getDb()
+      .prepare('SELECT id, project_id, image, tag, env_vars, created_at FROM project_dependencies WHERE id = ?')
+      .get(result.lastInsertRowid as number) as RawDep
+  )
 }
 
 export function deleteDependency(id: number): void {
   getDb().prepare('DELETE FROM project_dependencies WHERE id = ?').run(id)
 }
 
-export function listWindowDepContainers(windowId: number): WindowDepContainer[] {
+export function listWindowDeps(windowId: number): WindowDepContainer[] {
   return getDb()
     .prepare(
       `SELECT wdc.id, wdc.window_id, wdc.dependency_id, wdc.container_id,
@@ -126,3 +137,6 @@ export function listWindowDepContainers(windowId: number): WindowDepContainer[] 
     )
     .all(windowId) as WindowDepContainer[]
 }
+
+// Keep the old name as an alias for backward compatibility
+export const listWindowDepContainers = listWindowDeps
