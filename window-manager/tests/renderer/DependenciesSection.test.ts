@@ -133,5 +133,15 @@ describe('DependenciesSection', () => {
         expect(mockCreateDependency).toHaveBeenCalledWith(1, 'postgres', 'latest', {})
       })
     })
+
+    it('cancel clears env var rows so reopening shows empty form', async () => {
+      await openForm()
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      expect(screen.getByPlaceholderText(/^KEY$/i)).toBeDefined()
+      await fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+      // Reopen
+      await fireEvent.click(screen.getByRole('button', { name: /add dependency/i }))
+      expect(screen.queryByPlaceholderText(/^KEY$/i)).toBeNull()
+    })
   })
 })

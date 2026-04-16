@@ -157,7 +157,7 @@
       <div class="form-actions">
         <button
           type="button"
-          onclick={() => { showForm = false; formError = '' }}
+          onclick={() => { showForm = false; formError = ''; formEnvRows = [] }}
           disabled={formSaving}
         >Cancel</button>
         <button
