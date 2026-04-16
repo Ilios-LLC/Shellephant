@@ -15,24 +15,44 @@ describe('ProjectItem', () => {
   afterEach(() => cleanup())
 
   it('renders project name', () => {
-    render(ProjectItem, { project, selected: false, onSelect: vi.fn() })
+    render(ProjectItem, { project, selected: false, onSelect: vi.fn(), onSettingsClick: vi.fn() })
     expect(screen.getByText('my-project')).toBeDefined()
   })
 
   it('renders git URL snippet', () => {
-    render(ProjectItem, { project, selected: false, onSelect: vi.fn() })
+    render(ProjectItem, { project, selected: false, onSelect: vi.fn(), onSettingsClick: vi.fn() })
     expect(screen.getByText('org/my-project')).toBeDefined()
   })
 
   it('calls onSelect with project when clicked', async () => {
     const onSelect = vi.fn()
-    render(ProjectItem, { project, selected: false, onSelect })
+    render(ProjectItem, { project, selected: false, onSelect, onSettingsClick: vi.fn() })
     await fireEvent.click(screen.getByText('my-project'))
     expect(onSelect).toHaveBeenCalledWith(project)
   })
 
   it('applies selected class when selected is true', () => {
-    const { container } = render(ProjectItem, { project, selected: true, onSelect: vi.fn() })
+    const { container } = render(ProjectItem, { project, selected: true, onSelect: vi.fn(), onSettingsClick: vi.fn() })
     expect(container.querySelector('.selected')).not.toBeNull()
+  })
+
+  it('renders a gear icon button', () => {
+    render(ProjectItem, { project, selected: false, onSelect: vi.fn(), onSettingsClick: vi.fn() })
+    expect(screen.getByRole('button', { name: /project settings/i })).toBeDefined()
+  })
+
+  it('calls onSettingsClick with project when gear icon clicked', async () => {
+    const onSettingsClick = vi.fn()
+    render(ProjectItem, { project, selected: false, onSelect: vi.fn(), onSettingsClick })
+    await fireEvent.click(screen.getByRole('button', { name: /project settings/i }))
+    expect(onSettingsClick).toHaveBeenCalledWith(project)
+  })
+
+  it('gear icon click does not also call onSelect', async () => {
+    const onSelect = vi.fn()
+    const onSettingsClick = vi.fn()
+    render(ProjectItem, { project, selected: false, onSelect, onSettingsClick })
+    await fireEvent.click(screen.getByRole('button', { name: /project settings/i }))
+    expect(onSelect).not.toHaveBeenCalled()
   })
 })
