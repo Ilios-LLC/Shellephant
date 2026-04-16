@@ -155,8 +155,10 @@
     depContainers = containers
     if (containers.length > 0) {
       selectedDepContainerId = containers[0].container_id
-      void refreshDepStatuses()
-      statusTimer = setInterval(refreshDepStatuses, 5000)
+      if (alive) {
+        void refreshDepStatuses()
+        statusTimer = setInterval(refreshDepStatuses, 5000)
+      }
     }
     window.api.onDepLogsData((containerId: string, chunk: string) => {
       if (containerId === selectedDepContainerId) {
