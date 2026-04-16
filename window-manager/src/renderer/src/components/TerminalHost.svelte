@@ -7,10 +7,13 @@
   import type { ProjectRecord, WindowRecord } from '../types'
   import WindowDetailPane from './WindowDetailPane.svelte'
   import EditorPane from './EditorPane.svelte'
+  import ResizeHandle from './ResizeHandle.svelte'
   import CommitModal from './CommitModal.svelte'
   import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
   import { conversationSummary } from '../lib/conversationSummary'
+  import { panelLayout, resizePanels, reorderPanels, savePanelLayout } from '../lib/panelLayout'
+  import type { PanelId } from '../lib/panelLayout'
 
   interface Props {
     win: WindowRecord
@@ -22,13 +25,13 @@
 
   const rootPath = $derived('/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''))
 
-  // Claude terminal (default, opened on mount)
+  // Claude terminal
   let claudeTerminalEl: HTMLDivElement
   let claudeTerm: XTerm | undefined
   let claudeFitAddon: FitAddon | undefined
   let claudeResizeObserver: ResizeObserver | undefined
 
-  // Terminal session (lazy, opened on first switch to Terminal panel)
+  // Terminal session (lazy)
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
   let fitAddon: FitAddon | undefined
@@ -40,7 +43,11 @@
   let pushBusy = $state(false)
   let deleteBusy = $state(false)
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
-  let viewMode = $state<'claude' | 'terminal' | 'editor'>('claude')
+
+  let contentAreaWidth = $state(0)
+  let draggedPanelId: PanelId | null = null
+
+  const visiblePanels = $derived($panelLayout.panels.filter(p => p.visible))
 
   const xtermOptions = {
     fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
@@ -82,7 +89,7 @@
         body: v.body || undefined
       })
       if (res.ok) {
-        const subjectLine = res.stdout.split('\n').find((l) => /^\[.+\]/.test(l))
+        const subjectLine = res.stdout.split('\n').find((l: string) => /^\[.+\]/.test(l))
         pushToast({ level: 'success', title: 'Committed', body: subjectLine })
       } else {
         const nothing = /nothing to commit/i.test(res.stdout)
@@ -153,7 +160,7 @@
       else term?.write(data)
     })
 
-    window.api.onTerminalSummary(({ containerId, title, bullets }) => {
+    window.api.onTerminalSummary(({ containerId, title, bullets }: { containerId: string; title: string; bullets: string[] }) => {
       if (containerId === win.container_id) {
         conversationSummary.set(containerId, { title, bullets })
       }
@@ -165,9 +172,7 @@
     resizeObserver?.disconnect()
     window.api.offTerminalData()
     window.api.closeTerminal(win.container_id, 'claude')
-    if (terminalOpened) {
-      window.api.closeTerminal(win.container_id, 'terminal')
-    }
+    if (terminalOpened) window.api.closeTerminal(win.container_id, 'terminal')
     waitingWindows.remove(win.container_id)
     window.api.offTerminalSummary()
     conversationSummary.remove(win.container_id)
@@ -176,31 +181,74 @@
   })
 
   $effect(() => {
-    if (viewMode === 'claude') {
-      claudeFitAddon?.fit()
-    } else if (viewMode === 'terminal') {
-      if (!terminalOpened) initTerminalSession()
-      fitAddon?.fit()
+    const panels = $panelLayout.panels
+    const termPanel = panels.find(p => p.id === 'terminal')
+    const claudePanel = panels.find(p => p.id === 'claude')
+
+    // Re-attach if panel was toggled off then on — element is re-created empty by Svelte
+    if (claudePanel?.visible && claudeTerminalEl && claudeTerm && !claudeTerminalEl.hasChildNodes()) {
+      claudeTerm.open(claudeTerminalEl)
+    }
+    if (claudePanel?.visible) claudeFitAddon?.fit()
+
+    if (termPanel?.visible) {
+      if (!terminalOpened) {
+        if (terminalEl) initTerminalSession()
+      } else {
+        if (terminalEl && term && !terminalEl.hasChildNodes()) term.open(terminalEl)
+        fitAddon?.fit()
+      }
     }
   })
 </script>
 
 <section class="terminal-host">
-  <div class="content-area">
-    {#if viewMode === 'editor'}
-      <div class="editor-wrap">
-        <EditorPane containerId={win.container_id} {rootPath} />
+  <div class="content-area" bind:clientWidth={contentAreaWidth}>
+    {#each visiblePanels as panel, i (panel.id)}
+      <div
+        class="panel"
+        data-panel-id={panel.id}
+        style="width: {panel.width}%; min-width: 150px"
+        ondragover={(e) => e.preventDefault()}
+        ondrop={() => { if (draggedPanelId !== null && draggedPanelId !== panel.id) reorderPanels(draggedPanelId, panel.id) }}
+        role="region"
+        aria-label={panel.id}
+      >
+        <div class="panel-header">
+          <span class="panel-title">{panel.id === 'claude' ? 'Claude' : panel.id === 'terminal' ? 'Terminal' : 'Editor'}</span>
+          <span
+            class="drag-handle"
+            draggable="true"
+            role="button"
+            tabindex="0"
+            aria-label="drag to reorder {panel.id}"
+            ondragstart={() => { draggedPanelId = panel.id }}
+            ondragend={() => { draggedPanelId = null }}
+          >⠿</span>
+        </div>
+        <div class="panel-body">
+          {#if panel.id === 'claude'}
+            <div class="terminal-inner" bind:this={claudeTerminalEl}></div>
+          {:else if panel.id === 'terminal'}
+            <div class="terminal-inner" bind:this={terminalEl}></div>
+          {:else if panel.id === 'editor'}
+            <EditorPane containerId={win.container_id} {rootPath} />
+          {/if}
+        </div>
       </div>
-    {/if}
-    <div class="terminal-body" class:hidden={viewMode !== 'claude'} bind:this={claudeTerminalEl}></div>
-    <div class="terminal-body" class:hidden={viewMode !== 'terminal'} bind:this={terminalEl}></div>
+      {#if i < visiblePanels.length - 1}
+        <ResizeHandle
+          containerWidth={contentAreaWidth}
+          onResize={(delta) => resizePanels(panel.id, delta)}
+          onResizeEnd={savePanelLayout}
+        />
+      {/if}
+    {/each}
   </div>
   <WindowDetailPane
     {win}
     {project}
-    {viewMode}
     summary={$conversationSummary.get(win.container_id)}
-    onViewChange={(mode) => (viewMode = mode)}
     onCommit={() => (commitOpen = true)}
     onPush={runPush}
     onDelete={runDelete}
@@ -234,18 +282,46 @@
     overflow: hidden;
   }
 
-  .editor-wrap {
-    flex: 1;
+  .panel {
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
-  .terminal-body {
+  .panel-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.2rem 0.5rem;
+    background: var(--bg-1);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    color: var(--fg-2);
+    user-select: none;
+  }
+
+  .drag-handle {
+    cursor: grab;
+    padding: 0 0.2rem;
+    color: var(--fg-3);
+  }
+
+  .drag-handle:active {
+    cursor: grabbing;
+  }
+
+  .panel-body {
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .terminal-inner {
     flex: 1;
     overflow: hidden;
     padding: 0.5rem;
-  }
-
-  .terminal-body.hidden {
-    display: none;
   }
 </style>
