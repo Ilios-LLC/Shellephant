@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { ProjectRecord, WindowRecord, WindowDependencyContainer } from '../types'
+  import type { ProjectRecord, WindowRecord, WindowDependencyContainer, ContainerStatus } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
   import { panelLayout, togglePanel } from '../lib/panelLayout'
 
@@ -74,6 +74,26 @@
   let depLogEl = $state<HTMLElement | null>(null)
   const MAX_LOG_LINES = 500
 
+  let depStatuses = $state<Record<string, ContainerStatus>>({})
+  let statusTimer: ReturnType<typeof setInterval> | undefined
+
+  async function refreshDepStatuses(): Promise<void> {
+    if (depContainers.length === 0) return
+    try {
+      const statuses = await window.api.getDepContainersStatus(depContainers.map(d => d.container_id))
+      if (alive) depStatuses = statuses
+    } catch {
+      // keep last-known statuses on error
+    }
+  }
+
+  function statusPrefix(containerId: string): string {
+    const s = depStatuses[containerId]
+    if (s === 'running') return '▶ '
+    if (s === 'stopped') return '■ '
+    return '? '
+  }
+
   function parsePortsJson(raw: string | undefined): [string, string][] {
     if (!raw) return []
     try {
@@ -133,7 +153,13 @@
     timer = setInterval(refreshBranch, 5000)
     const containers = await window.api.listWindowDeps(win.id)
     depContainers = containers
-    if (containers.length > 0) selectedDepContainerId = containers[0].container_id
+    if (containers.length > 0) {
+      selectedDepContainerId = containers[0].container_id
+      if (alive) {
+        void refreshDepStatuses()
+        statusTimer = setInterval(refreshDepStatuses, 5000)
+      }
+    }
     window.api.onDepLogsData((containerId: string, chunk: string) => {
       if (containerId === selectedDepContainerId) {
         const lines = (depLogs + chunk).split('\n')
@@ -145,6 +171,7 @@
   onDestroy(() => {
     alive = false
     if (timer) clearInterval(timer)
+    if (statusTimer) clearInterval(statusTimer)
     window.api.offDepLogsData()
     if (depLogsVisible && selectedDepContainerId) {
       window.api.stopDepLogs(selectedDepContainerId)
@@ -183,11 +210,11 @@
           onchange={(e) => switchDepContainer((e.target as HTMLSelectElement).value)}
         >
           {#each depContainers as dc (dc.container_id)}
-            <option value={dc.container_id}>{dc.image}:{dc.tag}</option>
+            <option value={dc.container_id}>{statusPrefix(dc.container_id)}{dc.image}:{dc.tag}</option>
           {/each}
         </select>
       {:else if depContainers.length === 1}
-        <span class="dep-label">{depContainers[0].image}:{depContainers[0].tag}</span>
+        <span class="dep-label">{statusPrefix(depContainers[0].container_id)}{depContainers[0].image}:{depContainers[0].tag}</span>
       {/if}
       <pre class="dep-log-output" bind:this={depLogEl}>{depLogs}</pre>
     </div>

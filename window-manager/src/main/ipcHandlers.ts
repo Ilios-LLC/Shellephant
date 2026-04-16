@@ -23,9 +23,11 @@ import {
   listDependencies,
   createDependency,
   deleteDependency,
-  listWindowDepContainers
+  listWindowDepContainers,
+  updateDependency
 } from './dependencyService'
 import { startDepLogs, stopDepLogs } from './depLogsService'
+import { getDepContainersStatus } from './containerStatusService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -84,6 +86,8 @@ export function registerIpcHandlers(): void {
       createDependency(projectId, image, tag, envVars)
   )
   ipcMain.handle('project:dep-delete', (_, id: number) => deleteDependency(id))
+  ipcMain.handle('project:dep-update', (_, id: number, envVars: Record<string, string> | null) =>
+    updateDependency(id, envVars))
   ipcMain.handle('window:dep-containers-list', (_, windowId: number) =>
     listWindowDepContainers(windowId)
   )
@@ -96,6 +100,8 @@ export function registerIpcHandlers(): void {
     )
   })
   ipcMain.on('window:dep-logs-stop', (_, containerId: string) => stopDepLogs(containerId))
+  ipcMain.handle('window:dep-containers-status', (_, containerIds: string[]) =>
+    getDepContainersStatus(containerIds))
 
   // Git handlers
   ipcMain.handle('git:current-branch', async (_, windowId: number) => {

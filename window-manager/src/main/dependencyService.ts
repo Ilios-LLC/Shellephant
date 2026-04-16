@@ -128,6 +128,22 @@ export function deleteDependency(id: number): void {
   getDb().prepare('DELETE FROM project_dependencies WHERE id = ?').run(id)
 }
 
+export function updateDependency(
+  id: number,
+  envVars: Record<string, string> | null
+): ProjectDependency {
+  const envJson = envVars && Object.keys(envVars).length > 0 ? JSON.stringify(envVars) : null
+  const result = getDb()
+    .prepare('UPDATE project_dependencies SET env_vars = ? WHERE id = ?')
+    .run(envJson, id)
+  if (result.changes === 0) throw new Error(`dependency ${id} not found`)
+  return parseDep(
+    getDb()
+      .prepare('SELECT id, project_id, image, tag, env_vars, created_at FROM project_dependencies WHERE id = ?')
+      .get(id) as RawDep
+  )
+}
+
 export function listWindowDeps(windowId: number): WindowDepContainer[] {
   return getDb()
     .prepare(

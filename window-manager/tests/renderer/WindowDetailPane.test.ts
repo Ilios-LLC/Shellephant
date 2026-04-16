@@ -30,6 +30,7 @@ let mockStartDepLogs: ReturnType<typeof vi.fn>
 let mockStopDepLogs: ReturnType<typeof vi.fn>
 let mockOnDepLogsData: ReturnType<typeof vi.fn>
 let mockOffDepLogsData: ReturnType<typeof vi.fn>
+let mockGetDepContainersStatus: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -50,6 +51,7 @@ beforeEach(() => {
   mockStopDepLogs = vi.fn()
   mockOnDepLogsData = vi.fn()
   mockOffDepLogsData = vi.fn()
+  mockGetDepContainersStatus = vi.fn().mockResolvedValue({})
   // @ts-expect-error test bridge
   globalThis.window.api = {
     getCurrentBranch,
@@ -59,7 +61,8 @@ beforeEach(() => {
     startDepLogs: mockStartDepLogs,
     stopDepLogs: mockStopDepLogs,
     onDepLogsData: mockOnDepLogsData,
-    offDepLogsData: mockOffDepLogsData
+    offDepLogsData: mockOffDepLogsData,
+    getDepContainersStatus: mockGetDepContainersStatus
   }
 })
 afterEach(() => {
@@ -350,6 +353,69 @@ describe('WindowDetailPane', () => {
       await tick()
       expect(mockStopDepLogs).toHaveBeenCalledWith('dep-ctr')
       expect(screen.queryByRole('region', { name: /dep logs/i })).toBeNull()
+    })
+  })
+
+  describe('dep container status indicator', () => {
+    const depContainers: WindowDependencyContainer[] = [
+      { id: 1, window_id: 1, dependency_id: 1, container_id: 'ctr-1', image: 'redis', tag: 'latest' },
+      { id: 2, window_id: 1, dependency_id: 2, container_id: 'ctr-2', image: 'postgres', tag: '15' }
+    ]
+
+    it('does not call getDepContainersStatus when no dep containers', async () => {
+      mockListWindowDeps.mockResolvedValue([])
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      expect(mockGetDepContainersStatus).not.toHaveBeenCalled()
+    })
+
+    it('calls getDepContainersStatus on mount when dep containers exist', async () => {
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      mockGetDepContainersStatus.mockResolvedValue({ 'ctr-1': 'running', 'ctr-2': 'stopped' })
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      expect(mockGetDepContainersStatus).toHaveBeenCalledWith(['ctr-1', 'ctr-2'])
+    })
+
+    it('shows ▶ prefix for running container in dropdown', async () => {
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      mockGetDepContainersStatus.mockResolvedValue({ 'ctr-1': 'running', 'ctr-2': 'stopped' })
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      // Toggle dep logs to show the dropdown
+      await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
+      await tick()
+      // The select options should have status prefixes
+      const options = document.querySelectorAll('.dep-selector option')
+      expect(options[0].textContent).toContain('▶')
+      expect(options[1].textContent).toContain('■')
+    })
+
+    it('polls getDepContainersStatus every 5 seconds', async () => {
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      mockGetDepContainersStatus.mockResolvedValue({ 'ctr-1': 'running', 'ctr-2': 'running' })
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      expect(mockGetDepContainersStatus).toHaveBeenCalledTimes(1)
+      await vi.advanceTimersByTimeAsync(5000)
+      expect(mockGetDepContainersStatus).toHaveBeenCalledTimes(2)
+    })
+
+    it('shows ? prefix for unknown status', async () => {
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      mockGetDepContainersStatus.mockResolvedValue({ 'ctr-1': 'unknown', 'ctr-2': 'unknown' })
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
+      await tick()
+      const options = document.querySelectorAll('.dep-selector option')
+      expect(options[0].textContent).toContain('?')
+      expect(options[1].textContent).toContain('?')
     })
   })
 })

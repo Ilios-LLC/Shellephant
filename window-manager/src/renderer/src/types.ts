@@ -1,4 +1,5 @@
-export type WindowStatus = 'running' | 'stopped' | 'unknown'
+export type ContainerStatus = 'running' | 'stopped' | 'unknown'
+export type WindowStatus = ContainerStatus
 
 export interface PortMapping {
   container: number
@@ -79,6 +80,8 @@ export interface Api {
   createDependency: (projectId: number, image: string, tag: string, envVars?: Record<string, string>) => Promise<ProjectDependency>
   deleteDependency: (id: number) => Promise<void>
   listWindowDeps: (windowId: number) => Promise<WindowDependencyContainer[]>
+  updateDependency: (id: number, envVars: Record<string, string> | null) => Promise<ProjectDependency>
+  getDepContainersStatus: (ids: string[]) => Promise<Record<string, ContainerStatus>>
 
   // Dep logs
   startDepLogs: (windowId: number, containerId: string) => Promise<void>
