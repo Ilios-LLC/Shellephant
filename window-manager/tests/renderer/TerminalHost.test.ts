@@ -371,4 +371,27 @@ describe('TerminalHost', () => {
     resizeHandler({ cols: 100, rows: 30 })
     expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 100, 30, 'claude')
   })
+
+  it('enables commit button when getGitStatus returns isDirty: true', async () => {
+    mockApi.getGitStatus.mockResolvedValue({ isDirty: true, added: 1, deleted: 0 })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.getGitStatus).toHaveBeenCalled())
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^commit$/i })).not.toBeDisabled()
+    })
+  })
+
+  it('keeps commit button disabled when getGitStatus returns isDirty: false', async () => {
+    mockApi.getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.getGitStatus).toHaveBeenCalled())
+    expect(screen.getByRole('button', { name: /^commit$/i })).toBeDisabled()
+  })
+
+  it('keeps commit button enabled when getGitStatus has not resolved yet (unknown state)', async () => {
+    // When status is unknown (null), allow commit attempt rather than locking out the user
+    mockApi.getGitStatus.mockReturnValue(new Promise(() => {})) // never resolves
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    expect(screen.getByRole('button', { name: /^commit$/i })).not.toBeDisabled()
+  })
 })
