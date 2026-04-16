@@ -126,3 +126,41 @@ Displays a single project's details and its windows list.
 - Group label + `<select id="project-group">` in `.project-actions` — lists all groups with "No group" default; onchange calls `window.api.updateProject(project.id, { groupId })` then `onProjectUpdated`.
 - Two-click delete pattern for both project and individual windows (arms on first click, auto-cancels after 3s timeout).
 - Tests live in `window-manager/tests/renderer/ProjectView.test.ts` (11 tests).
+
+### window-manager/src/renderer/src/lib/panelLayout.ts
+Pure TypeScript Svelte store managing split-pane layout state.
+- Exports: `panelLayout` (readable store), `togglePanel`, `resizePanels`, `reorderPanels`, `savePanelLayout`, `_resetForTest`
+- Types: `PanelId` ('claude' | 'terminal' | 'editor'), `PanelConfig` (id, visible, width), `PanelLayout` (panels array)
+- Default layout: claude visible 50%, terminal hidden 0%, editor visible 50%.
+- `togglePanel(id)` — hides (redistributes width proportionally to remaining visible) or shows (equal share) a panel. Guards against hiding the last visible panel. Saves to localStorage.
+- `resizePanels(leftId, delta)` — adjusts left panel and its next visible right neighbor by delta (percent). Clamps both to minimum 1%. Does NOT save (called on pointermove; save on pointerup via `savePanelLayout()`).
+- `reorderPanels(draggedId, targetId)` — swaps two panels by index; widths travel with panels. Saves to localStorage.
+- `savePanelLayout()` — persists current store state to localStorage key `panelLayout`.
+- Tests live in `window-manager/tests/renderer/panelLayout.test.ts` (24 tests).
+
+### window-manager/src/renderer/src/components/ResizeHandle.svelte
+Thin vertical drag handle (4px) between adjacent visible panels in TerminalHost.
+- Props: `containerWidth: number`, `onResize: (deltaPercent: number) => void`, `onResizeEnd: () => void`
+- Uses `dragging` boolean (not pointer capture checks) for testability; calls `setPointerCapture` unconditionally on pointerdown.
+- Tests live in `window-manager/tests/renderer/ResizeHandle.test.ts` (8 tests).
+
+### window-manager/src/renderer/src/components/WindowDetailPane.svelte
+Footer pane showing window info and panel toggle buttons. Svelte 5 runes mode.
+- Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`
+- Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`.
+- `panelVisible` derived object and `visibleCount` derived count computed from `$panelLayout.panels`.
+- Polls `window.api.getCurrentBranch` and `window.api.getGitStatus` on mount + every 5s.
+- Two-click delete pattern (arms 3s timeout, second click fires `onDelete`).
+- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (24 tests).
+
+### window-manager/src/renderer/src/components/TerminalHost.svelte
+Top-level window component hosting claude/terminal/editor panels in a split-pane layout. Svelte 5 runes mode.
+- Props: `win: WindowRecord`, `project: ProjectRecord`, `onWindowDeleted?: (id: number) => void`
+- Reads `$panelLayout` store to render only visible panels side-by-side via `{#each visiblePanels}`.
+- Each panel div has `data-panel-id` attribute and percentage `width` style from store.
+- Drag-and-drop reorder: `draggable` span on panel header calls `reorderPanels(draggedId, targetId)`.
+- `ResizeHandle` between adjacent panels calls `resizePanels(leftId, delta)` on drag, `savePanelLayout()` on release.
+- Claude terminal opened eagerly in `onMount`; terminal session opened lazily in `$effect` when `terminal` panel becomes visible (guarded by `terminalOpened` flag).
+- `$effect` also re-attaches xterm instance if panel element is re-created by Svelte (checked via `hasChildNodes()`).
+- Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
+- Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (23 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` via stub.
