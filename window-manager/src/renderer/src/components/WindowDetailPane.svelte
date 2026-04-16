@@ -155,7 +155,7 @@
     <div class="actions">
       <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
       <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
-{#if onDelete}
+      {#if onDelete}
         <button
           type="button"
           class="delete-btn"
