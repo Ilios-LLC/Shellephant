@@ -178,7 +178,11 @@
     settingsProject = project
   }
 
-  function handleProjectSettingsSave(): void {
+  async function handleProjectSettingsSave(): Promise<void> {
+    if (settingsProject) {
+      const updated = await window.api.getProject(settingsProject.id)
+      if (updated) projects = projects.map((p) => (p.id === updated.id ? updated : p))
+    }
     settingsProject = null
   }
 

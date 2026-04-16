@@ -106,6 +106,13 @@ describe('Sidebar', () => {
     expect(onRequestSettings).toHaveBeenCalled()
   })
 
+  it('clicking the gear icon on a project calls onProjectSettingsClick with that project', async () => {
+    const p = makeProject(4, 'delta')
+    render(Sidebar, baseProps({ projects: [p] }))
+    await fireEvent.click(screen.getByRole('button', { name: /project settings/i }))
+    expect(onProjectSettingsClick).toHaveBeenCalledWith(p)
+  })
+
   describe('waiting section', () => {
     beforeEach(() => waitingWindows._resetForTest())
 

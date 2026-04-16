@@ -6,7 +6,7 @@
     project: ProjectRecord
     selected: boolean
     onSelect: (project: ProjectRecord) => void
-    onSettingsClick: (project: ProjectRecord) => void
+    onSettingsClick?: (project: ProjectRecord) => void
   }
 
   let { project, selected, onSelect, onSettingsClick = () => {} }: Props = $props()
