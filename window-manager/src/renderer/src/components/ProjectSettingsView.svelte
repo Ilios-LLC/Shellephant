@@ -3,9 +3,12 @@
   import type { ProjectRecord } from '../types'
 
   interface EnvRow {
+    id: number
     key: string
     value: string
   }
+
+  let nextId = 0
 
   interface Props {
     project: ProjectRecord
@@ -20,15 +23,19 @@
   let error = $state('')
 
   onMount(async () => {
-    const record = await window.api.getProject(project.id)
-    if (record?.env_vars) {
-      const parsed = JSON.parse(record.env_vars) as Record<string, string>
-      rows = Object.entries(parsed).map(([key, value]) => ({ key, value }))
+    try {
+      const record = await window.api.getProject(project.id)
+      if (record?.env_vars) {
+        const parsed = JSON.parse(record.env_vars) as Record<string, string>
+        rows = Object.entries(parsed).map(([key, value]) => ({ id: nextId++, key, value }))
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : String(err)
     }
   })
 
   function addRow(): void {
-    rows = [...rows, { key: '', value: '' }]
+    rows = [...rows, { id: nextId++, key: '', value: '' }]
   }
 
   function removeRow(index: number): void {
@@ -63,14 +70,14 @@
     <section class="section">
       <div class="section-title">Environment Variables</div>
       <div class="env-table">
-        {#each rows as row, i (i)}
+        {#each rows as row, i (row.id)}
           <div class="env-row">
             <input
               type="text"
               placeholder="KEY"
               bind:value={row.key}
               disabled={busy}
-              aria-label="key"
+              aria-label={`key ${i + 1}`}
             />
             <span class="eq">=</span>
             <input
@@ -78,12 +85,12 @@
               placeholder="value"
               bind:value={row.value}
               disabled={busy}
-              aria-label="value"
+              aria-label={`value ${i + 1}`}
             />
             <button
               type="button"
               class="remove-btn"
-              aria-label="remove"
+              aria-label={`remove row ${i + 1}`}
               onclick={() => removeRow(i)}
               disabled={busy}
             >×</button>
@@ -116,7 +123,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 100;
+    z-index: 200;
   }
 
   .modal-card {

@@ -45,12 +45,12 @@ describe('ProjectSettingsView', () => {
 
   it('renders the project name in the header', async () => {
     render(ProjectSettingsView, baseProps())
-    await waitFor(() => expect(screen.getByText(/my-project/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/my-project/i)).toBeInTheDocument())
   })
 
   it('renders Environment Variables section heading', async () => {
     render(ProjectSettingsView, baseProps())
-    await waitFor(() => expect(screen.getByText(/environment variables/i)).toBeDefined())
+    await waitFor(() => expect(screen.getByText(/environment variables/i)).toBeInTheDocument())
   })
 
   it('loads existing env vars from the project prop', async () => {
@@ -73,13 +73,12 @@ describe('ProjectSettingsView', () => {
   it('remove button deletes a row', async () => {
     mockGetProject.mockResolvedValue(projectWithVars)
     render(ProjectSettingsView, baseProps({ project: projectWithVars }))
-    await waitFor(() => screen.getAllByRole('button', { name: /remove/i }))
-    const removeBtns = screen.getAllByRole('button', { name: /remove/i })
-    await fireEvent.click(removeBtns[0])
+    await waitFor(() => screen.getByRole('button', { name: /remove row 1/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /remove row 1/i }))
     // FOO row removed, BAZ row remains
     await waitFor(() => {
       expect(screen.queryByDisplayValue('FOO')).toBeNull()
-      expect(screen.getByDisplayValue('BAZ')).toBeDefined()
+      expect(screen.getByDisplayValue('BAZ')).toBeInTheDocument()
     })
   })
 
@@ -114,6 +113,17 @@ describe('ProjectSettingsView', () => {
     await waitFor(() => {
       expect(mockUpdateEnvVars).toHaveBeenCalledWith(1, {})
       expect(onSave).toHaveBeenCalled()
+    })
+  })
+
+  it('shows an inline error when updateProjectEnvVars rejects', async () => {
+    mockGetProject.mockResolvedValue(projectWithVars)
+    mockUpdateEnvVars.mockRejectedValueOnce(new Error('network failure'))
+    render(ProjectSettingsView, baseProps({ project: projectWithVars }))
+    await waitFor(() => screen.getByRole('button', { name: /save/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => {
+      expect(screen.getByText(/network failure/i)).toBeInTheDocument()
     })
   })
 })
