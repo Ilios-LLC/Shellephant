@@ -332,7 +332,7 @@ describe('WindowDetailPane', () => {
       await tick()
       await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
       await tick()
-      expect(mockStartDepLogs).toHaveBeenCalledWith('dep-ctr')
+      expect(mockStartDepLogs).toHaveBeenCalledWith(1, 'dep-ctr')
       expect(screen.getByRole('region', { name: /dep logs/i })).toBeDefined()
     })
 
