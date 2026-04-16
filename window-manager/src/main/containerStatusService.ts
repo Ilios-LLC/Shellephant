@@ -1,6 +1,6 @@
 import { getDocker } from './docker'
 
-export type ContainerStatus = 'running' | 'stopped' | 'unknown'
+type ContainerStatus = 'running' | 'stopped' | 'unknown'
 
 export async function getDepContainersStatus(
   containerIds: string[]
