@@ -22,6 +22,7 @@ describe('Sidebar', () => {
   let onWaitingWindowSelect: ReturnType<typeof vi.fn>
   let onGroupSelect: ReturnType<typeof vi.fn>
   let onGroupCreated: ReturnType<typeof vi.fn>
+  let onProjectSettingsClick: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     onProjectSelect = vi.fn()
@@ -31,6 +32,7 @@ describe('Sidebar', () => {
     onWaitingWindowSelect = vi.fn()
     onGroupSelect = vi.fn()
     onGroupCreated = vi.fn()
+    onProjectSettingsClick = vi.fn()
     vi.stubGlobal('api', { createGroup: vi.fn() })
   })
 
@@ -52,6 +54,7 @@ describe('Sidebar', () => {
       onWaitingWindowSelect,
       onGroupSelect,
       onGroupCreated,
+      onProjectSettingsClick,
       ...overrides
     }
   }

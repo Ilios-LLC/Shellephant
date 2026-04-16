@@ -5,6 +5,7 @@
   import { pushToast } from './lib/toasts'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane, { type MainPaneView } from './components/MainPane.svelte'
+  import ProjectSettingsView from './components/ProjectSettingsView.svelte'
   import type { SettingsRequirement } from './components/SettingsView.svelte'
 
   let projects = $state<ProjectRecord[]>([])
@@ -18,6 +19,7 @@
   let settingsRequiredFor = $state<SettingsRequirement>(null)
   let groups = $state<ProjectGroupRecord[]>([])
   let activeGroupId = $state<number | null>(null)
+  let settingsProject = $state<ProjectRecord | null>(null)
 
   onMount(async () => {
     ;[patStatus, claudeStatus] = await Promise.all([
@@ -172,6 +174,18 @@
     projects = projects.map((p) => (p.id === project.id ? project : p))
   }
 
+  function handleProjectSettingsClick(project: ProjectRecord): void {
+    settingsProject = project
+  }
+
+  function handleProjectSettingsSave(): void {
+    settingsProject = null
+  }
+
+  function handleProjectSettingsCancel(): void {
+    settingsProject = null
+  }
+
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
   let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
   let filteredProjects = $derived(
@@ -198,6 +212,7 @@
     onWaitingWindowSelect={handleWaitingWindowSelect}
     onGroupSelect={handleGroupSelect}
     onGroupCreated={handleGroupCreated}
+    onProjectSettingsClick={handleProjectSettingsClick}
   />
   <MainPane
     project={selectedProject}
@@ -223,6 +238,13 @@
     onNavigateToWindow={handleNavigateToWindow}
     onProjectUpdated={handleProjectUpdated}
   />
+  {#if settingsProject}
+    <ProjectSettingsView
+      project={settingsProject}
+      onSave={handleProjectSettingsSave}
+      onCancel={handleProjectSettingsCancel}
+    />
+  {/if}
 </div>
 
 <style>
