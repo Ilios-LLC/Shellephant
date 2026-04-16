@@ -46,13 +46,12 @@ export interface ProjectDependency {
   created_at: string
 }
 
-export interface WindowDepContainer {
+export interface WindowDependencyContainer {
   id: number
   window_id: number
   dependency_id: number
   container_id: string
-  image: string
-  tag: string
+  created_at: string
 }
 
 export interface Api {
@@ -76,15 +75,12 @@ export interface Api {
 
   // Dependencies
   listDependencies: (projectId: number) => Promise<ProjectDependency[]>
-  createDependency: (
-    projectId: number,
-    data: { image: string; tag: string; envVars?: Record<string, string> }
-  ) => Promise<ProjectDependency>
+  createDependency: (projectId: number, image: string, tag: string, envVars: Record<string, string>) => Promise<ProjectDependency>
   deleteDependency: (id: number) => Promise<void>
-  listWindowDepContainers: (windowId: number) => Promise<WindowDepContainer[]>
+  listWindowDeps: (windowId: number) => Promise<WindowDependencyContainer[]>
 
   // Dep logs
-  startDepLogs: (containerId: string) => Promise<void>
+  startDepLogs: (windowId: number, containerId: string) => Promise<void>
   stopDepLogs: (containerId: string) => void
   onDepLogsData: (callback: (containerId: string, chunk: string) => void) => void
   offDepLogsData: () => void
