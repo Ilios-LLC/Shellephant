@@ -2,7 +2,7 @@ import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject, updateProject, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
-import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
+import { openTerminal, writeInput, resizeTerminal, closeTerminal, type SessionType } from './terminalService'
 import { setActiveContainer } from './focusState'
 import {
   getGitHubPat,
@@ -132,7 +132,7 @@ export function registerIpcHandlers(): void {
   })
 
   // Terminal handlers
-  ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string) => {
+  ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string, sessionType: SessionType = 'terminal') => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error('No window found for terminal:open')
     const row = getDb()
@@ -142,15 +142,15 @@ export function registerIpcHandlers(): void {
       )
       .get(containerId) as { git_url: string } | undefined
     const workDir = row ? `/workspace/${extractRepoName(row.git_url)}` : undefined
-    return openTerminal(containerId, win, cols, rows, displayName, workDir)
+    return openTerminal(containerId, win, cols, rows, displayName, workDir, sessionType)
   })
-  ipcMain.on('terminal:input', (_, containerId: string, data: string) =>
-    writeInput(containerId, data)
+  ipcMain.on('terminal:input', (_, containerId: string, data: string, sessionType: SessionType = 'terminal') =>
+    writeInput(containerId, data, sessionType)
   )
-  ipcMain.on('terminal:resize', (_, containerId: string, cols: number, rows: number) =>
-    resizeTerminal(containerId, cols, rows)
+  ipcMain.on('terminal:resize', (_, containerId: string, cols: number, rows: number, sessionType: SessionType = 'terminal') =>
+    resizeTerminal(containerId, cols, rows, sessionType)
   )
-  ipcMain.on('terminal:close', (_, containerId: string) => closeTerminal(containerId))
+  ipcMain.on('terminal:close', (_, containerId: string, sessionType: SessionType = 'terminal') => closeTerminal(containerId, sessionType))
 
   // Focus handlers
   ipcMain.on('focus:active-container', (_, containerId: string | null) =>

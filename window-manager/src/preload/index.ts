@@ -38,15 +38,16 @@ contextBridge.exposeInMainWorld('api', {
   clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
 
   // Terminal API
-  openTerminal: (containerId: string, cols: number, rows: number, displayName: string) =>
-    ipcRenderer.invoke('terminal:open', containerId, cols, rows, displayName),
-  sendTerminalInput: (containerId: string, data: string) =>
-    ipcRenderer.send('terminal:input', containerId, data),
-  resizeTerminal: (containerId: string, cols: number, rows: number) =>
-    ipcRenderer.send('terminal:resize', containerId, cols, rows),
-  closeTerminal: (containerId: string) => ipcRenderer.send('terminal:close', containerId),
-  onTerminalData: (callback: (containerId: string, data: string) => void) =>
-    ipcRenderer.on('terminal:data', (_, containerId, data) => callback(containerId, data)),
+  openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType: string = 'terminal') =>
+    ipcRenderer.invoke('terminal:open', containerId, cols, rows, displayName, sessionType),
+  sendTerminalInput: (containerId: string, data: string, sessionType: string = 'terminal') =>
+    ipcRenderer.send('terminal:input', containerId, data, sessionType),
+  resizeTerminal: (containerId: string, cols: number, rows: number, sessionType: string = 'terminal') =>
+    ipcRenderer.send('terminal:resize', containerId, cols, rows, sessionType),
+  closeTerminal: (containerId: string, sessionType: string = 'terminal') =>
+    ipcRenderer.send('terminal:close', containerId, sessionType),
+  onTerminalData: (callback: (containerId: string, sessionType: string, data: string) => void) =>
+    ipcRenderer.on('terminal:data', (_, containerId, sessionType, data) => callback(containerId, sessionType, data)),
   offTerminalData: () => ipcRenderer.removeAllListeners('terminal:data'),
   onTerminalWaiting: (
     callback: (info: {

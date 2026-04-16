@@ -176,42 +176,56 @@ describe('registerIpcHandlers', () => {
     expect(deleteWindow).toHaveBeenCalledWith(1)
   })
 
-  it('registers terminal:open handler that calls openTerminal', async () => {
+  it('registers terminal:open handler that calls openTerminal with sessionType', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
-    // mockDbGet returns undefined → workDir resolves to undefined
-    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined)
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window', 'claude')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'claude')
   })
 
-  it('terminal:open passes displayName as 5th arg to openTerminal', async () => {
+  it('terminal:open defaults sessionType to terminal when omitted', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
-    await getHandler('terminal:open')({ sender: {} }, 'ctr-1', 80, 24, 'my-display-name')
-    expect(openTerminal).toHaveBeenCalledWith('ctr-1', mockWin, 80, 24, 'my-display-name', undefined)
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'terminal')
   })
 
   it('terminal:open resolves workDir from DB and passes to openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
     mockDbGet.mockReturnValue({ git_url: 'git@github.com:org/my-repo.git' })
-    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 80, 24, 'win')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 80, 24, 'win', '/workspace/my-repo')
+    await getHandler('terminal:open')({ sender: {} }, 'container-abc', 80, 24, 'win', 'terminal')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 80, 24, 'win', '/workspace/my-repo', 'terminal')
   })
 
-  it('registers terminal:input listener that calls writeInput', () => {
+  it('registers terminal:input listener that calls writeInput with sessionType', () => {
+    getListener('terminal:input')({}, 'container-abc', 'ls\n', 'claude')
+    expect(writeInput).toHaveBeenCalledWith('container-abc', 'ls\n', 'claude')
+  })
+
+  it('terminal:input defaults sessionType to terminal', () => {
     getListener('terminal:input')({}, 'container-abc', 'ls\n')
-    expect(writeInput).toHaveBeenCalledWith('container-abc', 'ls\n')
+    expect(writeInput).toHaveBeenCalledWith('container-abc', 'ls\n', 'terminal')
   })
 
-  it('registers terminal:resize listener that calls resizeTerminal', () => {
+  it('registers terminal:resize listener that calls resizeTerminal with sessionType', () => {
+    getListener('terminal:resize')({}, 'container-abc', 80, 24, 'claude')
+    expect(resizeTerminal).toHaveBeenCalledWith('container-abc', 80, 24, 'claude')
+  })
+
+  it('terminal:resize defaults sessionType to terminal', () => {
     getListener('terminal:resize')({}, 'container-abc', 80, 24)
-    expect(resizeTerminal).toHaveBeenCalledWith('container-abc', 80, 24)
+    expect(resizeTerminal).toHaveBeenCalledWith('container-abc', 80, 24, 'terminal')
   })
 
-  it('registers terminal:close listener that calls closeTerminal', () => {
+  it('registers terminal:close listener that calls closeTerminal with sessionType', () => {
+    getListener('terminal:close')({}, 'container-abc', 'claude')
+    expect(closeTerminal).toHaveBeenCalledWith('container-abc', 'claude')
+  })
+
+  it('terminal:close defaults sessionType to terminal', () => {
     getListener('terminal:close')({}, 'container-abc')
-    expect(closeTerminal).toHaveBeenCalledWith('container-abc')
+    expect(closeTerminal).toHaveBeenCalledWith('container-abc', 'terminal')
   })
 
   it('registers git:current-branch handler that returns the trimmed branch', async () => {
