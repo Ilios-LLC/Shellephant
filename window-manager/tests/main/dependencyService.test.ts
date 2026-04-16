@@ -180,5 +180,9 @@ describe('dependencyService', () => {
       const updated = updateDependency(dep.id, {})
       expect(updated.env_vars).toBeNull()
     })
+
+    it('throws when id does not exist', () => {
+      expect(() => updateDependency(9999, { K: 'v' })).toThrow(/not found/i)
+    })
   })
 })

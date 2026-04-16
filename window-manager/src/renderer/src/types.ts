@@ -1,4 +1,5 @@
-export type WindowStatus = 'running' | 'stopped' | 'unknown'
+export type ContainerStatus = 'running' | 'stopped' | 'unknown'
+export type WindowStatus = ContainerStatus
 
 export interface PortMapping {
   container: number
@@ -54,8 +55,6 @@ export interface WindowDependencyContainer {
   image: string
   tag: string
 }
-
-export type ContainerStatus = 'running' | 'stopped' | 'unknown'
 
 export interface Api {
   // Projects
