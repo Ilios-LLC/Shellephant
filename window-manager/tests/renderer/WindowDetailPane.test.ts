@@ -105,63 +105,30 @@ describe('WindowDetailPane', () => {
     expect(screen.getByRole('button', { name: /push/i })).toBeDisabled()
   })
 
-  it('renders Terminal, Editor, and Both toggle buttons', () => {
+  it('renders Claude, Terminal, and Editor toggle buttons in order', () => {
     getCurrentBranch.mockResolvedValue('main')
     render(WindowDetailPane, { props: { win, project } })
-    expect(screen.getByRole('button', { name: /terminal/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /editor/i })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /both/i })).toBeInTheDocument()
+    const buttons = screen.getAllByRole('button', { name: /^(claude|terminal|editor)$/i })
+    expect(buttons[0]).toHaveAccessibleName(/claude/i)
+    expect(buttons[1]).toHaveAccessibleName(/terminal/i)
+    expect(buttons[2]).toHaveAccessibleName(/editor/i)
+    expect(screen.queryByRole('button', { name: /both/i })).not.toBeInTheDocument()
   })
 
   it('marks the active viewMode button with aria-pressed', () => {
     getCurrentBranch.mockResolvedValue('main')
     render(WindowDetailPane, { props: { win, project, viewMode: 'editor' } })
-    expect(screen.getByRole('button', { name: /editor/i })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByRole('button', { name: /terminal/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^editor$/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^claude$/i })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('calls onViewChange with the clicked mode', async () => {
     getCurrentBranch.mockResolvedValue('main')
     const onViewChange = vi.fn()
-    render(WindowDetailPane, { props: { win, project, viewMode: 'terminal', onViewChange } })
-    await fireEvent.click(screen.getByRole('button', { name: /editor/i }))
-    expect(onViewChange).toHaveBeenCalledWith('editor')
-  })
-
-  it('renders a Claude button', () => {
-    getCurrentBranch.mockResolvedValue('x')
-    render(WindowDetailPane, { props: { win, project } })
-    expect(screen.getByRole('button', { name: /claude/i })).toBeInTheDocument()
-  })
-
-  it('Claude button is disabled when container is not running', () => {
-    getCurrentBranch.mockResolvedValue('x')
-    const stoppedWin = { ...win, status: 'stopped' as const }
-    render(WindowDetailPane, { props: { win: stoppedWin, project } })
-    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
-  })
-
-  it('Claude button is disabled when container status is unknown', () => {
-    getCurrentBranch.mockResolvedValue('x')
-    const unknownWin = { ...win, status: 'unknown' as const }
-    render(WindowDetailPane, { props: { win: unknownWin, project } })
-    expect(screen.getByRole('button', { name: /claude/i })).toBeDisabled()
-  })
-
-  it('Claude button is enabled when container is running', () => {
-    getCurrentBranch.mockResolvedValue('x')
-    render(WindowDetailPane, { props: { win, project } })
-    expect(screen.getByRole('button', { name: /claude/i })).not.toBeDisabled()
-  })
-
-  it('clicking Claude button sends the inject command to the terminal', async () => {
-    getCurrentBranch.mockResolvedValue('x')
-    render(WindowDetailPane, { props: { win, project } })
-    await fireEvent.click(screen.getByRole('button', { name: /claude/i }))
-    expect(sendTerminalInput).toHaveBeenCalledWith(
-      'abc123def456',
-      '\x15claude --dangerously-skip-permissions\n'
-    )
+    render(WindowDetailPane, { props: { win, project, viewMode: 'claude', onViewChange } })
+    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    expect(onViewChange).toHaveBeenCalledWith('terminal')
   })
 
   it('does not render port arrows when window has no ports', () => {
