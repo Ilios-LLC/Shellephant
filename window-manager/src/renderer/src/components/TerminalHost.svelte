@@ -61,7 +61,6 @@
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
     term.open(terminalEl)
-    fitAddon.fit()
     term.reset()
     resizeObserver = new ResizeObserver(() => fitAddon?.fit())
     resizeObserver.observe(terminalEl)

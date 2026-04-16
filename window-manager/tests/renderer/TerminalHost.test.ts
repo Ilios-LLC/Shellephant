@@ -355,4 +355,20 @@ describe('TerminalHost', () => {
     unmount()
     expect(mockApi.offTerminalData).toHaveBeenCalled()
   })
+
+  it('forwards claude terminal onData to sendTerminalInput with claude sessionType', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockOnData).toHaveBeenCalled())
+    const dataHandler = mockOnData.mock.calls[0][0] as (s: string) => void
+    dataHandler('hello')
+    expect(mockApi.sendTerminalInput).toHaveBeenCalledWith('container123abc', 'hello', 'claude')
+  })
+
+  it('forwards claude terminal onResize to resizeTerminal with claude sessionType', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockOnResize).toHaveBeenCalled())
+    const resizeHandler = mockOnResize.mock.calls[0][0] as (size: { cols: number; rows: number }) => void
+    resizeHandler({ cols: 100, rows: 30 })
+    expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 100, 30, 'claude')
+  })
 })
