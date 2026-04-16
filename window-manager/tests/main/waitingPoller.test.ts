@@ -115,17 +115,14 @@ describe('waitingPoller', () => {
       expect(mockExecInContainer).not.toHaveBeenCalled()
     })
 
-    it('dispatches summary when summary file contains valid JSON', async () => {
+    it('does not dispatch summary even with valid JSON while SUMMARY_ENABLED = false', async () => {
       setContainers(['cid-summary'])
       const json = JSON.stringify({ title: 'Built login', bullets: ['added form', 'tests pass'] })
       mockExecInContainer
         .mockResolvedValueOnce({ ok: true, code: 0, stdout: '' })           // waiting check
         .mockResolvedValueOnce({ ok: true, code: 0, stdout: json })          // summary check
       await pollOnce()
-      expect(mockDispatchSummary).toHaveBeenCalledWith('cid-summary', {
-        title: 'Built login',
-        bullets: ['added form', 'tests pass']
-      })
+      expect(mockDispatchSummary).not.toHaveBeenCalled()
     })
 
     it('does not dispatch summary when stdout is empty', async () => {
