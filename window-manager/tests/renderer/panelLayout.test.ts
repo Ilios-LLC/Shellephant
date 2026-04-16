@@ -52,6 +52,27 @@ describe('panelLayout', () => {
     })
   })
 
+  describe('localStorage load on init', () => {
+    it('_resetForTest with saved layout restores that layout', () => {
+      const saved: PanelLayout = {
+        panels: [
+          { id: 'terminal', visible: true,  width: 40 },
+          { id: 'claude',   visible: true,  width: 60 },
+          { id: 'editor',   visible: false, width: 0  }
+        ]
+      }
+      _resetForTest(saved)
+      expect(get(panelLayout).panels.map(p => p.id)).toEqual(['terminal', 'claude', 'editor'])
+      expect(get(panelLayout).panels.find(p => p.id === 'terminal')!.width).toBeCloseTo(40)
+    })
+
+    it('falls back to default when localStorage has invalid JSON', () => {
+      store['panelLayout'] = 'not-valid-json'
+      _resetForTest()
+      expect(get(panelLayout).panels.map(p => p.id)).toEqual(['claude', 'terminal', 'editor'])
+    })
+  })
+
   describe('togglePanel — hide', () => {
     it('hides claude, gives width to editor', () => {
       togglePanel('claude')

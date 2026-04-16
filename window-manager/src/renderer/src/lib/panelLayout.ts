@@ -26,9 +26,19 @@ function saveLayout(layout: PanelLayout): void {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(layout))
 }
 
-const { subscribe, update, set } = writable<PanelLayout>(
-  structuredClone(DEFAULT_LAYOUT)
-)
+function loadLayout(): PanelLayout {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return structuredClone(DEFAULT_LAYOUT)
+    const parsed = JSON.parse(raw) as PanelLayout
+    if (!Array.isArray(parsed.panels) || parsed.panels.length !== 3) return structuredClone(DEFAULT_LAYOUT)
+    return parsed
+  } catch {
+    return structuredClone(DEFAULT_LAYOUT)
+  }
+}
+
+const { subscribe, update, set } = writable<PanelLayout>(loadLayout())
 
 export const panelLayout = { subscribe }
 
