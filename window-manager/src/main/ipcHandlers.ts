@@ -19,6 +19,13 @@ import { getDocker } from './docker'
 import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
+import {
+  listDependencies,
+  createDependency,
+  deleteDependency,
+  listWindowDepContainers
+} from './dependencyService'
+import { startDepLogs, stopDepLogs } from './depLogsService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -68,6 +75,27 @@ export function registerIpcHandlers(): void {
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
+
+  // Dependency handlers
+  ipcMain.handle('project:dep-list', (_, projectId: number) => listDependencies(projectId))
+  ipcMain.handle(
+    'project:dep-create',
+    (_, projectId: number, image: string, tag: string, envVars?: Record<string, string>) =>
+      createDependency(projectId, image, tag, envVars)
+  )
+  ipcMain.handle('project:dep-delete', (_, id: number) => deleteDependency(id))
+  ipcMain.handle('window:dep-containers-list', (_, windowId: number) =>
+    listWindowDepContainers(windowId)
+  )
+
+  // Dep logs handlers
+  ipcMain.handle('window:dep-logs-start', (event, containerId: string) => {
+    const container = getDocker().getContainer(containerId)
+    return startDepLogs(containerId, container, (chunk) =>
+      event.sender.send('window:dep-logs-data', containerId, chunk)
+    )
+  })
+  ipcMain.on('window:dep-logs-stop', (_, containerId: string) => stopDepLogs(containerId))
 
   // Git handlers
   ipcMain.handle('git:current-branch', async (_, windowId: number) => {

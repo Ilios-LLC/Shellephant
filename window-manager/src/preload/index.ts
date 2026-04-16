@@ -19,8 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectId: number) =>
-    ipcRenderer.invoke('window:create', name, projectId),
+  createWindow: (name: string, projectId: number, withDeps: boolean = false) =>
+    ipcRenderer.invoke('window:create', name, projectId, withDeps),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -83,5 +83,27 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:write-file', containerId, path, content),
 
   // Shell
-  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url)
+  openExternal: (url: string) => ipcRenderer.invoke('shell:openExternal', url),
+
+  // Dependency API
+  listDependencies: (projectId: number) =>
+    ipcRenderer.invoke('project:dep-list', projectId),
+  createDependency: (
+    projectId: number,
+    image: string,
+    tag: string,
+    envVars?: Record<string, string>
+  ) => ipcRenderer.invoke('project:dep-create', projectId, image, tag, envVars),
+  deleteDependency: (id: number) => ipcRenderer.invoke('project:dep-delete', id),
+  listWindowDepContainers: (windowId: number) =>
+    ipcRenderer.invoke('window:dep-containers-list', windowId),
+
+  // Dep logs API
+  startDepLogs: (containerId: string) =>
+    ipcRenderer.invoke('window:dep-logs-start', containerId),
+  stopDepLogs: (containerId: string) =>
+    ipcRenderer.send('window:dep-logs-stop', containerId),
+  onDepLogsData: (callback: (containerId: string, chunk: string) => void) =>
+    ipcRenderer.on('window:dep-logs-data', (_, containerId, chunk) => callback(containerId, chunk)),
+  offDepLogsData: () => ipcRenderer.removeAllListeners('window:dep-logs-data')
 })
