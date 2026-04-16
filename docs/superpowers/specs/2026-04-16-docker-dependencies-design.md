@@ -48,7 +48,7 @@ ALTER TABLE windows ADD COLUMN network_id TEXT DEFAULT NULL;
 
 ## Image Validation
 
-Validation runs in the main process on save (IPC: `project:dep-validate`). Dep is not written to DB until validation passes.
+Validation runs in the main process as part of `project:dep-create` and `project:dep-update`. Dep is not written to DB until validation passes.
 
 ### Parsing image string
 
@@ -133,10 +133,12 @@ When "Start with dependencies" toggle is enabled, `createWindow()` in `windowSer
      - Attached to bridge network
      - Network alias = image basename (e.g. `postgres` from `postgres:15`, `bar` from `ghcr.io/foo/bar:latest`)
    - Start container
-   - Insert row into `window_dependency_containers`
-   - **On failure:** stop+remove all dep containers started so far, remove bridge network, emit failure log to UI, abort window creation
+   - Collect container ID in memory (not yet written to DB)
+   - **On failure:** stop+remove all dep containers started so far, remove bridge network, emit failure log to UI, abort window creation (no DB rows written)
 
 3. **Create main container** attached to same bridge network — existing flow continues unchanged (clone, checkout, etc.)
+
+4. **On success:** insert window row (with `network_id`) and all `window_dependency_containers` rows atomically at the end of the flow, consistent with existing behavior where the window row is only written after all steps succeed.
 
 ### DNS / Service Discovery
 
