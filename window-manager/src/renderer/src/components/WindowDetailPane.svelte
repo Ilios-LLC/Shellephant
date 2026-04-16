@@ -71,6 +71,8 @@
   let depLogsVisible = $state(false)
   let selectedDepContainerId = $state<string | null>(null)
   let depLogs = $state('')
+  let depLogEl = $state<HTMLElement | null>(null)
+  const MAX_LOG_LINES = 500
 
   function parsePortsJson(raw: string | undefined): [string, string][] {
     if (!raw) return []
@@ -133,7 +135,11 @@
     depContainers = containers
     if (containers.length > 0) selectedDepContainerId = containers[0].container_id
     window.api.onDepLogsData((containerId: string, chunk: string) => {
-      if (containerId === selectedDepContainerId) depLogs += chunk
+      if (containerId === selectedDepContainerId) {
+        const lines = (depLogs + chunk).split('\n')
+        depLogs = lines.slice(-MAX_LOG_LINES).join('\n')
+        if (depLogEl) depLogEl.scrollTop = depLogEl.scrollHeight
+      }
     })
   })
   onDestroy(() => {
@@ -183,7 +189,7 @@
       {:else if depContainers.length === 1}
         <span class="dep-label">{depContainers[0].image}:{depContainers[0].tag}</span>
       {/if}
-      <pre class="dep-log-output">{depLogs}</pre>
+      <pre class="dep-log-output" bind:this={depLogEl}>{depLogs}</pre>
     </div>
   {/if}
   <div class="info-row">
