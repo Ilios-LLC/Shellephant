@@ -26,7 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   nano \
   vim \
   tmux \
+  python3.11-venv \
+  python3-pip \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install uvicorn
+RUN pip3 install --break-system-packages uvicorn
 
 # Install Go
 ARG GO_VERSION=1.24.2
@@ -35,6 +40,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
   tar -C /usr/local -xzf "go${GO_VERSION}.linux-${ARCH}.tar.gz" && \
   rm "go${GO_VERSION}.linux-${ARCH}.tar.gz"
 ENV PATH=$PATH:/usr/local/go/bin:/home/node/go/bin
+
+# Install air (Go hot reload)
+RUN GOBIN=/usr/local/bin go install github.com/air-verse/air@latest
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
@@ -99,6 +107,7 @@ RUN mkdir -p /home/node/.ssh && \
 
 # Install Claude
 RUN curl -fsSL https://claude.ai/install.sh | bash
+ENV PATH=$PATH:/home/node/.local/bin
 
 # Install Playwright MCP server and download Chromium for headless browsing
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
