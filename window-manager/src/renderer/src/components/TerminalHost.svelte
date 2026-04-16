@@ -61,6 +61,7 @@
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
     term.open(terminalEl)
+    fitAddon.fit()
     term.reset()
     resizeObserver = new ResizeObserver(() => fitAddon?.fit())
     resizeObserver.observe(terminalEl)
@@ -205,7 +206,7 @@
     onPush={runPush}
     onDelete={runDelete}
     onGitStatus={(s) => (gitStatus = s)}
-    commitDisabled={commitBusy || pushBusy || deleteBusy || !gitStatus?.isDirty}
+    commitDisabled={commitBusy || pushBusy || deleteBusy || (gitStatus !== null && !gitStatus.isDirty)}
     pushDisabled={commitBusy || pushBusy || deleteBusy}
     deleteDisabled={deleteBusy}
   />
