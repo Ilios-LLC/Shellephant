@@ -47,7 +47,7 @@ function makeFakePty() {
   let dataHandler: DataHandler | null = null
   let exitHandler: ExitHandler | null = null
   const pty = {
-    write: mockWrite,
+    write: vi.fn(),
     resize: mockResize,
     kill: mockKill,
     onData: (cb: DataHandler) => {
@@ -92,21 +92,21 @@ describe('terminalService', () => {
     win: ReturnType<typeof makeFakeWin>,
     cols: number,
     rows: number,
-    displayName: string = ''
+    displayName: string = '',
+    sessionType: 'terminal' | 'claude' = 'terminal'
   ): Promise<void> {
-    await openTerminal(containerId, win as any, cols, rows, displayName)
+    await openTerminal(containerId, win as any, cols, rows, displayName, undefined, sessionType)
     await vi.advanceTimersByTimeAsync(400)
   }
 
   describe('openTerminal', () => {
-    it('spawns docker exec -it under a node-pty with the given cols/rows', async () => {
+    it('spawns docker exec with cw session for terminal sessionType', async () => {
       const ptyInstance = makeFakePty()
       mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
       await openTerminal('container-1', win as any, 120, 40)
 
-      expect(mockSpawn).toHaveBeenCalledTimes(1)
       const [program, args, opts] = mockSpawn.mock.calls[0] as [
         string,
         string[],
@@ -114,24 +114,62 @@ describe('terminalService', () => {
       ]
       expect(program).toBe('docker')
       expect(args).toContain('exec')
-      expect(args).toContain('-i')
-      expect(args).toContain('-t')
-      expect(args).toContain('TERM=xterm-256color')
-      expect(args).toContain('LANG=C.UTF-8')
-      expect(args).toContain('LC_ALL=C.UTF-8')
-      expect(args).toContain('container-1')
-      expect(args).toContain('sh')
-      expect(args).toContain('-c')
       expect(args.join(' ')).toMatch(/tmux -u new-session -A -s cw/)
+      expect(args.join(' ')).not.toMatch(/cw-claude/)
       expect(opts.cols).toBe(120)
       expect(opts.rows).toBe(40)
-      expect(opts.name).toBe('xterm-256color')
+    })
+
+    it('spawns docker exec with cw-claude session and runs claude for claude sessionType', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openTerminal('container-1', win as any, 120, 40, '', '/workspace/repo', 'claude')
+
+      const [, args] = mockSpawn.mock.calls[0] as [string, string[]]
+      expect(args.join(' ')).toMatch(/tmux -u new-session -A -s cw-claude/)
+      expect(args.join(' ')).toMatch(/claude/)
+    })
+
+    it('terminal:data event includes sessionType', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openTerminal('container-1', win as any, 80, 24, '', undefined, 'claude')
+      ptyInstance.emitData('hello')
+
+      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-1', 'claude', 'hello')
+    })
+
+    it('terminal:data uses terminal sessionType by default', async () => {
+      const ptyInstance = makeFakePty()
+      mockSpawn.mockReturnValueOnce(ptyInstance)
+      const win = makeFakeWin()
+
+      await openTerminal('container-1', win as any, 80, 24)
+      ptyInstance.emitData('hello')
+
+      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-1', 'terminal', 'hello')
+    })
+
+    it('two sessions for same container coexist independently', async () => {
+      const p1 = makeFakePty()
+      const p2 = makeFakePty()
+      mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+      const win = makeFakeWin()
+
+      await openTerminal('container-x', win as any, 80, 24, '', undefined, 'terminal')
+      await openTerminal('container-x', win as any, 80, 24, '', undefined, 'claude')
+
+      expect(mockSpawn).toHaveBeenCalledTimes(2)
+      expect(mockKill).not.toHaveBeenCalled()
     })
 
     it('fires a stale-marker cleanup exec on open', async () => {
       mockSpawn.mockReturnValueOnce(makeFakePty())
       await openTerminal('container-stale', makeFakeWin() as any, 80, 24)
-      // Fire-and-forget — wait a tick for the promise chain to settle.
       await vi.advanceTimersByTimeAsync(0)
       await Promise.resolve()
       expect(mockGetContainer).toHaveBeenCalledWith('container-stale')
@@ -159,29 +197,14 @@ describe('terminalService', () => {
       expect(opts.rows).toBe(1)
     })
 
-    it('forwards pty data immediately (no boot-settle swallow)', async () => {
+    it('forwards pty data immediately', async () => {
       const ptyInstance = makeFakePty()
       mockSpawn.mockReturnValueOnce(ptyInstance)
       const win = makeFakeWin()
 
       await openTerminal('container-boot', win as any, 80, 24)
       ptyInstance.emitData('hello')
-      expect(win.webContents.send).toHaveBeenCalledWith(
-        'terminal:data',
-        'container-boot',
-        'hello'
-      )
-    })
-
-    it('forwards pty data after the settle window opens passthrough', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      const win = makeFakeWin()
-
-      await openAndSettle('container-2', win, 80, 24)
-      ptyInstance.emitData('hello')
-
-      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-2', 'hello')
+      expect(win.webContents.send).toHaveBeenCalledWith('terminal:data', 'container-boot', 'terminal', 'hello')
     })
 
     it('kicks tmux with a size-bump SIGWINCH when the settle elapses', async () => {
@@ -217,14 +240,15 @@ describe('terminalService', () => {
       expect(win.webContents.send).toHaveBeenCalledWith(
         'terminal:data',
         'container-exit',
+        'terminal',
         '\r\n[detached]\r\n'
       )
 
       writeInput('container-exit', 'x')
-      expect(mockWrite).not.toHaveBeenCalled()
+      expect(ptyInstance.write).not.toHaveBeenCalled()
     })
 
-    it('is idempotent: a second open kills the previous pty first', async () => {
+    it('is idempotent within same sessionType: second open kills previous pty', async () => {
       const p1 = makeFakePty()
       const p2 = makeFakePty()
       mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
@@ -239,20 +263,31 @@ describe('terminalService', () => {
   })
 
   describe('getSession', () => {
-    it('returns the session for the given containerId', async () => {
+    it('returns the session for the given containerId and sessionType', async () => {
       mockSpawn.mockReturnValueOnce(makeFakePty())
       const win = makeFakeWin()
-      await openAndSettle('container-gs', win, 80, 24, 'my-name')
-      const s = getSession('container-gs')
+      await openAndSettle('container-gs', win, 80, 24, 'my-name', 'terminal')
+      const s = getSession('container-gs', 'terminal')
       expect(s?.displayName).toBe('my-name')
       expect(s?.win).toBe(win)
+    })
+
+    it('defaults sessionType to terminal', async () => {
+      mockSpawn.mockReturnValueOnce(makeFakePty())
+      await openAndSettle('container-gs2', makeFakeWin(), 80, 24, 'n')
+      expect(getSession('container-gs2')).toBeDefined()
     })
 
     it('returns undefined for an unknown containerId', () => {
       expect(getSession('nope')).toBeUndefined()
     })
-  })
 
+    it('returns undefined when sessionType does not match', async () => {
+      mockSpawn.mockReturnValueOnce(makeFakePty())
+      await openAndSettle('container-gs3', makeFakeWin(), 80, 24, '', 'terminal')
+      expect(getSession('container-gs3', 'claude')).toBeUndefined()
+    })
+  })
 
   describe('writeInput', () => {
     it('writes to the right session pty', async () => {
@@ -260,7 +295,20 @@ describe('terminalService', () => {
       mockSpawn.mockReturnValueOnce(ptyInstance)
       await openAndSettle('container-w', makeFakeWin(), 80, 24)
       writeInput('container-w', 'ls\n')
-      expect(mockWrite).toHaveBeenCalledWith('ls\n')
+      expect(ptyInstance.write).toHaveBeenCalledWith('ls\n')
+    })
+
+    it('routes to the correct sessionType', async () => {
+      const p1 = makeFakePty()
+      const p2 = makeFakePty()
+      mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+      const win = makeFakeWin()
+      await openAndSettle('container-route', win, 80, 24, '', 'terminal')
+      await openAndSettle('container-route', win, 80, 24, '', 'claude')
+
+      writeInput('container-route', 'a', 'claude')
+      expect(p2.write).toHaveBeenCalledWith('a')
+      expect(p1.write).not.toHaveBeenCalled()
     })
 
     it('is a no-op when no session exists', () => {
@@ -316,7 +364,21 @@ describe('terminalService', () => {
 
       expect(mockKill).toHaveBeenCalled()
       writeInput('container-c', 'x')
-      expect(mockWrite).not.toHaveBeenCalled()
+      expect(ptyInstance.write).not.toHaveBeenCalled()
+    })
+
+    it('only closes the specified sessionType', async () => {
+      const p1 = makeFakePty()
+      const p2 = makeFakePty()
+      mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+      const win = makeFakeWin()
+      await openAndSettle('container-sel', win, 80, 24, '', 'terminal')
+      await openAndSettle('container-sel', win, 80, 24, '', 'claude')
+
+      closeTerminal('container-sel', 'terminal')
+
+      expect(mockKill).toHaveBeenCalledTimes(1)
+      expect(getSession('container-sel', 'claude')).toBeDefined()
     })
 
     it('is a no-op when no session exists', () => {
@@ -336,12 +398,23 @@ describe('terminalService', () => {
   })
 
   describe('closeTerminalSessionFor', () => {
-    it('behaves identically to closeTerminal', async () => {
-      const ptyInstance = makeFakePty()
-      mockSpawn.mockReturnValueOnce(ptyInstance)
-      await openAndSettle('container-csf', makeFakeWin(), 80, 24)
-      closeTerminalSessionFor('container-csf')
-      expect(mockKill).toHaveBeenCalled()
+    it('closes both terminal and claude sessions for the container', async () => {
+      const p1 = makeFakePty()
+      const p2 = makeFakePty()
+      mockSpawn.mockReturnValueOnce(p1).mockReturnValueOnce(p2)
+      const win = makeFakeWin()
+      await openAndSettle('container-both', win, 80, 24, '', 'terminal')
+      await openAndSettle('container-both', win, 80, 24, '', 'claude')
+
+      closeTerminalSessionFor('container-both')
+
+      expect(mockKill).toHaveBeenCalledTimes(2)
+      expect(getSession('container-both', 'terminal')).toBeUndefined()
+      expect(getSession('container-both', 'claude')).toBeUndefined()
+    })
+
+    it('is a no-op when no sessions exist', () => {
+      expect(() => closeTerminalSessionFor('ghost')).not.toThrow()
     })
   })
 })

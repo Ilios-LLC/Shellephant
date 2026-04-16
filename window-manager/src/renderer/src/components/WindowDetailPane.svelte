@@ -3,7 +3,7 @@
   import type { ProjectRecord, WindowRecord } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
 
-  type ViewMode = 'terminal' | 'editor' | 'both'
+  type ViewMode = 'claude' | 'terminal' | 'editor'
 
   interface Props {
     win: WindowRecord
@@ -23,7 +23,7 @@
   let {
     win,
     project,
-    viewMode = 'terminal',
+    viewMode = 'claude',
     onViewChange = () => {},
     onCommit = () => {},
     onPush = () => {},
@@ -103,13 +103,17 @@
     if (timer) clearInterval(timer)
   })
 
-  function injectClaude(): void {
-    window.api.sendTerminalInput(win.container_id, '\x15claude --dangerously-skip-permissions\n')
-  }
 </script>
 
 <footer class="detail-pane">
   <div class="toggle-row">
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={viewMode === 'claude'}
+      aria-pressed={viewMode === 'claude'}
+      onclick={() => onViewChange('claude')}
+    >Claude</button>
     <button
       type="button"
       class="toggle-btn"
@@ -124,13 +128,6 @@
       aria-pressed={viewMode === 'editor'}
       onclick={() => onViewChange('editor')}
     >Editor</button>
-    <button
-      type="button"
-      class="toggle-btn"
-      class:active={viewMode === 'both'}
-      aria-pressed={viewMode === 'both'}
-      onclick={() => onViewChange('both')}
-    >Both</button>
   </div>
   <div class="info-row">
     <div class="info">
@@ -158,7 +155,6 @@
     <div class="actions">
       <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
       <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
-      <button type="button" disabled={win.status !== 'running'} onclick={injectClaude}>Claude</button>
       {#if onDelete}
         <button
           type="button"
