@@ -205,8 +205,17 @@
         } else {
           console.warn('[TerminalHost] terminal panel visible but terminalEl not bound')
         }
+      } else if (terminalEl && term && !terminalEl.hasChildNodes()) {
+        // Panel was hidden (DOM node destroyed) and re-shown (fresh node).
+        // XTerm can't be re-opened on a new element — dispose and reinitialize.
+        resizeObserver?.disconnect()
+        resizeObserver = undefined
+        term.dispose()
+        term = undefined
+        fitAddon = undefined
+        terminalOpened = false
+        initTerminalSession()
       } else {
-        if (terminalEl && term && !terminalEl.hasChildNodes()) term.open(terminalEl)
         fitAddon?.fit()
       }
     }

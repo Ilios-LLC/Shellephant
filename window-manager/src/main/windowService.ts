@@ -2,9 +2,10 @@ import Dockerode from 'dockerode'
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getGitHubPat, getClaudeToken } from './settingsService'
+import { getIdentity } from './githubIdentity'
 import { closeTerminalSessionFor } from './terminalService'
 import { toSlug } from './slug'
-import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug } from './gitOps'
+import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug, applyGitIdentityInContainer } from './gitOps'
 import { getDocker } from './docker'
 import type { PortMapping } from './projectService'
 
@@ -119,6 +120,13 @@ export async function createWindow(
 
     onProgress('Checking out branch…')
     await checkoutSlug(container, clonePath, slug, remoteHasSlug)
+
+    try {
+      const { name, email } = await getIdentity(pat)
+      await applyGitIdentityInContainer(container, name, email)
+    } catch (err) {
+      console.warn('Failed to set git identity in container:', err)
+    }
 
     onProgress('Finalizing…')
     const result = db

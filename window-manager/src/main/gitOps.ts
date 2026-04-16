@@ -19,6 +19,15 @@ export interface GitResult {
 
 type Container = ReturnType<Dockerode['getContainer']>
 
+export async function applyGitIdentityInContainer(
+  container: Container,
+  name: string,
+  email: string
+): Promise<void> {
+  await execInContainer(container, ['git', 'config', '--global', 'user.name', name])
+  await execInContainer(container, ['git', 'config', '--global', 'user.email', email])
+}
+
 const BLOCKED_DIRS = new Set([
   'node_modules', '.venv', 'venv', '__pycache__', '.git',
   'dist', 'build', '.next', '.nuxt', 'target', 'coverage', 'out'
