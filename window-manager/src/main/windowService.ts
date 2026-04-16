@@ -195,6 +195,10 @@ export async function createWindow(
     })
     await container.start()
 
+    if (networkId) {
+      await getDocker().getNetwork(networkId).connect({ Container: container.id })
+    }
+
     const portsJson = await resolvePortsJson(container, projectPorts)
 
     onProgress('Preparing workspace…')
