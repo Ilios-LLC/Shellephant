@@ -18,6 +18,8 @@ export interface WindowDepContainer {
   tag: string
 }
 
+export type WindowDependencyContainer = WindowDepContainer
+
 interface RawDep {
   id: number
   project_id: number
@@ -41,7 +43,7 @@ function parseImageRef(image: string): {
   if (parts.length === 1) {
     return { isHub: true, registry: 'hub.docker.com', namespace: 'library', repoPath: parts[0] }
   }
-  if (parts.length === 2 && !parts[0].includes('.')) {
+  if (parts.length === 2 && !parts[0].includes('.') && !parts[0].includes(':')) {
     return { isHub: true, registry: 'hub.docker.com', namespace: parts[0], repoPath: parts[1] }
   }
   const registry = parts[0]
