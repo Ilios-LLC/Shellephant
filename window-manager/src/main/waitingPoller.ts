@@ -7,6 +7,7 @@ import { dispatchSummary } from './summaryDispatcher'
 const POLL_INTERVAL_MS = 3000
 const MARKER = '/tmp/claude-waiting'
 const SUMMARY_FILE = '/tmp/claude-summary.json'
+const SUMMARY_ENABLED = false
 
 export function startWaitingPoller(): () => void {
   void primeMarkers()
@@ -65,7 +66,7 @@ async function checkOne(containerId: string): Promise<void> {
       '-c',
       `test -f ${SUMMARY_FILE} && cat ${SUMMARY_FILE} && rm -f ${SUMMARY_FILE}`
     ])
-    if (s.ok && s.stdout.trim()) {
+    if (SUMMARY_ENABLED && s.ok && s.stdout.trim()) {
       try {
         const summary = JSON.parse(s.stdout.trim()) as { title: string; bullets: string[] }
         if (summary.title && Array.isArray(summary.bullets)) {
