@@ -47,7 +47,8 @@ function makeContainer(id = 'ctr-id') {
 function makeNetwork(id = 'net-id') {
   return {
     id,
-    remove: vi.fn(async () => {})
+    remove: vi.fn(async () => {}),
+    connect: vi.fn(async () => {})
   }
 }
 
@@ -103,7 +104,8 @@ describe('createWindow with deps', () => {
         cb(null, { pipe: vi.fn() })
       }),
       modem: { followProgress: vi.fn((_s: object, cb: () => void) => cb()) },
-      createNetwork: vi.fn(async () => net)
+      createNetwork: vi.fn(async () => net),
+      getNetwork: vi.fn(() => net)
     }
     vi.mocked(getDocker).mockReturnValue(docker as never)
     vi.mocked(listDependencies).mockReturnValue([
@@ -117,6 +119,7 @@ describe('createWindow with deps', () => {
     )
     expect(docker.createContainer).toHaveBeenCalledTimes(2)
     expect(depCtr.start).toHaveBeenCalled()
+    expect(net.connect).toHaveBeenCalledWith(expect.objectContaining({ Container: 'main-ctr' }))
 
     const row = getDb().prepare('SELECT network_id FROM windows WHERE id = ?').get(win.id) as { network_id: string }
     expect(row.network_id).toBe('net-123')
