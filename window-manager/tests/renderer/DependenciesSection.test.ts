@@ -144,4 +144,68 @@ describe('DependenciesSection', () => {
       expect(screen.queryByPlaceholderText(/^KEY$/i)).toBeNull()
     })
   })
+
+  describe('inline env var edit', () => {
+    const depWithEnv = {
+      id: 2,
+      project_id: 1,
+      image: 'redis',
+      tag: '7',
+      env_vars: { REDIS_PASS: 'pw' },
+      created_at: ''
+    }
+
+    it('shows Edit Env Vars button per dep', async () => {
+      mockListDependencies.mockResolvedValue([mockDep])
+      mountSection()
+      await waitFor(() => screen.getByText('postgres:latest'))
+      expect(screen.getByRole('button', { name: /edit env vars/i })).toBeDefined()
+    })
+
+    it('expanding edit shows pre-populated KEY and VALUE inputs', async () => {
+      mockListDependencies.mockResolvedValue([depWithEnv])
+      mountSection()
+      await waitFor(() => screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /edit env vars/i }))
+      expect((screen.getByPlaceholderText(/^KEY$/i) as HTMLInputElement).value).toBe('REDIS_PASS')
+      expect((screen.getByPlaceholderText(/^VALUE$/i) as HTMLInputElement).value).toBe('pw')
+    })
+
+    it('save calls updateDependency with new values', async () => {
+      mockListDependencies.mockResolvedValue([mockDep])
+      mountSection()
+      await waitFor(() => screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      await fireEvent.input(screen.getByPlaceholderText(/^KEY$/i), { target: { value: 'FOO' } })
+      await fireEvent.input(screen.getByPlaceholderText(/^VALUE$/i), { target: { value: 'bar' } })
+      await fireEvent.click(screen.getByRole('button', { name: /save env vars/i }))
+      await waitFor(() => expect(mockUpdateDependency).toHaveBeenCalledWith(1, { FOO: 'bar' }))
+    })
+
+    it('cancel collapses editor without calling updateDependency', async () => {
+      mockListDependencies.mockResolvedValue([mockDep])
+      mountSection()
+      await waitFor(() => screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /cancel env vars/i }))
+      expect(mockUpdateDependency).not.toHaveBeenCalled()
+      expect(screen.queryByPlaceholderText(/^KEY$/i)).toBeNull()
+    })
+
+    it('opening a second edit collapses the first', async () => {
+      const dep2 = { ...depWithEnv, id: 3, image: 'mysql', tag: '8' }
+      mockListDependencies.mockResolvedValue([depWithEnv, dep2])
+      mountSection()
+      await waitFor(() => {
+        const btns = screen.getAllByRole('button', { name: /edit env vars/i })
+        expect(btns).toHaveLength(2)
+      })
+      const [btn1, btn2] = screen.getAllByRole('button', { name: /edit env vars/i })
+      await fireEvent.click(btn1)
+      expect(screen.getAllByPlaceholderText(/^KEY$/i)).toHaveLength(1)
+      await fireEvent.click(btn2)
+      expect(screen.getAllByPlaceholderText(/^KEY$/i)).toHaveLength(1)
+    })
+  })
 })
