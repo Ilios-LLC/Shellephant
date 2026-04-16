@@ -9,7 +9,7 @@
     onSettingsClick: (project: ProjectRecord) => void
   }
 
-  let { project, selected, onSelect, onSettingsClick }: Props = $props()
+  let { project, selected, onSelect, onSettingsClick = () => {} }: Props = $props()
 
   function extractPath(gitUrl: string): string {
     const match = gitUrl.match(/^git@[^:]+:(.+?)(?:\.git)?$/)
@@ -137,5 +137,9 @@
 
   .gear-btn:hover {
     color: var(--accent-hi);
+  }
+
+  .gear-btn:focus-visible {
+    opacity: 1;
   }
 </style>
