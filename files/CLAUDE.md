@@ -16,6 +16,17 @@ If asked to view Jira tickets, do so with the Atlassian MCP server.
 
 When making commits, never mention yourself as a co-author.
 
+## Conversation Summarization Hook (DISABLED)
+
+The Stop hook that generates a conversation summary (title + bullet points) and writes it to `/tmp/claude-summary.json` is **currently disabled**. The hook entry in `claude-settings.json` is intact; only the script exits early.
+
+To re-enable: in `files/claude-summarize.sh`, remove the two lines after the header comments:
+```
+# DISABLED: ...
+exit 0
+```
+Then rebuild the container image so `/usr/local/bin/claude-summarize.sh` is updated.
+
 ## Quality Control
 
 

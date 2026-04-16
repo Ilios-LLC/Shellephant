@@ -64,8 +64,8 @@ export function openTerminal(
   let tmuxCmd: string
   if (sessionType === 'claude') {
     tmuxCmd = workDir
-      ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'claude'`
-      : `exec tmux -u new-session -A -s cw-claude 'claude'`
+      ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'bash -c "claude; exec bash"'`
+      : `exec tmux -u new-session -A -s cw-claude 'bash -c "claude; exec bash"'`
   } else {
     tmuxCmd = workDir
       ? `exec tmux -u new-session -A -s cw -c '${workDir}'`
