@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { ProjectDependency } from '../types'
-  import { onMount } from 'svelte'
+  import { onMount, onDestroy } from 'svelte'
 
   interface Props { projectId: number }
   let { projectId }: Props = $props()
@@ -16,6 +16,7 @@
   let deleteTimer: ReturnType<typeof setTimeout> | null = null
 
   onMount(async () => { await load() })
+  onDestroy(() => { if (deleteTimer) clearTimeout(deleteTimer) })
 
   async function load(): Promise<void> {
     loading = true
@@ -51,8 +52,12 @@
     if (confirmDeleteId !== id) { armDelete(id); return }
     if (deleteTimer) clearTimeout(deleteTimer)
     confirmDeleteId = null
-    await window.api.deleteDependency(id)
-    await load()
+    try {
+      await window.api.deleteDependency(id)
+      await load()
+    } catch (e) {
+      formError = e instanceof Error ? e.message : String(e)
+    }
   }
 
   function getDeleteLabel(dep: ProjectDependency): string {

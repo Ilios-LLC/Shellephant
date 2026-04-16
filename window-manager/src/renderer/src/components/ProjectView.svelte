@@ -1,5 +1,6 @@
 <!-- src/renderer/src/components/ProjectView.svelte -->
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
   import DependenciesSection from './DependenciesSection.svelte'
 
@@ -85,6 +86,11 @@
       deletingWindowId = null
     }
   }
+
+  onDestroy(() => {
+    if (deleteTimeout) clearTimeout(deleteTimeout)
+    if (winDeleteTimeout) clearTimeout(winDeleteTimeout)
+  })
 
   let activeTab = $state<'windows' | 'deps'>('windows')
 </script>

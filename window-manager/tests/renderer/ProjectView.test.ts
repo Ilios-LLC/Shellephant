@@ -131,7 +131,8 @@ describe('ProjectView', () => {
       vi.stubGlobal('api', {
         deleteProject: vi.fn(),
         deleteWindow: vi.fn(),
-        updateProject: mockUpdate
+        updateProject: mockUpdate,
+        listDependencies: vi.fn().mockResolvedValue([])
       })
       const onProjectUpdated = vi.fn()
       render(ProjectView, baseProjectViewProps({
@@ -151,7 +152,8 @@ describe('ProjectView', () => {
       vi.stubGlobal('api', {
         deleteProject: vi.fn(),
         deleteWindow: vi.fn(),
-        updateProject: mockUpdate
+        updateProject: mockUpdate,
+        listDependencies: vi.fn().mockResolvedValue([])
       })
       const projectWithGroup = { ...project, group_id: 1 }
       const onProjectUpdated = vi.fn()
