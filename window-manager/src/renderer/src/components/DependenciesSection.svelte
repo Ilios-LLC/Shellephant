@@ -12,11 +12,20 @@
   let formTag = $state('latest')
   let formError = $state('')
   let formSaving = $state(false)
+  let formEnvRows = $state<{ key: string; value: string }[]>([])
   let confirmDeleteId = $state<number | null>(null)
   let deleteTimer: ReturnType<typeof setTimeout> | null = null
 
   onMount(async () => { await load() })
   onDestroy(() => { if (deleteTimer) clearTimeout(deleteTimer) })
+
+  function addFormEnvRow(): void {
+    formEnvRows = [...formEnvRows, { key: '', value: '' }]
+  }
+
+  function removeFormEnvRow(i: number): void {
+    formEnvRows = formEnvRows.filter((_, idx) => idx !== i)
+  }
 
   async function load(): Promise<void> {
     loading = true
@@ -30,10 +39,14 @@
     formSaving = true
     formError = ''
     try {
-      await window.api.createDependency(projectId, image, formTag.trim() || 'latest', {})
+      const envVars = Object.fromEntries(
+        formEnvRows.filter(r => r.key.trim()).map(r => [r.key.trim(), r.value])
+      )
+      await window.api.createDependency(projectId, image, formTag.trim() || 'latest', envVars)
       showForm = false
       formImage = ''
       formTag = 'latest'
+      formEnvRows = []
       await load()
     } catch (e) {
       formError = e instanceof Error ? e.message : String(e)
@@ -105,6 +118,41 @@
           class="tag-input"
         />
       </div>
+      <div class="env-rows">
+        {#each formEnvRows as row, i (i)}
+          <div class="env-row">
+            <input
+              placeholder="KEY"
+              aria-label="env key"
+              bind:value={row.key}
+              disabled={formSaving}
+              class="env-key-input"
+            />
+            <span class="env-eq">=</span>
+            <input
+              placeholder="VALUE"
+              aria-label="env value"
+              bind:value={row.value}
+              disabled={formSaving}
+              class="env-val-input"
+            />
+            <button
+              type="button"
+              aria-label="remove env var"
+              onclick={() => removeFormEnvRow(i)}
+              disabled={formSaving}
+              class="env-remove-btn"
+            >×</button>
+          </div>
+        {/each}
+        <button
+          type="button"
+          aria-label="add env var"
+          onclick={addFormEnvRow}
+          disabled={formSaving}
+          class="env-add-btn"
+        >+ Env Var</button>
+      </div>
       {#if formError}<p class="error">{formError}</p>{/if}
       <div class="form-actions">
         <button
@@ -149,4 +197,11 @@
   .save-btn:disabled, .form-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
   .add-btn { font-family: var(--font-ui); font-size: 0.8rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); background: transparent; color: var(--fg-1); border-radius: 4px; cursor: pointer; align-self: flex-start; }
   .error { font-size: 0.78rem; color: var(--danger); margin: 0; }
+  .env-rows { display: flex; flex-direction: column; gap: 0.3rem; }
+  .env-row { display: flex; align-items: center; gap: 0.3rem; }
+  .env-key-input { flex: 1; padding: 0.35rem 0.45rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; color: var(--fg-0); font-family: var(--font-mono); font-size: 0.8rem; }
+  .env-val-input { flex: 2; padding: 0.35rem 0.45rem; background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; color: var(--fg-0); font-family: var(--font-mono); font-size: 0.8rem; }
+  .env-eq { font-family: var(--font-mono); font-size: 0.82rem; color: var(--fg-3); }
+  .env-remove-btn { font-size: 0.78rem; padding: 0 0.35rem; border: 1px solid var(--border); background: transparent; color: var(--fg-2); border-radius: 4px; cursor: pointer; line-height: 1.6; }
+  .env-add-btn { font-family: var(--font-ui); font-size: 0.75rem; padding: 0.2rem 0.5rem; border: 1px solid var(--border); background: transparent; color: var(--fg-2); border-radius: 4px; cursor: pointer; align-self: flex-start; }
 </style>

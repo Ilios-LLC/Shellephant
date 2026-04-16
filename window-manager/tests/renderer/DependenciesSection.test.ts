@@ -13,15 +13,18 @@ describe('DependenciesSection', () => {
   let mockListDependencies: ReturnType<typeof vi.fn>
   let mockCreateDependency: ReturnType<typeof vi.fn>
   let mockDeleteDependency: ReturnType<typeof vi.fn>
+  let mockUpdateDependency: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     mockListDependencies = vi.fn().mockResolvedValue([])
     mockCreateDependency = vi.fn().mockResolvedValue(mockDep)
     mockDeleteDependency = vi.fn().mockResolvedValue(undefined)
+    mockUpdateDependency = vi.fn().mockResolvedValue(mockDep)
     vi.stubGlobal('api', {
       listDependencies: mockListDependencies,
       createDependency: mockCreateDependency,
-      deleteDependency: mockDeleteDependency
+      deleteDependency: mockDeleteDependency,
+      updateDependency: mockUpdateDependency
     })
   })
 
@@ -76,5 +79,59 @@ describe('DependenciesSection', () => {
     await fireEvent.click(del)
     await fireEvent.click(screen.getByRole('button', { name: /confirm/i }))
     await waitFor(() => expect(mockDeleteDependency).toHaveBeenCalledWith(1))
+  })
+
+  describe('add form env vars', () => {
+    async function openForm() {
+      mountSection()
+      await waitFor(() => screen.getByRole('button', { name: /add dependency/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /add dependency/i }))
+    }
+
+    it('shows Add Env Var button in add form', async () => {
+      await openForm()
+      expect(screen.getByRole('button', { name: /add env var/i })).toBeDefined()
+    })
+
+    it('clicking Add Env Var renders KEY and VALUE inputs', async () => {
+      await openForm()
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      expect(screen.getByPlaceholderText(/^KEY$/i)).toBeDefined()
+      expect(screen.getByPlaceholderText(/^VALUE$/i)).toBeDefined()
+    })
+
+    it('clicking × removes the env var row', async () => {
+      await openForm()
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      expect(screen.getByPlaceholderText(/^KEY$/i)).toBeDefined()
+      await fireEvent.click(screen.getByRole('button', { name: /remove env var/i }))
+      expect(screen.queryByPlaceholderText(/^KEY$/i)).toBeNull()
+    })
+
+    it('passes env vars to createDependency on save', async () => {
+      mockListDependencies.mockResolvedValueOnce([]).mockResolvedValueOnce([mockDep])
+      await openForm()
+      await fireEvent.input(screen.getByPlaceholderText(/postgres/i), { target: { value: 'postgres' } })
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      await fireEvent.input(screen.getByPlaceholderText(/^KEY$/i), { target: { value: 'DB_PASS' } })
+      await fireEvent.input(screen.getByPlaceholderText(/^VALUE$/i), { target: { value: 'secret' } })
+      await fireEvent.click(screen.getByRole('button', { name: /save dependency/i }))
+      await waitFor(() => {
+        expect(mockCreateDependency).toHaveBeenCalledWith(1, 'postgres', 'latest', { DB_PASS: 'secret' })
+      })
+    })
+
+    it('skips rows with blank KEY on save', async () => {
+      mockListDependencies.mockResolvedValueOnce([]).mockResolvedValueOnce([mockDep])
+      await openForm()
+      await fireEvent.input(screen.getByPlaceholderText(/postgres/i), { target: { value: 'postgres' } })
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      // leave KEY blank, fill VALUE
+      await fireEvent.input(screen.getByPlaceholderText(/^VALUE$/i), { target: { value: 'ignored' } })
+      await fireEvent.click(screen.getByRole('button', { name: /save dependency/i }))
+      await waitFor(() => {
+        expect(mockCreateDependency).toHaveBeenCalledWith(1, 'postgres', 'latest', {})
+      })
+    })
   })
 })
