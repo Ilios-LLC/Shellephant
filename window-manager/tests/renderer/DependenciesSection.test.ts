@@ -207,5 +207,18 @@ describe('DependenciesSection', () => {
       await fireEvent.click(btn2)
       expect(screen.getAllByPlaceholderText(/^KEY$/i)).toHaveLength(1)
     })
+
+    it('shows editError when updateDependency rejects', async () => {
+      mockUpdateDependency.mockRejectedValueOnce(new Error('update failed'))
+      mockListDependencies.mockResolvedValue([mockDep])
+      mountSection()
+      await waitFor(() => screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /edit env vars/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /add env var/i }))
+      await fireEvent.input(screen.getByPlaceholderText(/^KEY$/i), { target: { value: 'K' } })
+      await fireEvent.input(screen.getByPlaceholderText(/^VALUE$/i), { target: { value: 'V' } })
+      await fireEvent.click(screen.getByRole('button', { name: /save env vars/i }))
+      await waitFor(() => expect(screen.getByText(/update failed/i)).toBeDefined())
+    })
   })
 })

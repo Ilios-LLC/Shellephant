@@ -301,7 +301,7 @@
   .form-actions { display: flex; justify-content: flex-end; gap: 0.4rem; margin-top: 0.25rem; }
   .form-actions button { font-family: var(--font-ui); font-size: 0.82rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); background: transparent; color: var(--fg-1); border-radius: 4px; cursor: pointer; }
   .save-btn { background: var(--accent); border-color: var(--accent); color: white; }
-  .save-btn:disabled, .form-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .save-btn:disabled, .form-actions button:disabled, .edit-actions button:disabled { opacity: 0.4; cursor: not-allowed; }
   .add-btn { font-family: var(--font-ui); font-size: 0.8rem; padding: 0.35rem 0.7rem; border: 1px solid var(--border); background: transparent; color: var(--fg-1); border-radius: 4px; cursor: pointer; align-self: flex-start; }
   .error { font-size: 0.78rem; color: var(--danger); margin: 0; }
   .env-rows { display: flex; flex-direction: column; gap: 0.3rem; }
