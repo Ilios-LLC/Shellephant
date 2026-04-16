@@ -10,7 +10,8 @@ import {
   createDependency,
   deleteDependency,
   validateImage,
-  listWindowDeps
+  listWindowDeps,
+  updateDependency
 } from '../../src/main/dependencyService'
 
 function seedProject(): number {
@@ -143,6 +144,33 @@ describe('dependencyService', () => {
       const pid = seedProject()
       const wid = seedWindow(pid)
       expect(listWindowDeps(wid)).toEqual([])
+    })
+  })
+
+  describe('updateDependency', () => {
+    it('updates env_vars and returns the updated dep', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200 })
+      const pid = seedProject()
+      const dep = await createDependency(pid, 'postgres', 'latest', {})
+      const updated = updateDependency(dep.id, { DB_PASS: 'hunter2' })
+      expect(updated.env_vars).toEqual({ DB_PASS: 'hunter2' })
+      expect(updated.id).toBe(dep.id)
+    })
+
+    it('persists env_vars so listDependencies reflects the change', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200 })
+      const pid = seedProject()
+      const dep = await createDependency(pid, 'postgres', 'latest', {})
+      updateDependency(dep.id, { KEY: 'val' })
+      expect(listDependencies(pid)[0].env_vars).toEqual({ KEY: 'val' })
+    })
+
+    it('sets env_vars to null when passed null', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200 })
+      const pid = seedProject()
+      const dep = await createDependency(pid, 'postgres', 'latest', { EXISTING: 'x' })
+      const updated = updateDependency(dep.id, null)
+      expect(updated.env_vars).toBeNull()
     })
   })
 })
