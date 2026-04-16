@@ -1,5 +1,22 @@
+import { writable } from 'svelte/store'
+
+const mockPanelLayoutStore = writable({
+  panels: [
+    { id: 'claude',   visible: true,  width: 50 },
+    { id: 'terminal', visible: false, width: 0  },
+    { id: 'editor',   visible: true,  width: 50 }
+  ]
+})
+const mockTogglePanel = vi.fn()
+
+vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
+  panelLayout: { subscribe: (...args: unknown[]) => mockPanelLayoutStore.subscribe(args[0] as Parameters<typeof mockPanelLayoutStore.subscribe>[0]) },
+  togglePanel: (...args: unknown[]) => mockTogglePanel(...args)
+}))
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
 
@@ -13,6 +30,14 @@ beforeEach(() => {
   sendTerminalInput.mockReset()
   getGitStatus.mockReset()
   getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
+  mockTogglePanel.mockReset()
+  mockPanelLayoutStore.set({
+    panels: [
+      { id: 'claude',   visible: true,  width: 50 },
+      { id: 'terminal', visible: false, width: 0  },
+      { id: 'editor',   visible: true,  width: 50 }
+    ]
+  })
   // @ts-expect-error test bridge
   globalThis.window.api = { getCurrentBranch, sendTerminalInput, getGitStatus }
 })
@@ -115,20 +140,49 @@ describe('WindowDetailPane', () => {
     expect(screen.queryByRole('button', { name: /both/i })).not.toBeInTheDocument()
   })
 
-  it('marks the active viewMode button with aria-pressed', () => {
+  it('claude button aria-pressed true when claude visible in store', () => {
     getCurrentBranch.mockResolvedValue('main')
-    render(WindowDetailPane, { props: { win, project, viewMode: 'editor' } })
-    expect(screen.getByRole('button', { name: /^editor$/i })).toHaveAttribute('aria-pressed', 'true')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^claude$/i })).toHaveAttribute('aria-pressed', 'true')
     expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'false')
-    expect(screen.getByRole('button', { name: /^claude$/i })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /^editor$/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
-  it('calls onViewChange with the clicked mode', async () => {
+  it('calling togglePanel when a toggle button is clicked', async () => {
     getCurrentBranch.mockResolvedValue('main')
-    const onViewChange = vi.fn()
-    render(WindowDetailPane, { props: { win, project, viewMode: 'claude', onViewChange } })
+    render(WindowDetailPane, { props: { win, project } })
     await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
-    expect(onViewChange).toHaveBeenCalledWith('terminal')
+    expect(mockTogglePanel).toHaveBeenCalledWith('terminal')
+  })
+
+  it('toggle button disabled when it is the only visible panel', () => {
+    getCurrentBranch.mockResolvedValue('main')
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 100 },
+        { id: 'terminal', visible: false, width: 0   },
+        { id: 'editor',   visible: false, width: 0   }
+      ]
+    })
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^claude$/i })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^terminal$/i })).not.toBeDisabled()
+    expect(screen.getByRole('button', { name: /^editor$/i })).not.toBeDisabled()
+  })
+
+  it('updates aria-pressed when store changes after mount', async () => {
+    getCurrentBranch.mockResolvedValue('main')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'false')
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 33 },
+        { id: 'terminal', visible: true,  width: 33 },
+        { id: 'editor',   visible: true,  width: 34 }
+      ]
+    })
+    await tick()
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('does not render port arrows when window has no ports', () => {

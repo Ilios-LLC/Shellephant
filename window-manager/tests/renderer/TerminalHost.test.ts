@@ -75,6 +75,35 @@ vi.mock('../../src/renderer/src/components/EditorPane.svelte', () => ({
   default: vi.fn(() => ({}))
 }))
 
+import { writable } from 'svelte/store'
+
+const mockPanelLayoutStore = writable({
+  panels: [
+    { id: 'claude',   visible: true,  width: 50 },
+    { id: 'terminal', visible: false, width: 0  },
+    { id: 'editor',   visible: true,  width: 50 }
+  ]
+})
+const mockTogglePanel = vi.fn()
+const mockResizePanels = vi.fn()
+const mockReorderPanels = vi.fn()
+const mockSavePanelLayout = vi.fn()
+
+vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
+  panelLayout: {
+    subscribe: (...args: unknown[]) =>
+      mockPanelLayoutStore.subscribe(args[0] as Parameters<typeof mockPanelLayoutStore.subscribe>[0])
+  },
+  togglePanel: (...args: unknown[]) => mockTogglePanel(...args),
+  resizePanels: (...args: unknown[]) => mockResizePanels(...args),
+  reorderPanels: (...args: unknown[]) => mockReorderPanels(...args),
+  savePanelLayout: () => mockSavePanelLayout()
+}))
+
+vi.mock('../../src/renderer/src/components/ResizeHandle.svelte', () => ({
+  default: vi.fn(() => ({}))
+}))
+
 import TerminalHost from '../../src/renderer/src/components/TerminalHost.svelte'
 
 const mockWindow: WindowRecord = {
@@ -133,9 +162,21 @@ describe('TerminalHost', () => {
       'ResizeObserver',
       class {
         observe = vi.fn()
+        unobserve = vi.fn()
         disconnect = vi.fn()
       }
     )
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 50 },
+        { id: 'terminal', visible: false, width: 0  },
+        { id: 'editor',   visible: true,  width: 50 }
+      ]
+    })
+    mockTogglePanel.mockReset()
+    mockResizePanels.mockReset()
+    mockReorderPanels.mockReset()
+    mockSavePanelLayout.mockReset()
   })
 
   afterEach(() => {
@@ -166,38 +207,46 @@ describe('TerminalHost', () => {
     expect(terminalCalls).toHaveLength(0)
   })
 
-  it('opens terminal session on first click of Terminal button', async () => {
+  it('opens terminal session when terminal panel becomes visible in store', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
     mockApi.openTerminal.mockClear()
 
-    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p =>
+        p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p
+      )
+    }))
 
     await vi.waitFor(() => {
       expect(mockApi.openTerminal).toHaveBeenCalledWith(
-        'container123abc',
-        expect.any(Number),
-        expect.any(Number),
-        'host-test',
-        'terminal'
+        'container123abc', expect.any(Number), expect.any(Number), 'host-test', 'terminal'
       )
     })
   })
 
-  it('does not re-open terminal session on subsequent Terminal clicks', async () => {
+  it('does not re-open terminal session on second visibility change', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
 
-    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
     await vi.waitFor(() => {
       const calls = mockApi.openTerminal.mock.calls as unknown[][]
-      expect(calls.some((c) => c[4] === 'terminal')).toBe(true)
+      expect(calls.some(c => c[4] === 'terminal')).toBe(true)
     })
     mockApi.openTerminal.mockClear()
 
-    await fireEvent.click(screen.getByRole('button', { name: /^claude$/i }))
-    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    // Hide then re-show terminal
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: false, width: 0 } : p)
+    }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
 
+    await new Promise(r => setTimeout(r, 10))
     expect(mockApi.openTerminal).not.toHaveBeenCalled()
   })
 
@@ -215,11 +264,13 @@ describe('TerminalHost', () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
-    // Switch to terminal first so term is initialized
-    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    // Make terminal visible to trigger initTerminalSession
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
     await vi.waitFor(() => {
       const calls = mockApi.openTerminal.mock.calls as unknown[][]
-      expect(calls.some((c) => c[4] === 'terminal')).toBe(true)
+      expect(calls.some(c => c[4] === 'terminal')).toBe(true)
     })
     mockWrite.mockClear()
 
@@ -249,7 +300,9 @@ describe('TerminalHost', () => {
   it('closes terminal session on unmount if it was opened', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
-    await fireEvent.click(screen.getByRole('button', { name: /^terminal$/i }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
     await vi.waitFor(() => {
       const calls = mockApi.openTerminal.mock.calls as unknown[][]
       expect(calls.some((c) => c[4] === 'terminal')).toBe(true)
@@ -280,18 +333,29 @@ describe('TerminalHost', () => {
     expect(hasWebLinks).toBe(true)
   })
 
-  it('Claude toggle button is active (aria-pressed true) by default', async () => {
+  it('renders claude panel by default', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: /^claude$/i })).toHaveAttribute('aria-pressed', 'true')
+    expect(document.querySelector('[data-panel-id="claude"]')).toBeTruthy()
   })
 
-  it('hides claude terminal div when Editor mode is active', async () => {
+  it('does not render terminal panel when hidden in store', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
-    await fireEvent.click(screen.getByRole('button', { name: /^editor$/i }))
-    const claudeBody = document.querySelectorAll('.terminal-body')[0]
-    expect(claudeBody?.classList.contains('hidden')).toBe(true)
+    expect(document.querySelector('[data-panel-id="terminal"]')).toBeNull()
+  })
+
+  it('renders terminal panel when visible in store', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true, width: 50 },
+        { id: 'terminal', visible: true, width: 25 },
+        { id: 'editor',   visible: true, width: 25 }
+      ]
+    })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    expect(document.querySelector('[data-panel-id="terminal"]')).toBeTruthy()
   })
 
   it('removes from waitingWindows when user types in claude terminal', async () => {
