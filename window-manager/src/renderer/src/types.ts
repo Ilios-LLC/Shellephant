@@ -53,6 +53,7 @@ export interface Api {
 
   // Git
   getCurrentBranch: (windowId: number) => Promise<string>
+  getGitStatus: (windowId: number) => Promise<{ isDirty: boolean; added: number; deleted: number } | null>
   commit: (
     windowId: number,
     payload: { subject: string; body?: string }
@@ -68,11 +69,11 @@ export interface Api {
   clearClaudeToken: () => Promise<TokenStatus>
 
   // Terminal
-  openTerminal: (containerId: string, cols: number, rows: number, displayName: string) => Promise<void>
-  sendTerminalInput: (containerId: string, data: string) => void
-  resizeTerminal: (containerId: string, cols: number, rows: number) => void
-  closeTerminal: (containerId: string) => void
-  onTerminalData: (callback: (containerId: string, data: string) => void) => void
+  openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType?: string) => Promise<void>
+  sendTerminalInput: (containerId: string, data: string, sessionType?: string) => void
+  resizeTerminal: (containerId: string, cols: number, rows: number, sessionType?: string) => void
+  closeTerminal: (containerId: string, sessionType?: string) => void
+  onTerminalData: (callback: (containerId: string, sessionType: string, data: string) => void) => void
   offTerminalData: () => void
   onTerminalWaiting: (
     callback: (info: {
