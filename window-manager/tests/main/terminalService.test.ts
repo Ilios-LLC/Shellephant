@@ -245,7 +245,7 @@ describe('terminalService', () => {
       )
 
       writeInput('container-exit', 'x')
-      expect(mockWrite).not.toHaveBeenCalled()
+      expect(ptyInstance.write).not.toHaveBeenCalled()
     })
 
     it('is idempotent within same sessionType: second open kills previous pty', async () => {
@@ -364,7 +364,7 @@ describe('terminalService', () => {
 
       expect(mockKill).toHaveBeenCalled()
       writeInput('container-c', 'x')
-      expect(mockWrite).not.toHaveBeenCalled()
+      expect(ptyInstance.write).not.toHaveBeenCalled()
     })
 
     it('only closes the specified sessionType', async () => {
