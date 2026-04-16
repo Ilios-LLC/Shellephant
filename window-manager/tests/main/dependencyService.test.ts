@@ -172,5 +172,13 @@ describe('dependencyService', () => {
       const updated = updateDependency(dep.id, null)
       expect(updated.env_vars).toBeNull()
     })
+
+    it('stores null when env_vars is an empty object', async () => {
+      mockFetch.mockResolvedValueOnce({ ok: true, status: 200 })
+      const pid = seedProject()
+      const dep = await createDependency(pid, 'postgres', 'latest', { EXISTING: 'x' })
+      const updated = updateDependency(dep.id, {})
+      expect(updated.env_vars).toBeNull()
+    })
   })
 })
