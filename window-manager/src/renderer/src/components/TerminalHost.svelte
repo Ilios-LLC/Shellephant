@@ -62,7 +62,7 @@
     scrollback: 1000
   }
 
-  function initTerminalSession(): void {
+  function initTerminalSession(launchBackend = true): void {
     terminalOpened = true
     term = new XTerm(xtermOptions)
     fitAddon = new FitAddon()
@@ -70,10 +70,13 @@
     term.loadAddon(new WebLinksAddon())
     term.open(terminalEl)
     fitAddon.fit()
-    term.reset()
+    term.focus()
     resizeObserver = new ResizeObserver(() => fitAddon?.fit())
     resizeObserver.observe(terminalEl)
-    window.api.openTerminal(win.container_id, term.cols, term.rows, win.name, 'terminal')
+    if (launchBackend) {
+      term.reset()
+      window.api.openTerminal(win.container_id, term.cols, term.rows, win.name, 'terminal')
+    }
     term.onData((data: string) => {
       window.api.sendTerminalInput(win.container_id, data, 'terminal')
       waitingWindows.remove(win.container_id)
@@ -207,14 +210,15 @@
         }
       } else if (terminalEl && term && !terminalEl.hasChildNodes()) {
         // Panel was hidden (DOM node destroyed) and re-shown (fresh node).
-        // XTerm can't be re-opened on a new element — dispose and reinitialize.
+        // XTerm can't be re-opened on a new element — dispose and reinitialize
+        // the renderer only; the backend tmux session stays alive.
         resizeObserver?.disconnect()
         resizeObserver = undefined
         term.dispose()
         term = undefined
         fitAddon = undefined
         terminalOpened = false
-        initTerminalSession()
+        initTerminalSession(false)
       } else {
         fitAddon?.fit()
       }

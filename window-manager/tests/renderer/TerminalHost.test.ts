@@ -6,6 +6,7 @@ const mockOpen = vi.fn()
 const mockWrite = vi.fn()
 const mockDispose = vi.fn()
 const mockReset = vi.fn()
+const mockFocus = vi.fn()
 const mockOnData = vi.fn()
 const mockOnResize = vi.fn()
 const mockLoadAddon = vi.fn()
@@ -17,6 +18,7 @@ vi.mock('@xterm/xterm', () => {
     write = mockWrite
     dispose = mockDispose
     reset = mockReset
+    focus = mockFocus
     onData = mockOnData
     onResize = mockOnResize
     loadAddon = mockLoadAddon
@@ -248,6 +250,48 @@ describe('TerminalHost', () => {
 
     await new Promise(r => setTimeout(r, 10))
     expect(mockApi.openTerminal).not.toHaveBeenCalled()
+  })
+
+  it('focuses terminal after opening so user can type immediately', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true, width: 50 },
+        { id: 'terminal', visible: true, width: 25 },
+        { id: 'editor',   visible: true, width: 25 }
+      ]
+    })
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => {
+      const calls = mockApi.openTerminal.mock.calls as unknown[][]
+      expect(calls.some(c => c[4] === 'terminal')).toBe(true)
+    })
+    expect(mockFocus).toHaveBeenCalled()
+  })
+
+  it('focuses terminal on reinit after panel re-show without reopening backend', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
+    await vi.waitFor(() => {
+      const calls = mockApi.openTerminal.mock.calls as unknown[][]
+      expect(calls.some(c => c[4] === 'terminal')).toBe(true)
+    })
+    mockApi.openTerminal.mockClear()
+    mockFocus.mockClear()
+
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: false, width: 0 } : p)
+    }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
+    }))
+
+    await new Promise(r => setTimeout(r, 10))
+    expect(mockApi.openTerminal).not.toHaveBeenCalled()
+    expect(mockFocus).toHaveBeenCalled()
   })
 
   it('routes onTerminalData to claude session when sessionType is claude', async () => {
