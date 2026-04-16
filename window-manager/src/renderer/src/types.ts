@@ -51,7 +51,8 @@ export interface WindowDependencyContainer {
   window_id: number
   dependency_id: number
   container_id: string
-  created_at: string
+  image: string
+  tag: string
 }
 
 export interface Api {
@@ -75,7 +76,7 @@ export interface Api {
 
   // Dependencies
   listDependencies: (projectId: number) => Promise<ProjectDependency[]>
-  createDependency: (projectId: number, image: string, tag: string, envVars: Record<string, string>) => Promise<ProjectDependency>
+  createDependency: (projectId: number, image: string, tag: string, envVars?: Record<string, string>) => Promise<ProjectDependency>
   deleteDependency: (id: number) => Promise<void>
   listWindowDeps: (windowId: number) => Promise<WindowDependencyContainer[]>
 
