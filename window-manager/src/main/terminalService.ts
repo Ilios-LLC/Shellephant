@@ -5,6 +5,8 @@ import { getClaudeToken } from './settingsService'
 import { getDocker } from './docker'
 import { execInContainer } from './gitOps'
 
+export type SessionType = 'claude' | 'terminal'
+
 export interface TerminalSession {
   pty: IPty
   resizeTimer: ReturnType<typeof setTimeout> | null
@@ -13,20 +15,17 @@ export interface TerminalSession {
   win: BrowserWindow
 }
 
-// Collapse bursts of resize events into a single pty.resize call. During
-// initial layout / window drags ResizeObserver can fire many times; without
-// debounce each fire triggers SIGWINCH in the remote shell.
 const RESIZE_DEBOUNCE_MS = 80
-
-// After the client attaches to tmux we bump the PTY size by one row and back
-// so tmux receives SIGWINCH and repaints the pane state fresh — preserving
-// the persistent-session prompt the user expects to see on re-open.
 const REFRESH_KICK_MS = 120
 
 const sessions = new Map<string, TerminalSession>()
 
-export function getSession(containerId: string): TerminalSession | undefined {
-  return sessions.get(containerId)
+function sessionKey(containerId: string, sessionType: SessionType): string {
+  return `${containerId}:${sessionType}`
+}
+
+export function getSession(containerId: string, sessionType: SessionType = 'terminal'): TerminalSession | undefined {
+  return sessions.get(sessionKey(containerId, sessionType))
 }
 
 export function openTerminal(
@@ -35,11 +34,12 @@ export function openTerminal(
   cols: number,
   rows: number,
   displayName: string = '',
-  workDir?: string
+  workDir?: string,
+  sessionType: SessionType = 'terminal'
 ): Promise<void> {
-  // Idempotent: tear down any existing session for this container first.
-  if (sessions.has(containerId)) {
-    closeTerminal(containerId)
+  const key = sessionKey(containerId, sessionType)
+  if (sessions.has(key)) {
+    closeTerminalByKey(key)
   }
 
   const safeCols = Math.max(1, Math.floor(cols))
@@ -60,9 +60,17 @@ export function openTerminal(
   if (claudeToken) {
     args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`)
   }
-  const tmuxCmd = workDir
-    ? `exec tmux -u new-session -A -s cw -c '${workDir}'`
-    : 'exec tmux -u new-session -A -s cw'
+
+  let tmuxCmd: string
+  if (sessionType === 'claude') {
+    tmuxCmd = workDir
+      ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'claude'`
+      : `exec tmux -u new-session -A -s cw-claude 'claude'`
+  } else {
+    tmuxCmd = workDir
+      ? `exec tmux -u new-session -A -s cw -c '${workDir}'`
+      : 'exec tmux -u new-session -A -s cw'
+  }
   args.push(containerId, 'sh', '-c', tmuxCmd)
 
   const child = pty.spawn('docker', args, {
@@ -80,26 +88,24 @@ export function openTerminal(
     displayName,
     win
   }
-  sessions.set(containerId, session)
+  sessions.set(key, session)
 
-  // Fire-and-forget: clear any stale Stop-hook marker left from a
-  // previous session so the first poll tick doesn't spuriously notify.
   void clearStaleMarker(containerId)
 
   child.onData((data: string) => {
     if (win.isDestroyed()) return
-    win.webContents.send('terminal:data', containerId, data)
+    win.webContents.send('terminal:data', containerId, sessionType, data)
   })
 
   child.onExit(() => {
-    sessions.delete(containerId)
+    sessions.delete(key)
     if (!win.isDestroyed()) {
-      win.webContents.send('terminal:data', containerId, '\r\n[detached]\r\n')
+      win.webContents.send('terminal:data', containerId, sessionType, '\r\n[detached]\r\n')
     }
   })
 
   setTimeout(() => {
-    if (!sessions.has(containerId)) return
+    if (!sessions.has(key)) return
     try {
       child.resize(safeCols, Math.max(1, safeRows - 1))
       child.resize(safeCols, safeRows)
@@ -111,12 +117,12 @@ export function openTerminal(
   return Promise.resolve()
 }
 
-export function writeInput(containerId: string, data: string): void {
-  sessions.get(containerId)?.pty.write(data)
+export function writeInput(containerId: string, data: string, sessionType: SessionType = 'terminal'): void {
+  sessions.get(sessionKey(containerId, sessionType))?.pty.write(data)
 }
 
-export function resizeTerminal(containerId: string, cols: number, rows: number): void {
-  const session = sessions.get(containerId)
+export function resizeTerminal(containerId: string, cols: number, rows: number, sessionType: SessionType = 'terminal'): void {
+  const session = sessions.get(sessionKey(containerId, sessionType))
   if (!session) return
   session.pendingResize = {
     cols: Math.max(1, Math.floor(cols)),
@@ -136,8 +142,8 @@ export function resizeTerminal(containerId: string, cols: number, rows: number):
   }, RESIZE_DEBOUNCE_MS)
 }
 
-export function closeTerminal(containerId: string): void {
-  const session = sessions.get(containerId)
+function closeTerminalByKey(key: string): void {
+  const session = sessions.get(key)
   if (!session) return
   if (session.resizeTimer) clearTimeout(session.resizeTimer)
   try {
@@ -145,11 +151,16 @@ export function closeTerminal(containerId: string): void {
   } catch {
     // Already dead; ignore.
   }
-  sessions.delete(containerId)
+  sessions.delete(key)
+}
+
+export function closeTerminal(containerId: string, sessionType: SessionType = 'terminal'): void {
+  closeTerminalByKey(sessionKey(containerId, sessionType))
 }
 
 export function closeTerminalSessionFor(containerId: string): void {
-  closeTerminal(containerId)
+  closeTerminalByKey(sessionKey(containerId, 'terminal'))
+  closeTerminalByKey(sessionKey(containerId, 'claude'))
 }
 
 async function clearStaleMarker(containerId: string): Promise<void> {
