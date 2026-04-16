@@ -27,6 +27,7 @@ export interface WindowRecord {
   project_id: number
   container_id: string
   ports?: string
+  network_id?: string | null
   created_at: string
   status: WindowStatus
 }
@@ -34,6 +35,24 @@ export interface WindowRecord {
 export interface TokenStatus {
   configured: boolean
   hint: string | null
+}
+
+export interface ProjectDependency {
+  id: number
+  project_id: number
+  image: string
+  tag: string
+  env_vars: Record<string, string> | null
+  created_at: string
+}
+
+export interface WindowDepContainer {
+  id: number
+  window_id: number
+  dependency_id: number
+  container_id: string
+  image: string
+  tag: string
 }
 
 export interface Api {
@@ -49,11 +68,26 @@ export interface Api {
   listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
-  createWindow: (name: string, projectId: number) => Promise<WindowRecord>
+  createWindow: (name: string, projectId: number, withDeps?: boolean) => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
   onWindowCreateProgress: (callback: (step: string) => void) => void
   offWindowCreateProgress: () => void
+
+  // Dependencies
+  listDependencies: (projectId: number) => Promise<ProjectDependency[]>
+  createDependency: (
+    projectId: number,
+    data: { image: string; tag: string; envVars?: Record<string, string> }
+  ) => Promise<ProjectDependency>
+  deleteDependency: (id: number) => Promise<void>
+  listWindowDepContainers: (windowId: number) => Promise<WindowDepContainer[]>
+
+  // Dep logs
+  startDepLogs: (containerId: string) => Promise<void>
+  stopDepLogs: (containerId: string) => void
+  onDepLogsData: (callback: (containerId: string, chunk: string) => void) => void
+  offDepLogsData: () => void
 
   // Git
   getCurrentBranch: (windowId: number) => Promise<string>
