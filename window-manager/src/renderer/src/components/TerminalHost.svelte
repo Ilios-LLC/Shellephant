@@ -22,17 +22,58 @@
 
   const rootPath = $derived('/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''))
 
+  // Claude terminal (default, opened on mount)
+  let claudeTerminalEl: HTMLDivElement
+  let claudeTerm: XTerm | undefined
+  let claudeFitAddon: FitAddon | undefined
+  let claudeResizeObserver: ResizeObserver | undefined
+
+  // Terminal session (lazy, opened on first switch to Terminal panel)
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
   let fitAddon: FitAddon | undefined
   let resizeObserver: ResizeObserver | undefined
+  let terminalOpened = false
 
   let commitOpen = $state(false)
   let commitBusy = $state(false)
   let pushBusy = $state(false)
   let deleteBusy = $state(false)
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
-  let viewMode = $state<'terminal' | 'editor' | 'both'>('terminal')
+  let viewMode = $state<'claude' | 'terminal' | 'editor'>('claude')
+
+  const xtermOptions = {
+    fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
+    fontSize: 13,
+    theme: {
+      background: '#09090b',
+      foreground: '#fafafa',
+      cursor: '#8b5cf6',
+      selectionBackground: '#3f3f46'
+    },
+    scrollback: 1000
+  }
+
+  function initTerminalSession(): void {
+    terminalOpened = true
+    term = new XTerm(xtermOptions)
+    fitAddon = new FitAddon()
+    term.loadAddon(fitAddon)
+    term.loadAddon(new WebLinksAddon())
+    term.open(terminalEl)
+    fitAddon.fit()
+    term.reset()
+    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
+    resizeObserver.observe(terminalEl)
+    window.api.openTerminal(win.container_id, term.cols, term.rows, win.name, 'terminal')
+    term.onData((data: string) => {
+      window.api.sendTerminalInput(win.container_id, data, 'terminal')
+      waitingWindows.remove(win.container_id)
+    })
+    term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+      window.api.resizeTerminal(win.container_id, cols, rows, 'terminal')
+    })
+  }
 
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
@@ -89,35 +130,28 @@
   }
 
   onMount(() => {
-    term = new XTerm({
-      fontFamily: "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace",
-      fontSize: 13,
-      theme: {
-        background: '#09090b',
-        foreground: '#fafafa',
-        cursor: '#8b5cf6',
-        selectionBackground: '#3f3f46'
-      },
-      scrollback: 1000
+    claudeTerm = new XTerm(xtermOptions)
+    claudeFitAddon = new FitAddon()
+    claudeTerm.loadAddon(claudeFitAddon)
+    claudeTerm.loadAddon(new WebLinksAddon())
+    claudeTerm.open(claudeTerminalEl)
+    claudeFitAddon.fit()
+    claudeTerm.reset()
+    claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
+    claudeResizeObserver.observe(claudeTerminalEl)
+    window.api.openTerminal(win.container_id, claudeTerm.cols, claudeTerm.rows, win.name, 'claude')
+    claudeTerm.onData((data: string) => {
+      window.api.sendTerminalInput(win.container_id, data, 'claude')
+      waitingWindows.remove(win.container_id)
+    })
+    claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+      window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
     })
 
-    fitAddon = new FitAddon()
-    term.loadAddon(fitAddon)
-    term.loadAddon(new WebLinksAddon())
-
-    term.open(terminalEl)
-    fitAddon.fit()
-    term.reset()
-
-    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
-    resizeObserver.observe(terminalEl)
-
-    window.api.openTerminal(win.container_id, term.cols, term.rows, win.name)
-
-    window.api.onTerminalData((containerId: string, data: string) => {
-      if (containerId === win.container_id) {
-        term?.write(data)
-      }
+    window.api.onTerminalData((containerId: string, sessionType: string, data: string) => {
+      if (containerId !== win.container_id) return
+      if (sessionType === 'claude') claudeTerm?.write(data)
+      else term?.write(data)
     })
 
     window.api.onTerminalSummary(({ containerId, title, bullets }) => {
@@ -125,42 +159,42 @@
         conversationSummary.set(containerId, { title, bullets })
       }
     })
-
-    term.onData((data: string) => {
-      window.api.sendTerminalInput(win.container_id, data)
-      waitingWindows.remove(win.container_id)
-    })
-
-    term.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      window.api.resizeTerminal(win.container_id, cols, rows)
-    })
   })
 
   onDestroy(() => {
+    claudeResizeObserver?.disconnect()
     resizeObserver?.disconnect()
     window.api.offTerminalData()
-    window.api.closeTerminal(win.container_id)
+    window.api.closeTerminal(win.container_id, 'claude')
+    if (terminalOpened) {
+      window.api.closeTerminal(win.container_id, 'terminal')
+    }
     waitingWindows.remove(win.container_id)
     window.api.offTerminalSummary()
     conversationSummary.remove(win.container_id)
+    claudeTerm?.dispose()
     term?.dispose()
   })
 
   $effect(() => {
-    if (viewMode !== 'editor' && fitAddon) {
-      fitAddon.fit()
+    if (viewMode === 'claude') {
+      claudeFitAddon?.fit()
+    } else if (viewMode === 'terminal') {
+      if (!terminalOpened) initTerminalSession()
+      fitAddon?.fit()
     }
   })
 </script>
 
 <section class="terminal-host">
-  <div class="content-area" class:split={viewMode === 'both'}>
-    {#if viewMode !== 'terminal'}
+  <div class="content-area">
+    {#if viewMode === 'editor'}
       <div class="editor-wrap">
         <EditorPane containerId={win.container_id} {rootPath} />
       </div>
     {/if}
-    <div class="terminal-body" class:hidden={viewMode === 'editor'} bind:this={terminalEl}></div>
+    <div class="terminal-body" class:hidden={viewMode !== 'claude'} bind:this={claudeTerminalEl}></div>
+    <div class="terminal-body" class:hidden={viewMode !== 'terminal'} bind:this={terminalEl}></div>
   </div>
   <WindowDetailPane
     {win}
