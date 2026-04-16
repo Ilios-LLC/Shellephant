@@ -95,11 +95,11 @@ contextBridge.exposeInMainWorld('api', {
     envVars?: Record<string, string>
   ) => ipcRenderer.invoke('project:dep-create', projectId, image, tag, envVars),
   deleteDependency: (id: number) => ipcRenderer.invoke('project:dep-delete', id),
-  listWindowDepContainers: (windowId: number) =>
+  listWindowDeps: (windowId: number) =>
     ipcRenderer.invoke('window:dep-containers-list', windowId),
 
   // Dep logs API
-  startDepLogs: (containerId: string) =>
+  startDepLogs: (_windowId: number, containerId: string) =>
     ipcRenderer.invoke('window:dep-logs-start', containerId),
   stopDepLogs: (containerId: string) =>
     ipcRenderer.send('window:dep-logs-stop', containerId),
