@@ -16,6 +16,7 @@
     onWaitingWindowSelect: (entry: WaitingEntry) => void
     onGroupSelect: (id: number) => void
     onGroupCreated: (group: ProjectGroupRecord) => void
+    onProjectSettingsClick: (project: ProjectRecord) => void
   }
 
   let {
@@ -29,7 +30,8 @@
     onRequestHome,
     onWaitingWindowSelect,
     onGroupSelect,
-    onGroupCreated
+    onGroupCreated,
+    onProjectSettingsClick
   }: Props = $props()
 </script>
 
@@ -76,6 +78,7 @@
         {project}
         selected={project.id === selectedProjectId}
         onSelect={onProjectSelect}
+        onSettingsClick={onProjectSettingsClick}
       />
     {/each}
   </nav>

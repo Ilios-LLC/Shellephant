@@ -27,7 +27,9 @@ vi.mock('../../src/main/projectService', () => ({
   createProject: vi.fn(),
   listProjects: vi.fn(),
   deleteProject: vi.fn(),
-  updateProject: vi.fn()
+  updateProject: vi.fn(),
+  getProject: vi.fn(),
+  updateProjectEnvVars: vi.fn()
 }))
 
 vi.mock('../../src/main/projectGroupService', () => ({
@@ -73,7 +75,7 @@ vi.mock('../../src/main/db', () => ({
 
 import { ipcMain, BrowserWindow } from 'electron'
 import { createWindow, listWindows, deleteWindow } from '../../src/main/windowService'
-import { createProject, listProjects, deleteProject, updateProject } from '../../src/main/projectService'
+import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars } from '../../src/main/projectService'
 import { createGroup, listGroups } from '../../src/main/projectGroupService'
 import {
   openTerminal,
@@ -421,5 +423,25 @@ describe('registerIpcHandlers', () => {
     const result = await getHandler('group:list')({})
     expect(listGroups).toHaveBeenCalled()
     expect(result).toEqual(groups)
+  })
+
+  it('registers project:get handler that calls getProject', async () => {
+    const record = {
+      id: 1,
+      name: 'test',
+      git_url: 'git@github.com:org/repo.git',
+      created_at: '2026-01-01',
+      env_vars: null
+    }
+    vi.mocked(getProject).mockReturnValue(record)
+    const result = await getHandler('project:get')({}, 1)
+    expect(getProject).toHaveBeenCalledWith(1)
+    expect(result).toEqual(record)
+  })
+
+  it('registers project:update-env-vars handler that calls updateProjectEnvVars', async () => {
+    vi.mocked(updateProjectEnvVars).mockReturnValue(undefined)
+    await getHandler('project:update-env-vars')({}, 1, { FOO: 'bar' })
+    expect(updateProjectEnvVars).toHaveBeenCalledWith(1, { FOO: 'bar' })
   })
 })

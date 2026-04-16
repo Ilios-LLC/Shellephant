@@ -25,7 +25,9 @@ import {
   createProject,
   listProjects,
   deleteProject,
-  updateProject
+  updateProject,
+  getProject,
+  updateProjectEnvVars
 } from '../../src/main/projectService'
 
 describe('projectService', () => {
@@ -229,6 +231,61 @@ describe('projectService', () => {
 
     it('throws when the project does not exist', () => {
       expect(() => updateProject(99999, { groupId: null })).toThrow('Project 99999 not found')
+    })
+  })
+
+  describe('getProject', () => {
+    it('returns the project record by id', async () => {
+      const created = await createProject('my-project', 'git@github.com:org/repo.git')
+      const found = getProject(created.id)
+      expect(found).toBeDefined()
+      expect(found!.id).toBe(created.id)
+      expect(found!.name).toBe('my-project')
+    })
+
+    it('returns undefined when project does not exist', () => {
+      expect(getProject(99999)).toBeUndefined()
+    })
+
+    it('returns undefined for soft-deleted project', async () => {
+      const created = await createProject('to-delete', 'git@github.com:org/repo.git')
+      await deleteProject(created.id)
+      expect(getProject(created.id)).toBeUndefined()
+    })
+
+    it('includes env_vars field in returned record', async () => {
+      const created = await createProject('env-project', 'git@github.com:org/env.git')
+      const found = getProject(created.id)
+      expect('env_vars' in found!).toBe(true)
+    })
+  })
+
+  describe('updateProjectEnvVars', () => {
+    it('saves env vars as JSON and returns them on next getProject', async () => {
+      const created = await createProject('my-project', 'git@github.com:org/repo.git')
+      updateProjectEnvVars(created.id, { FOO: 'bar', BAZ: 'qux' })
+      const found = getProject(created.id)
+      expect(found!.env_vars).toBe(JSON.stringify({ FOO: 'bar', BAZ: 'qux' }))
+    })
+
+    it('overwrites existing env vars', async () => {
+      const created = await createProject('my-project', 'git@github.com:org/repo.git')
+      updateProjectEnvVars(created.id, { FIRST: '1' })
+      updateProjectEnvVars(created.id, { SECOND: '2' })
+      const found = getProject(created.id)
+      expect(found!.env_vars).toBe(JSON.stringify({ SECOND: '2' }))
+    })
+
+    it('clears env vars when empty object passed', async () => {
+      const created = await createProject('my-project', 'git@github.com:org/repo.git')
+      updateProjectEnvVars(created.id, { FOO: 'bar' })
+      updateProjectEnvVars(created.id, {})
+      const found = getProject(created.id)
+      expect(found!.env_vars).toBe(JSON.stringify({}))
+    })
+
+    it('throws when the project does not exist', () => {
+      expect(() => updateProjectEnvVars(99999, { FOO: 'bar' })).toThrow('Project 99999 not found')
     })
   })
 })

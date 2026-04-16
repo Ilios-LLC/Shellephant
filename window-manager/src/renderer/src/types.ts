@@ -16,6 +16,7 @@ export interface ProjectRecord {
   name: string
   git_url: string
   ports?: string
+  env_vars?: string | null
   group_id?: number | null
   created_at: string
 }
@@ -41,6 +42,8 @@ export interface Api {
   listProjects: () => Promise<ProjectRecord[]>
   deleteProject: (id: number) => Promise<void>
   updateProject: (id: number, patch: { groupId: number | null }) => Promise<ProjectRecord>
+  getProject: (id: number) => Promise<ProjectRecord | undefined>
+  updateProjectEnvVars: (id: number, envVars: Record<string, string>) => Promise<void>
   createGroup: (name: string) => Promise<ProjectGroupRecord>
   listGroups: () => Promise<ProjectGroupRecord[]>
 

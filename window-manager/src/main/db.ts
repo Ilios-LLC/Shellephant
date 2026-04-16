@@ -10,6 +10,7 @@ export function initDb(dbPath: string): void {
       name       TEXT NOT NULL,
       git_url    TEXT NOT NULL UNIQUE,
       ports      TEXT DEFAULT NULL,
+      env_vars   TEXT DEFAULT NULL,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       deleted_at DATETIME DEFAULT NULL
     )
@@ -66,6 +67,12 @@ export function initDb(dbPath: string): void {
     _db.exec(
       'ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) DEFAULT NULL'
     )
+  }
+
+  // Migrate: add env_vars column for databases created before this feature
+  const projEnvCols = _db.pragma('table_info(projects)') as { name: string }[]
+  if (!projEnvCols.some((c) => c.name === 'env_vars')) {
+    _db.exec('ALTER TABLE projects ADD COLUMN env_vars TEXT DEFAULT NULL')
   }
 }
 

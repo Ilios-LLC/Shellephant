@@ -101,6 +101,12 @@ describe('db', () => {
     const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
     expect(cols.map((c) => c.name)).toContain('group_id')
   })
+
+  it('projects table has an env_vars column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('env_vars')
+  })
 })
 
 describe('db migrations', () => {
@@ -239,6 +245,43 @@ describe('db migrations', () => {
     expect(tables).toHaveLength(1)
     const cols = migrated.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
     expect(cols.map((c) => c.name)).toContain('group_id')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
+
+  it('adds env_vars column to a projects table that lacks it', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-envvars-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`
+      CREATE TABLE project_groups (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE projects (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        name       TEXT NOT NULL,
+        git_url    TEXT NOT NULL UNIQUE,
+        ports      TEXT DEFAULT NULL,
+        group_id   INTEGER DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const cols = migrated.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('env_vars')
 
     closeDb()
     fs.rmSync(tmpPath, { force: true })
