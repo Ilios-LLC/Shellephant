@@ -1,8 +1,17 @@
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, screen, fireEvent, cleanup } from '@testing-library/svelte'
 import ResizeHandle from '../../src/renderer/src/components/ResizeHandle.svelte'
 
-afterEach(cleanup)
+beforeEach(() => {
+  // JSDOM doesn't implement setPointerCapture; mock it so unconditional calls don't throw
+  HTMLElement.prototype.setPointerCapture = vi.fn()
+  HTMLElement.prototype.releasePointerCapture = vi.fn()
+})
+
+afterEach(() => {
+  cleanup()
+  vi.restoreAllMocks()
+})
 
 describe('ResizeHandle', () => {
   it('renders a separator element', () => {
@@ -49,6 +58,13 @@ describe('ResizeHandle', () => {
     render(ResizeHandle, { props: { containerWidth: 1000, onResize: vi.fn(), onResizeEnd } })
     await fireEvent.pointerUp(screen.getByRole('separator'))
     expect(onResizeEnd).not.toHaveBeenCalled()
+  })
+
+  it('calls setPointerCapture on pointerdown', async () => {
+    render(ResizeHandle, { props: { containerWidth: 1000, onResize: vi.fn(), onResizeEnd: vi.fn() } })
+    const el = screen.getByRole('separator')
+    await fireEvent.pointerDown(el, { clientX: 100, pointerId: 1 })
+    expect(HTMLElement.prototype.setPointerCapture).toHaveBeenCalledWith(1)
   })
 
   it('stops calling onResize after pointerup', async () => {

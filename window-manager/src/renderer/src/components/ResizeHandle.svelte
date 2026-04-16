@@ -13,8 +13,8 @@
   function handlePointerDown(e: PointerEvent): void {
     dragging = true
     startX = e.clientX
-    const target = e.currentTarget as HTMLElement
-    if (target.setPointerCapture) target.setPointerCapture(e.pointerId)
+    const el = e.currentTarget as HTMLElement
+    el.setPointerCapture(e.pointerId)
   }
 
   function handlePointerMove(e: PointerEvent): void {
@@ -34,6 +34,7 @@
 <div
   class="resize-handle"
   role="separator"
+  aria-orientation="vertical"
   aria-label="resize panels"
   onpointerdown={handlePointerDown}
   onpointermove={handlePointerMove}
