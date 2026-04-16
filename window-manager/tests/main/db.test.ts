@@ -107,6 +107,51 @@ describe('db', () => {
     const cols = db.prepare('PRAGMA table_info(projects)').all() as { name: string }[]
     expect(cols.map((c) => c.name)).toContain('env_vars')
   })
+
+  it('creates the project_dependencies table on init', () => {
+    const db = getDb()
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='project_dependencies'")
+      .all()
+    expect(tables).toHaveLength(1)
+  })
+
+  it('project_dependencies table has expected columns', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(project_dependencies)').all() as { name: string }[]
+    const names = cols.map((c) => c.name)
+    expect(names).toContain('id')
+    expect(names).toContain('project_id')
+    expect(names).toContain('image')
+    expect(names).toContain('tag')
+    expect(names).toContain('env_vars')
+    expect(names).toContain('created_at')
+  })
+
+  it('creates the window_dependency_containers table on init', () => {
+    const db = getDb()
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='window_dependency_containers'")
+      .all()
+    expect(tables).toHaveLength(1)
+  })
+
+  it('window_dependency_containers table has expected columns', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(window_dependency_containers)').all() as { name: string }[]
+    const names = cols.map((c) => c.name)
+    expect(names).toContain('id')
+    expect(names).toContain('window_id')
+    expect(names).toContain('dependency_id')
+    expect(names).toContain('container_id')
+    expect(names).toContain('created_at')
+  })
+
+  it('windows table has a network_id column', () => {
+    const db = getDb()
+    const cols = db.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('network_id')
+  })
 })
 
 describe('db migrations', () => {
@@ -285,5 +330,67 @@ describe('db migrations', () => {
 
     closeDb()
     fs.rmSync(tmpPath, { force: true })
+  })
+
+  it('adds network_id column to an existing windows table that lacks it', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-networkid-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`
+      CREATE TABLE project_groups (id INTEGER PRIMARY KEY, name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)
+    `)
+    pre.exec(`
+      CREATE TABLE projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        git_url TEXT NOT NULL UNIQUE,
+        ports TEXT DEFAULT NULL,
+        group_id INTEGER DEFAULT NULL,
+        env_vars TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        project_id INTEGER NOT NULL,
+        container_id TEXT NOT NULL,
+        ports TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const cols = migrated.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('network_id')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
+})
+
+describe('db migrations — docker dependencies', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('tag column defaults to latest', () => {
+    getDb().prepare("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:o/r.git')").run()
+    getDb().prepare("INSERT INTO project_dependencies (project_id, image) VALUES (1, 'postgres')").run()
+    const row = getDb().prepare('SELECT tag FROM project_dependencies WHERE id = 1').get() as { tag: string }
+    expect(row.tag).toBe('latest')
   })
 })

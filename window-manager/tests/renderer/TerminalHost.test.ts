@@ -157,7 +157,10 @@ describe('TerminalHost', () => {
       getCurrentBranch: vi.fn().mockResolvedValue('main'),
       getGitStatus: vi.fn().mockResolvedValue({ isDirty: false, added: 0, deleted: 0 }),
       commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
-      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' })
+      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      listWindowDeps: vi.fn().mockResolvedValue([]),
+      onDepLogsData: vi.fn(),
+      offDepLogsData: vi.fn()
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(

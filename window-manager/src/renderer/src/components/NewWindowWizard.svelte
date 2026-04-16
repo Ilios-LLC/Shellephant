@@ -1,5 +1,6 @@
 <script lang="ts">
-  import type { ProjectRecord, WindowRecord } from '../types'
+  import { onMount } from 'svelte'
+  import type { ProjectRecord, WindowRecord, ProjectDependency } from '../types'
 
   interface Props {
     project: ProjectRecord
@@ -13,6 +14,13 @@
   let loading = $state(false)
   let progress = $state('')
   let error = $state('')
+  let hasDeps = $state(false)
+  let withDeps = $state(false)
+
+  onMount(async () => {
+    const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
+    hasDeps = deps.length > 0
+  })
 
   async function handleSubmit(): Promise<void> {
     const trimmed = name.trim()
@@ -24,7 +32,7 @@
       progress = step
     })
     try {
-      const record = await window.api.createWindow(trimmed, project.id)
+      const record = await window.api.createWindow(trimmed, project.id, withDeps)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -60,6 +68,13 @@
         autofocus
       />
     </div>
+
+    {#if hasDeps}
+      <label class="dep-toggle">
+        <input type="checkbox" bind:checked={withDeps} disabled={loading} aria-label="Start with dependencies" />
+        Start with dependencies
+      </label>
+    {/if}
 
     {#if loading && progress}
       <p class="progress" aria-live="polite">
@@ -234,5 +249,19 @@
     to {
       transform: rotate(360deg);
     }
+  }
+
+  .dep-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--fg-1);
+    cursor: pointer;
+    font-family: var(--font-ui);
+  }
+  .dep-toggle input {
+    width: auto;
+    cursor: pointer;
   }
 </style>

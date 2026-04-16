@@ -1,6 +1,8 @@
 <!-- src/renderer/src/components/ProjectView.svelte -->
 <script lang="ts">
+  import { onDestroy } from 'svelte'
   import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
+  import DependenciesSection from './DependenciesSection.svelte'
 
   interface Props {
     project: ProjectRecord
@@ -84,6 +86,13 @@
       deletingWindowId = null
     }
   }
+
+  onDestroy(() => {
+    if (deleteTimeout) clearTimeout(deleteTimeout)
+    if (winDeleteTimeout) clearTimeout(winDeleteTimeout)
+  })
+
+  let activeTab = $state<'windows' | 'deps'>('windows')
 </script>
 
 <div class="project-view">
@@ -115,6 +124,22 @@
     </div>
   </header>
 
+  <div class="tab-row">
+    <button
+      type="button"
+      class="tab-btn"
+      class:active={activeTab === 'windows'}
+      onclick={() => { activeTab = 'windows' }}
+    >Windows</button>
+    <button
+      type="button"
+      class="tab-btn"
+      class:active={activeTab === 'deps'}
+      onclick={() => { activeTab = 'deps' }}
+    >Dependencies</button>
+  </div>
+
+  {#if activeTab === 'windows'}
   <section class="windows-section">
     <div class="section-header">
       <h3 class="section-title">Windows</h3>
@@ -169,6 +194,9 @@
       </div>
     {/if}
   </section>
+  {:else}
+  <DependenciesSection projectId={project.id} />
+  {/if}
 </div>
 
 <style>
@@ -416,4 +444,28 @@
     font-size: 0.7rem;
     color: var(--fg-2);
   }
+
+  .tab-row {
+    display: flex;
+    gap: 0;
+    border-bottom: 1px solid var(--border);
+    padding: 0 1.25rem;
+  }
+  .tab-btn {
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--fg-2);
+    cursor: pointer;
+    margin-bottom: -1px;
+  }
+  .tab-btn.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+  }
+
 </style>

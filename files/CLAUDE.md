@@ -98,6 +98,15 @@ When writing a plan according to superpowers:writing-plans, always write it to t
 
 ## Codebase Structure
 
+### window-manager/src/main/windowService.ts
+Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `getWaitingInfoByContainerId`, `__resetStatusMapForTests`, types `WindowRecord`, `WindowStatus`, `ProgressReporter`.
+- `createWindow(name, projectId, withDeps?, onProgress?)` — creates a dev container for a project window. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
+- `deleteWindow(id)` — soft-deletes window, stops/removes dep containers via `listWindowDepContainers`, removes bridge network, stops main container, closes terminal session.
+- `listWindows(projectId?)` — queries including `network_id` column; merges `statusMap` for status field.
+- `WindowRecord` includes optional `network_id` field.
+- Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`. All functions under 100 lines.
+- Tests: `window-manager/tests/main/windowService.test.ts` (45 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific).
+
 ### window-manager/src/main/gitOps.ts
 Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
@@ -131,12 +140,24 @@ Svelte 5 runes-mode component that renders a horizontal strip of group icon butt
 - Empty-name Enter cancels without calling the API.
 - Tests live in `window-manager/tests/renderer/GroupStrip.test.ts` (8 tests).
 
+### window-manager/src/renderer/src/components/DependenciesSection.svelte
+Svelte 5 runes-mode component for listing, adding, and deleting project dependencies.
+- Props: `projectId: number`
+- Loads deps via `window.api.listDependencies(projectId)` in `onMount`.
+- Empty state shows "No dependencies yet." text; "+ Add Dependency" button (`aria-label="add dependency"`) toggles `showForm`.
+- Add form: image input (placeholder "postgres"), tag input (placeholder "latest"), Save button (`aria-label="save dependency"`), Cancel button; calls `window.api.createDependency(projectId, image, tag, {})`.
+- Shows error message on save failure.
+- Two-click delete: first click arms (3s timeout), second click calls `window.api.deleteDependency(id)` and reloads.
+- Tests live in `window-manager/tests/renderer/DependenciesSection.test.ts` (6 tests).
+
 ### window-manager/src/renderer/src/components/ProjectView.svelte
-Displays a single project's details and its windows list.
+Displays a single project's details and its windows list, with a Windows/Dependencies tab bar.
 - Props: `project: ProjectRecord`, `windows: WindowRecord[]`, `groups: ProjectGroupRecord[]`, `onWindowSelect`, `onRequestNewWindow`, `onProjectDeleted`, `onWindowDeleted`, `onProjectUpdated`
 - Group label + `<select id="project-group">` in `.project-actions` — lists all groups with "No group" default; onchange calls `window.api.updateProject(project.id, { groupId })` then `onProjectUpdated`.
 - Two-click delete pattern for both project and individual windows (arms on first click, auto-cancels after 3s timeout).
-- Tests live in `window-manager/tests/renderer/ProjectView.test.ts` (11 tests).
+- Tab bar (`.tab-row`) switches between `windows` and `deps` active tabs via `activeTab` state.
+- When `activeTab === 'deps'`, renders `<DependenciesSection projectId={project.id} />`.
+- Tests live in `window-manager/tests/renderer/ProjectView.test.ts` (19 tests).
 
 ### window-manager/src/renderer/src/lib/panelLayout.ts
 Pure TypeScript Svelte store managing split-pane layout state.

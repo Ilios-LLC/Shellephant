@@ -57,7 +57,7 @@ describe('MainPane', () => {
   })
 
   it('renders ProjectView when project selected but no window', () => {
-    vi.stubGlobal('api', { createWindow: vi.fn(), deleteProject: vi.fn() })
+    vi.stubGlobal('api', { createWindow: vi.fn(), deleteProject: vi.fn(), deleteWindow: vi.fn(), updateProject: vi.fn(), listDependencies: vi.fn().mockResolvedValue([]) })
     render(MainPane, baseProps({ project }))
     expect(screen.getByText('test')).toBeDefined()
   })
@@ -70,7 +70,7 @@ describe('MainPane', () => {
   })
 
   it('renders NewWindowWizard when view=new-window and project present', () => {
-    vi.stubGlobal('api', { createWindow: vi.fn() })
+    vi.stubGlobal('api', { createWindow: vi.fn(), listDependencies: vi.fn().mockResolvedValue([]), onWindowCreateProgress: vi.fn(), offWindowCreateProgress: vi.fn() })
     render(MainPane, baseProps({ project, view: 'new-window' }))
     expect(screen.getByRole('heading', { name: /new window/i })).toBeDefined()
     expect(screen.getByPlaceholderText(/dev-window/i)).toBeDefined()

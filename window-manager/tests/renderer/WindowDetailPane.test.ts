@@ -15,14 +15,21 @@ vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
 }))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
+import type { WindowDependencyContainer } from '../../src/renderer/src/types'
 
 const getCurrentBranch = vi.fn()
 const sendTerminalInput = vi.fn()
 const getGitStatus = vi.fn()
+
+let mockListWindowDeps: ReturnType<typeof vi.fn>
+let mockStartDepLogs: ReturnType<typeof vi.fn>
+let mockStopDepLogs: ReturnType<typeof vi.fn>
+let mockOnDepLogsData: ReturnType<typeof vi.fn>
+let mockOffDepLogsData: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -38,10 +45,27 @@ beforeEach(() => {
       { id: 'editor',   visible: true,  width: 50 }
     ]
   })
+  mockListWindowDeps = vi.fn().mockResolvedValue([])
+  mockStartDepLogs = vi.fn().mockResolvedValue(undefined)
+  mockStopDepLogs = vi.fn()
+  mockOnDepLogsData = vi.fn()
+  mockOffDepLogsData = vi.fn()
   // @ts-expect-error test bridge
-  globalThis.window.api = { getCurrentBranch, sendTerminalInput, getGitStatus }
+  globalThis.window.api = {
+    getCurrentBranch,
+    sendTerminalInput,
+    getGitStatus,
+    listWindowDeps: mockListWindowDeps,
+    startDepLogs: mockStartDepLogs,
+    stopDepLogs: mockStopDepLogs,
+    onDepLogsData: mockOnDepLogsData,
+    offDepLogsData: mockOffDepLogsData
+  }
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 const win = {
   id: 1,
@@ -273,6 +297,59 @@ describe('WindowDetailPane', () => {
       render(WindowDetailPane, { props: { win, project, onGitStatus } })
       await vi.runOnlyPendingTimersAsync()
       expect(onGitStatus).toHaveBeenCalledWith(status)
+    })
+  })
+
+  describe('dep logs tab', () => {
+    it('does not show Dep Logs button when no dep containers', async () => {
+      mockListWindowDeps.mockResolvedValue([])
+      render(WindowDetailPane, { props: { win, project } })
+      // flush the onMount async call
+      await tick()
+      await tick()
+      expect(mockListWindowDeps).toHaveBeenCalledWith(1)
+      expect(screen.queryByRole('button', { name: /dep logs/i })).toBeNull()
+    })
+
+    it('shows Dep Logs button when dep containers exist', async () => {
+      const depContainers: WindowDependencyContainer[] = [
+        { id: 1, window_id: 1, dependency_id: 1, container_id: 'dep-ctr', image: 'redis', tag: 'latest' }
+      ]
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      expect(screen.getByRole('button', { name: /dep logs/i })).toBeDefined()
+    })
+
+    it('clicking Dep Logs calls startDepLogs and shows log area', async () => {
+      const depContainers: WindowDependencyContainer[] = [
+        { id: 1, window_id: 1, dependency_id: 1, container_id: 'dep-ctr', image: 'redis', tag: 'latest' }
+      ]
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
+      await tick()
+      expect(mockStartDepLogs).toHaveBeenCalledWith(1, 'dep-ctr')
+      expect(screen.getByRole('region', { name: /dep logs/i })).toBeDefined()
+    })
+
+    it('clicking Dep Logs again hides the area and calls stopDepLogs', async () => {
+      const depContainers: WindowDependencyContainer[] = [
+        { id: 1, window_id: 1, dependency_id: 1, container_id: 'dep-ctr', image: 'redis', tag: 'latest' }
+      ]
+      mockListWindowDeps.mockResolvedValue(depContainers)
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      await tick()
+      await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
+      await tick()
+      await fireEvent.click(screen.getByRole('button', { name: /dep logs/i }))
+      await tick()
+      expect(mockStopDepLogs).toHaveBeenCalledWith('dep-ctr')
+      expect(screen.queryByRole('region', { name: /dep logs/i })).toBeNull()
     })
   })
 })

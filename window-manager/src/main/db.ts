@@ -2,6 +2,30 @@ import Database from 'better-sqlite3'
 
 let _db: Database.Database | null = null
 
+function col(db: Database.Database, table: string): string[] {
+  return (db.pragma(`table_info(${table})`) as { name: string }[]).map((c) => c.name)
+}
+
+function runColumnMigrations(db: Database.Database): void {
+  if (!col(db, 'projects').includes('ports')) {
+    db.exec('ALTER TABLE projects ADD COLUMN ports TEXT DEFAULT NULL')
+  }
+  if (!col(db, 'windows').includes('ports')) {
+    db.exec('ALTER TABLE windows ADD COLUMN ports TEXT DEFAULT NULL')
+  }
+  if (!col(db, 'projects').includes('group_id')) {
+    db.exec(
+      'ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) DEFAULT NULL'
+    )
+  }
+  if (!col(db, 'projects').includes('env_vars')) {
+    db.exec('ALTER TABLE projects ADD COLUMN env_vars TEXT DEFAULT NULL')
+  }
+  if (!col(db, 'windows').includes('network_id')) {
+    db.exec('ALTER TABLE windows ADD COLUMN network_id TEXT DEFAULT NULL')
+  }
+}
+
 export function initDb(dbPath: string): void {
   _db = new Database(dbPath)
   _db.exec(`
@@ -15,19 +39,11 @@ export function initDb(dbPath: string): void {
       deleted_at DATETIME DEFAULT NULL
     )
   `)
-  // Migrate: add ports column for databases created before this feature
-  const projCols = _db.pragma('table_info(projects)') as { name: string }[]
-  if (!projCols.some((c) => c.name === 'ports')) {
-    _db.exec('ALTER TABLE projects ADD COLUMN ports TEXT DEFAULT NULL')
-  }
-
-  // Pre-project windows tables lack project_id. Drop so the CREATE below
-  // applies the current schema. Containers are ephemeral so data loss is fine.
-  const winCols = _db.pragma('table_info(windows)') as { name: string }[]
-  if (winCols.length > 0 && !winCols.some((c) => c.name === 'project_id')) {
+  // Pre-project windows tables lack project_id — drop so CREATE below applies current schema
+  const legacyWinCols = col(_db, 'windows')
+  if (legacyWinCols.length > 0 && !legacyWinCols.includes('project_id')) {
     _db.exec('DROP TABLE windows')
   }
-
   _db.exec(`
     CREATE TABLE IF NOT EXISTS windows (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -39,12 +55,6 @@ export function initDb(dbPath: string): void {
       deleted_at   DATETIME DEFAULT NULL
     )
   `)
-  // Migrate: add ports column for databases created before this feature
-  const winPortCols = _db.pragma('table_info(windows)') as { name: string }[]
-  if (!winPortCols.some((c) => c.name === 'ports')) {
-    _db.exec('ALTER TABLE windows ADD COLUMN ports TEXT DEFAULT NULL')
-  }
-
   _db.exec(`
     CREATE TABLE IF NOT EXISTS settings (
       key        TEXT PRIMARY KEY,
@@ -52,7 +62,6 @@ export function initDb(dbPath: string): void {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
-
   _db.exec(`
     CREATE TABLE IF NOT EXISTS project_groups (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,20 +69,26 @@ export function initDb(dbPath: string): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
-
-  // Migrate: add group_id to projects for databases created before this feature
-  const projGroupCols = _db.pragma('table_info(projects)') as { name: string }[]
-  if (!projGroupCols.some((c) => c.name === 'group_id')) {
-    _db.exec(
-      'ALTER TABLE projects ADD COLUMN group_id INTEGER REFERENCES project_groups(id) DEFAULT NULL'
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS project_dependencies (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL REFERENCES projects(id),
+      image      TEXT NOT NULL,
+      tag        TEXT NOT NULL DEFAULT 'latest',
+      env_vars   TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
-  }
-
-  // Migrate: add env_vars column for databases created before this feature
-  const projEnvCols = _db.pragma('table_info(projects)') as { name: string }[]
-  if (!projEnvCols.some((c) => c.name === 'env_vars')) {
-    _db.exec('ALTER TABLE projects ADD COLUMN env_vars TEXT DEFAULT NULL')
-  }
+  `)
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS window_dependency_containers (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      window_id     INTEGER NOT NULL REFERENCES windows(id),
+      dependency_id INTEGER NOT NULL REFERENCES project_dependencies(id),
+      container_id  TEXT NOT NULL,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+  runColumnMigrations(_db)
 }
 
 export function getDb(): Database.Database {

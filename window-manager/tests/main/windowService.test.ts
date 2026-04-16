@@ -317,7 +317,7 @@ describe('windowService', () => {
     it('reports progress steps in order', async () => {
       const projectId = seedProject('git@github.com:org/my-repo.git')
       const steps: string[] = []
-      await createWindow('progress', projectId, (s) => steps.push(s))
+      await createWindow('progress', projectId, false, (s) => steps.push(s))
       expect(steps).toEqual([
         expect.stringMatching(/probing/i),
         expect.stringMatching(/starting/i),
