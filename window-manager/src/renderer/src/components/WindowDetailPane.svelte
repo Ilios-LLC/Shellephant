@@ -3,7 +3,6 @@
   import type { ProjectRecord, WindowRecord } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
   import { panelLayout, togglePanel } from '../lib/panelLayout'
-  import type { PanelId } from '../lib/panelLayout'
 
   interface Props {
     win: WindowRecord
@@ -39,10 +38,6 @@
   const visibleCount = $derived(
     Object.values(panelVisible).filter(Boolean).length
   )
-
-  function handleToggle(id: PanelId): void {
-    togglePanel(id)
-  }
 
   let deleteArmed = $state(false)
   let armTimer: ReturnType<typeof setTimeout> | undefined
@@ -122,7 +117,7 @@
         class:active={panelVisible[id]}
         aria-pressed={panelVisible[id]}
         disabled={visibleCount <= 1 && panelVisible[id]}
-        onclick={() => handleToggle(id)}
+        onclick={() => togglePanel(id)}
       >{id === 'claude' ? 'Claude' : id === 'terminal' ? 'Terminal' : 'Editor'}</button>
     {/each}
   </div>

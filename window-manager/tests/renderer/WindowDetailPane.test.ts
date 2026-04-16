@@ -16,6 +16,7 @@ vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/svelte'
+import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
 
@@ -167,6 +168,21 @@ describe('WindowDetailPane', () => {
     expect(screen.getByRole('button', { name: /^claude$/i })).toBeDisabled()
     expect(screen.getByRole('button', { name: /^terminal$/i })).not.toBeDisabled()
     expect(screen.getByRole('button', { name: /^editor$/i })).not.toBeDisabled()
+  })
+
+  it('updates aria-pressed when store changes after mount', async () => {
+    getCurrentBranch.mockResolvedValue('main')
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'false')
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 33 },
+        { id: 'terminal', visible: true,  width: 33 },
+        { id: 'editor',   visible: true,  width: 34 }
+      ]
+    })
+    await tick()
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('does not render port arrows when window has no ports', () => {
