@@ -2,14 +2,12 @@
   import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, WindowRecord } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
-
-  type ViewMode = 'claude' | 'terminal' | 'editor'
+  import { panelLayout, togglePanel } from '../lib/panelLayout'
+  import type { PanelId } from '../lib/panelLayout'
 
   interface Props {
     win: WindowRecord
     project: ProjectRecord
-    viewMode?: ViewMode
-    onViewChange?: (mode: ViewMode) => void
     onCommit?: () => void
     onPush?: () => void
     onDelete?: () => void
@@ -23,8 +21,6 @@
   let {
     win,
     project,
-    viewMode = 'claude',
-    onViewChange = () => {},
     onCommit = () => {},
     onPush = () => {},
     onDelete,
@@ -34,6 +30,19 @@
     summary = undefined,
     onGitStatus = () => {}
   }: Props = $props()
+
+  const panelVisible = $derived({
+    claude:   $panelLayout.panels.find(p => p.id === 'claude')?.visible   ?? false,
+    terminal: $panelLayout.panels.find(p => p.id === 'terminal')?.visible ?? false,
+    editor:   $panelLayout.panels.find(p => p.id === 'editor')?.visible   ?? false
+  })
+  const visibleCount = $derived(
+    Object.values(panelVisible).filter(Boolean).length
+  )
+
+  function handleToggle(id: PanelId): void {
+    togglePanel(id)
+  }
 
   let deleteArmed = $state(false)
   let armTimer: ReturnType<typeof setTimeout> | undefined
@@ -79,7 +88,7 @@
     try {
       next = await window.api.getCurrentBranch(win.id)
     } catch {
-      // keep last-known branch on error; do not toast
+      // keep last-known branch on error
     }
     if (alive && next) branch = next
 
@@ -102,32 +111,20 @@
     alive = false
     if (timer) clearInterval(timer)
   })
-
 </script>
 
 <footer class="detail-pane">
   <div class="toggle-row">
-    <button
-      type="button"
-      class="toggle-btn"
-      class:active={viewMode === 'claude'}
-      aria-pressed={viewMode === 'claude'}
-      onclick={() => onViewChange('claude')}
-    >Claude</button>
-    <button
-      type="button"
-      class="toggle-btn"
-      class:active={viewMode === 'terminal'}
-      aria-pressed={viewMode === 'terminal'}
-      onclick={() => onViewChange('terminal')}
-    >Terminal</button>
-    <button
-      type="button"
-      class="toggle-btn"
-      class:active={viewMode === 'editor'}
-      aria-pressed={viewMode === 'editor'}
-      onclick={() => onViewChange('editor')}
-    >Editor</button>
+    {#each (['claude', 'terminal', 'editor'] as const) as id}
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={panelVisible[id]}
+        aria-pressed={panelVisible[id]}
+        disabled={visibleCount <= 1 && panelVisible[id]}
+        onclick={() => handleToggle(id)}
+      >{id === 'claude' ? 'Claude' : id === 'terminal' ? 'Terminal' : 'Editor'}</button>
+    {/each}
   </div>
   <div class="info-row">
     <div class="info">
