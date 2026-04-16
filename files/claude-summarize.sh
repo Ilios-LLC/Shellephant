@@ -2,6 +2,12 @@
 # Called by an async Claude Code Stop hook.
 # Generates a JSON summary (title + bullets) from the conversation transcript
 # and writes it atomically to /tmp/claude-summary.json for the host waitingPoller.
+#
+# DISABLED: conversation summarization is temporarily turned off.
+# To re-enable: remove the two lines below (the comment and the exit 0).
+# The hook entry in claude-settings.json and all downstream code remain intact.
+exit 0
+
 set -euo pipefail
 INPUT=$(cat)
 TRANSCRIPT=$(printf '%s' "$INPUT" | jq -r '.transcript_path // empty')

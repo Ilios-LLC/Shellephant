@@ -31,7 +31,7 @@ vi.mock('../../src/main/windowService', () => ({
   getWaitingInfoByContainerId: (id: string) => mockGetWaitingInfo(id)
 }))
 
-import { dispatchWaiting } from '../../src/main/waitingDispatcher'
+import { dispatchWaiting, _recentDispatches } from '../../src/main/waitingDispatcher'
 
 function fakeWin(opts: { destroyed?: boolean } = {}) {
   return {
@@ -51,6 +51,7 @@ const fullInfo = {
 describe('dispatchWaiting', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    _recentDispatches.clear()
     mockIsUserWatching.mockReturnValue(false)
     mockGetWaitingInfo.mockReturnValue(fullInfo)
     mockGetAllWindows.mockReturnValue([fakeWin()])
@@ -94,5 +95,32 @@ describe('dispatchWaiting', () => {
     mockGetAllWindows.mockReturnValue([fakeWin({ destroyed: true })])
     dispatchWaiting('cid-1')
     expect(mockNotificationShow).toHaveBeenCalled()
+  })
+
+  it('suppresses a second dispatch for the same container within the dedupe window', () => {
+    dispatchWaiting('cid-1')
+    expect(mockNotificationShow).toHaveBeenCalledTimes(1)
+    dispatchWaiting('cid-1')
+    expect(mockNotificationShow).toHaveBeenCalledTimes(1)
+  })
+
+  it('allows a second dispatch after the dedupe window expires', () => {
+    vi.useFakeTimers()
+    try {
+      dispatchWaiting('cid-1')
+      expect(mockNotificationShow).toHaveBeenCalledTimes(1)
+      vi.advanceTimersByTime(10_001)
+      dispatchWaiting('cid-1')
+      expect(mockNotificationShow).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('dedupe is per-container — different containers do not suppress each other', () => {
+    dispatchWaiting('cid-1')
+    mockGetWaitingInfo.mockReturnValue({ ...fullInfo, containerId: 'cid-2', windowName: 'beta' })
+    dispatchWaiting('cid-2')
+    expect(mockNotificationShow).toHaveBeenCalledTimes(2)
   })
 })
