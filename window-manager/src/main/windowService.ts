@@ -370,7 +370,9 @@ export async function deleteWindow(id: number): Promise<void> {
   }
 
   if (row.network_id) {
-    await getDocker().getNetwork(row.network_id).remove().catch(() => {})
+    const net = getDocker().getNetwork(row.network_id)
+    await net.disconnect({ Container: row.container_id, Force: true }).catch(() => {})
+    await net.remove().catch(() => {})
   }
 
   try {
