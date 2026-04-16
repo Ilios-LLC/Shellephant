@@ -110,7 +110,7 @@
       depLogsVisible = false
     } else {
       depLogs = ''
-      await window.api.startDepLogs(win.id, selectedDepContainerId)
+      await window.api.startDepLogs(selectedDepContainerId)
       depLogsVisible = true
     }
   }
