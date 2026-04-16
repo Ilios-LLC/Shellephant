@@ -1,6 +1,7 @@
 <!-- src/renderer/src/components/ProjectView.svelte -->
 <script lang="ts">
-  import type { ProjectRecord, ProjectGroupRecord, WindowRecord, ProjectDependency } from '../types'
+  import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
+  import DependenciesSection from './DependenciesSection.svelte'
 
   interface Props {
     project: ProjectRecord
@@ -86,51 +87,6 @@
   }
 
   let activeTab = $state<'windows' | 'deps'>('windows')
-  let deps = $state<ProjectDependency[]>([])
-  let depLoading = $state(false)
-  let depError = $state('')
-  let newDepImage = $state('')
-  let newDepTag = $state('latest')
-  let confirmingDepId = $state<number | null>(null)
-  let depDeleteTimeout: ReturnType<typeof setTimeout> | null = null
-
-  async function loadDeps(): Promise<void> {
-    deps = await window.api.listDependencies(project.id)
-  }
-
-  async function handleSaveDep(): Promise<void> {
-    const img = newDepImage.trim()
-    if (!img || depLoading) return
-    depLoading = true
-    depError = ''
-    try {
-      const dep = await window.api.createDependency(project.id, img, newDepTag.trim() || 'latest')
-      deps = [...deps, dep]
-      newDepImage = ''
-      newDepTag = 'latest'
-    } catch (err) {
-      depError = err instanceof Error ? err.message : String(err)
-    } finally {
-      depLoading = false
-    }
-  }
-
-  function armDepDelete(id: number): void {
-    if (confirmingDepId === id) {
-      void handleDepDelete(id)
-      return
-    }
-    if (depDeleteTimeout) clearTimeout(depDeleteTimeout)
-    confirmingDepId = id
-    depDeleteTimeout = setTimeout(() => { confirmingDepId = null }, 3000)
-  }
-
-  async function handleDepDelete(id: number): Promise<void> {
-    if (depDeleteTimeout) clearTimeout(depDeleteTimeout)
-    confirmingDepId = null
-    await window.api.deleteDependency(id)
-    deps = deps.filter((d) => d.id !== id)
-  }
 </script>
 
 <div class="project-view">
@@ -173,7 +129,7 @@
       type="button"
       class="tab-btn"
       class:active={activeTab === 'deps'}
-      onclick={() => { activeTab = 'deps'; void loadDeps() }}
+      onclick={() => { activeTab = 'deps' }}
     >Dependencies</button>
   </div>
 
@@ -233,47 +189,7 @@
     {/if}
   </section>
   {:else}
-  <section class="deps-section">
-    <div class="section-header">
-      <h3 class="section-title">Dependencies</h3>
-    </div>
-
-    {#each deps as dep (dep.id)}
-      <div class="dep-row">
-        <span class="dep-image">{dep.image}:{dep.tag}</span>
-        <button
-          type="button"
-          class="dep-delete"
-          aria-label={confirmingDepId === dep.id ? `confirm delete ${dep.image}:${dep.tag}` : `delete ${dep.image}:${dep.tag}`}
-          onclick={() => armDepDelete(dep.id)}
-        >{confirmingDepId === dep.id ? 'Delete?' : '×'}</button>
-      </div>
-    {/each}
-
-    <div class="dep-add">
-      <input
-        type="text"
-        placeholder="postgres or ghcr.io/foo/bar"
-        bind:value={newDepImage}
-        disabled={depLoading}
-      />
-      <input
-        type="text"
-        placeholder="latest"
-        bind:value={newDepTag}
-        disabled={depLoading}
-      />
-      <button
-        type="button"
-        onclick={handleSaveDep}
-        disabled={!newDepImage.trim() || depLoading}
-        aria-label="save dependency"
-      >{depLoading ? 'Validating…' : 'Add'}</button>
-    </div>
-    {#if depError}
-      <p class="dep-error">{depError}</p>
-    {/if}
-  </section>
+  <DependenciesSection projectId={project.id} />
   {/if}
 </div>
 
@@ -545,76 +461,5 @@
     color: var(--accent);
     border-bottom-color: var(--accent);
   }
-  .deps-section {
-    padding: 1rem 1.25rem;
-    display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
-  }
-  .dep-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0.35rem 0.5rem;
-    background: var(--bg-1);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-  }
-  .dep-image {
-    font-family: var(--font-mono);
-    font-size: 0.82rem;
-    color: var(--fg-1);
-  }
-  .dep-delete {
-    font-family: var(--font-ui);
-    font-size: 0.75rem;
-    padding: 0.2rem 0.45rem;
-    border: 1px solid var(--border);
-    background: transparent;
-    color: var(--fg-2);
-    border-radius: 4px;
-    cursor: pointer;
-  }
-  .dep-delete:hover {
-    color: var(--danger);
-    border-color: var(--danger);
-  }
-  .dep-add {
-    display: flex;
-    gap: 0.4rem;
-    margin-top: 0.5rem;
-  }
-  .dep-add input {
-    flex: 1;
-    padding: 0.4rem 0.5rem;
-    background: var(--bg-2);
-    border: 1px solid var(--border);
-    border-radius: 4px;
-    color: var(--fg-0);
-    font-family: var(--font-ui);
-    font-size: 0.85rem;
-  }
-  .dep-add input:focus {
-    outline: none;
-    border-color: var(--accent);
-  }
-  .dep-add button {
-    font-family: var(--font-ui);
-    font-size: 0.82rem;
-    padding: 0.4rem 0.7rem;
-    background: var(--accent);
-    border: 1px solid var(--accent);
-    border-radius: 4px;
-    color: white;
-    cursor: pointer;
-  }
-  .dep-add button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-  .dep-error {
-    font-size: 0.78rem;
-    color: var(--danger);
-    margin: 0;
-  }
+
 </style>

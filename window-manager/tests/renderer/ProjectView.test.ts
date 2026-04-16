@@ -48,7 +48,8 @@ describe('ProjectView', () => {
     vi.stubGlobal('api', {
       deleteProject: mockDeleteProject,
       deleteWindow: mockDeleteWindow,
-      updateProject: vi.fn().mockResolvedValue({ ...project, group_id: null })
+      updateProject: vi.fn().mockResolvedValue({ ...project, group_id: null }),
+      listDependencies: vi.fn().mockResolvedValue([])
     })
   })
 
@@ -168,6 +169,30 @@ describe('ProjectView', () => {
     })
   })
 
+  describe('tabs', () => {
+    it('renders Windows tab button', () => {
+      render(ProjectView, baseProjectViewProps())
+      expect(screen.getByRole('button', { name: /windows/i })).toBeDefined()
+    })
+
+    it('renders Dependencies tab button', () => {
+      render(ProjectView, baseProjectViewProps())
+      expect(screen.getByRole('button', { name: /dependencies/i })).toBeDefined()
+    })
+
+    it('clicking Dependencies tab shows dep section', async () => {
+      vi.stubGlobal('api', {
+        deleteProject: vi.fn(),
+        deleteWindow: vi.fn(),
+        updateProject: vi.fn().mockResolvedValue(project),
+        listDependencies: vi.fn().mockResolvedValue([])
+      })
+      render(ProjectView, baseProjectViewProps())
+      await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => expect(screen.getByRole('button', { name: /add dependency/i })).toBeDefined())
+    })
+  })
+
   describe('dependencies tab', () => {
     let mockListDeps: ReturnType<typeof vi.fn>
     let mockCreateDep: ReturnType<typeof vi.fn>
@@ -197,7 +222,7 @@ describe('ProjectView', () => {
     it('clicking Dependencies tab shows the deps section', async () => {
       render(ProjectView, baseProjectViewProps())
       await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
-      await waitFor(() => expect(screen.getByRole('button', { name: /save dependency/i })).toBeDefined())
+      await waitFor(() => expect(screen.getByRole('button', { name: /add dependency/i })).toBeDefined())
     })
 
     it('lists saved dependencies when tab is active', async () => {
@@ -213,6 +238,8 @@ describe('ProjectView', () => {
       mockCreateDep.mockRejectedValue(new Error('not found on Docker Hub'))
       render(ProjectView, baseProjectViewProps())
       await fireEvent.click(screen.getByRole('button', { name: /dependencies/i }))
+      await waitFor(() => screen.getByRole('button', { name: /add dependency/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /add dependency/i }))
       await waitFor(() => screen.getByPlaceholderText(/postgres/i))
       await fireEvent.input(screen.getByPlaceholderText(/postgres/i), { target: { value: 'badimg' } })
       await fireEvent.click(screen.getByRole('button', { name: /save dependency/i }))
