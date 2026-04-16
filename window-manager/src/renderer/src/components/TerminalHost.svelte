@@ -45,6 +45,7 @@
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
 
   let contentAreaWidth = $state(0)
+  // Not $state — only read inside event handlers, no re-render needed
   let draggedPanelId: PanelId | null = null
 
   const visiblePanels = $derived($panelLayout.panels.filter(p => p.visible))
@@ -136,6 +137,10 @@
   }
 
   onMount(() => {
+    if (!claudeTerminalEl) {
+      console.warn('[TerminalHost] claudeTerminalEl not bound on mount; claude panel may be hidden')
+      return
+    }
     claudeTerm = new XTerm(xtermOptions)
     claudeFitAddon = new FitAddon()
     claudeTerm.loadAddon(claudeFitAddon)
@@ -185,7 +190,8 @@
     const termPanel = panels.find(p => p.id === 'terminal')
     const claudePanel = panels.find(p => p.id === 'claude')
 
-    // Re-attach if panel was toggled off then on — element is re-created empty by Svelte
+    // Re-attach xterm if the DOM element was re-created by Svelte (fresh element has no children).
+    // xterm appends its canvas synchronously on open(), so no children = element is newly created.
     if (claudePanel?.visible && claudeTerminalEl && claudeTerm && !claudeTerminalEl.hasChildNodes()) {
       claudeTerm.open(claudeTerminalEl)
     }
@@ -193,7 +199,11 @@
 
     if (termPanel?.visible) {
       if (!terminalOpened) {
-        if (terminalEl) initTerminalSession()
+        if (terminalEl) {
+          initTerminalSession()
+        } else {
+          console.warn('[TerminalHost] terminal panel visible but terminalEl not bound')
+        }
       } else {
         if (terminalEl && term && !terminalEl.hasChildNodes()) term.open(terminalEl)
         fitAddon?.fit()
