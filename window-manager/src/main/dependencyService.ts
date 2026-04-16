@@ -69,7 +69,7 @@ export async function validateImage(image: string, tag: string): Promise<void> {
   })
 
   if (res.status === 401) {
-    const wwwAuth = (res.headers as unknown as { get(k: string): string | null }).get('Www-Authenticate') ?? ''
+    const wwwAuth = res.headers.get('Www-Authenticate') ?? ''
     const realmMatch = wwwAuth.match(/realm="([^"]+)"/)
     const serviceMatch = wwwAuth.match(/service="([^"]+)"/)
     const scopeMatch = wwwAuth.match(/scope="([^"]+)"/)
@@ -110,7 +110,7 @@ export async function createDependency(
   projectId: number,
   image: string,
   tag: string,
-  envVars: Record<string, string>
+  envVars: Record<string, string> = {}
 ): Promise<ProjectDependency> {
   await validateImage(image, tag)
   const envJson = Object.keys(envVars).length > 0 ? JSON.stringify(envVars) : null
