@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
-import { createProject, listProjects, deleteProject, updateProject, type PortMapping } from './projectService'
+import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal } from './terminalService'
 import { setActiveContainer } from './focusState'
@@ -49,6 +49,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('project:delete', (_, id: number) => deleteProject(id))
   ipcMain.handle('project:update', (_, id: number, patch: { groupId: number | null }) =>
     updateProject(id, patch)
+  )
+  ipcMain.handle('project:get', (_, id: number) => getProject(id))
+  ipcMain.handle('project:update-env-vars', (_, id: number, envVars: Record<string, string>) =>
+    updateProjectEnvVars(id, envVars)
   )
 
   // Group handlers

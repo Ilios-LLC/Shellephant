@@ -8,6 +8,9 @@ contextBridge.exposeInMainWorld('api', {
   deleteProject: (id: number) => ipcRenderer.invoke('project:delete', id),
   updateProject: (id: number, patch: { groupId: number | null }) =>
     ipcRenderer.invoke('project:update', id, patch),
+  getProject: (id: number) => ipcRenderer.invoke('project:get', id),
+  updateProjectEnvVars: (id: number, envVars: Record<string, string>) =>
+    ipcRenderer.invoke('project:update-env-vars', id, envVars),
 
   // Group API
   createGroup: (name: string) => ipcRenderer.invoke('group:create', name),
