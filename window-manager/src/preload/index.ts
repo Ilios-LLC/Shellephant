@@ -97,6 +97,10 @@ contextBridge.exposeInMainWorld('api', {
   deleteDependency: (id: number) => ipcRenderer.invoke('project:dep-delete', id),
   listWindowDeps: (windowId: number) =>
     ipcRenderer.invoke('window:dep-containers-list', windowId),
+  updateDependency: (id: number, envVars: Record<string, string> | null) =>
+    ipcRenderer.invoke('project:dep-update', id, envVars),
+  getDepContainersStatus: (ids: string[]) =>
+    ipcRenderer.invoke('window:dep-containers-status', ids),
 
   // Dep logs API
   startDepLogs: (_windowId: number, containerId: string) =>

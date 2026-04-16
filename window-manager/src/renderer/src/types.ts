@@ -55,6 +55,8 @@ export interface WindowDependencyContainer {
   tag: string
 }
 
+export type ContainerStatus = 'running' | 'stopped' | 'unknown'
+
 export interface Api {
   // Projects
   createProject: (name: string, gitUrl: string, ports?: PortMapping[]) => Promise<ProjectRecord>
@@ -79,6 +81,8 @@ export interface Api {
   createDependency: (projectId: number, image: string, tag: string, envVars?: Record<string, string>) => Promise<ProjectDependency>
   deleteDependency: (id: number) => Promise<void>
   listWindowDeps: (windowId: number) => Promise<WindowDependencyContainer[]>
+  updateDependency: (id: number, envVars: Record<string, string> | null) => Promise<ProjectDependency>
+  getDepContainersStatus: (ids: string[]) => Promise<Record<string, ContainerStatus>>
 
   // Dep logs
   startDepLogs: (windowId: number, containerId: string) => Promise<void>
