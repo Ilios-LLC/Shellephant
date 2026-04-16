@@ -74,6 +74,35 @@ export function initDb(dbPath: string): void {
   if (!projEnvCols.some((c) => c.name === 'env_vars')) {
     _db.exec('ALTER TABLE projects ADD COLUMN env_vars TEXT DEFAULT NULL')
   }
+
+  // Create project_dependencies table
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS project_dependencies (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      project_id INTEGER NOT NULL REFERENCES projects(id),
+      image      TEXT NOT NULL,
+      tag        TEXT NOT NULL DEFAULT 'latest',
+      env_vars   TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Create window_dependency_containers table
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS window_dependency_containers (
+      id            INTEGER PRIMARY KEY AUTOINCREMENT,
+      window_id     INTEGER NOT NULL REFERENCES windows(id),
+      dependency_id INTEGER NOT NULL REFERENCES project_dependencies(id),
+      container_id  TEXT NOT NULL,
+      created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+    )
+  `)
+
+  // Migrate: add network_id to windows for databases created before this feature
+  const winNetCols = _db.pragma('table_info(windows)') as { name: string }[]
+  if (!winNetCols.some((c) => c.name === 'network_id')) {
+    _db.exec('ALTER TABLE windows ADD COLUMN network_id TEXT DEFAULT NULL')
+  }
 }
 
 export function getDb(): Database.Database {
