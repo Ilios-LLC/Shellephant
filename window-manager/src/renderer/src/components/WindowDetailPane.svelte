@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { ProjectRecord, WindowRecord } from '../types'
+  import type { ProjectRecord, WindowRecord, WindowDependencyContainer } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
   import { panelLayout, togglePanel } from '../lib/panelLayout'
 
@@ -67,6 +67,11 @@
   let timer: ReturnType<typeof setInterval> | undefined
   let alive = true
 
+  let depContainers = $state<WindowDependencyContainer[]>([])
+  let depLogsVisible = $state(false)
+  let selectedDepContainerId = $state<string | null>(null)
+  let depLogs = $state('')
+
   function parsePortsJson(raw: string | undefined): [string, string][] {
     if (!raw) return []
     try {
@@ -98,13 +103,46 @@
     }
   }
 
-  onMount(() => {
+  async function toggleDepLogs(): Promise<void> {
+    if (!selectedDepContainerId) return
+    if (depLogsVisible) {
+      window.api.stopDepLogs(selectedDepContainerId)
+      depLogsVisible = false
+    } else {
+      depLogs = ''
+      await window.api.startDepLogs(win.id, selectedDepContainerId)
+      depLogsVisible = true
+    }
+  }
+
+  async function switchDepContainer(containerId: string): Promise<void> {
+    if (selectedDepContainerId && depLogsVisible) {
+      window.api.stopDepLogs(selectedDepContainerId)
+    }
+    selectedDepContainerId = containerId
+    depLogs = ''
+    if (depLogsVisible) {
+      await window.api.startDepLogs(win.id, containerId)
+    }
+  }
+
+  onMount(async () => {
     void refreshBranch()
     timer = setInterval(refreshBranch, 5000)
+    const containers = await window.api.listWindowDeps(win.id)
+    depContainers = containers
+    if (containers.length > 0) selectedDepContainerId = containers[0].container_id
+    window.api.onDepLogsData((containerId: string, chunk: string) => {
+      if (containerId === selectedDepContainerId) depLogs += chunk
+    })
   })
   onDestroy(() => {
     alive = false
     if (timer) clearInterval(timer)
+    window.api.offDepLogsData()
+    if (depLogsVisible && selectedDepContainerId) {
+      window.api.stopDepLogs(selectedDepContainerId)
+    }
   })
 </script>
 
@@ -120,7 +158,34 @@
         onclick={() => togglePanel(id)}
       >{id === 'claude' ? 'Claude' : id === 'terminal' ? 'Terminal' : 'Editor'}</button>
     {/each}
+    {#if depContainers.length > 0}
+      <button
+        type="button"
+        class="toggle-btn"
+        class:active={depLogsVisible}
+        aria-label="Dep Logs"
+        onclick={toggleDepLogs}
+      >Dep Logs</button>
+    {/if}
   </div>
+  {#if depLogsVisible}
+    <div class="dep-logs-section" role="region" aria-label="dep logs">
+      {#if depContainers.length > 1}
+        <select
+          class="dep-selector"
+          value={selectedDepContainerId}
+          onchange={(e) => switchDepContainer((e.target as HTMLSelectElement).value)}
+        >
+          {#each depContainers as dc (dc.container_id)}
+            <option value={dc.container_id}>{dc.image}:{dc.tag}</option>
+          {/each}
+        </select>
+      {:else if depContainers.length === 1}
+        <span class="dep-label">{depContainers[0].image}:{depContainers[0].tag}</span>
+      {/if}
+      <pre class="dep-log-output">{depLogs}</pre>
+    </div>
+  {/if}
   <div class="info-row">
     <div class="info">
       <span class="name">{win.name}</span>
@@ -291,5 +356,40 @@
   }
   .summary-bullets li {
     line-height: 1.4;
+  }
+  .dep-logs-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border-top: 1px solid var(--border);
+    padding-top: 0.35rem;
+  }
+  .dep-selector {
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    padding: 0.18rem 0.4rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-1);
+    align-self: flex-start;
+  }
+  .dep-label {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--fg-2);
+  }
+  .dep-log-output {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--fg-1);
+    max-height: 160px;
+    overflow-y: auto;
+    margin: 0;
+    white-space: pre-wrap;
+    word-break: break-all;
+    background: var(--bg-2);
+    padding: 0.35rem 0.5rem;
+    border-radius: 4px;
   }
 </style>
