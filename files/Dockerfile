@@ -131,6 +131,7 @@ ENV PLAYWRIGHT_MCP_BROWSER=chromium
 
 # Enable experimental agent teams feature in Claude Code
 ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+ENV CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/

@@ -2,19 +2,29 @@
   import FileTree from './FileTree.svelte'
   import MonacoEditor from './MonacoEditor.svelte'
 
-  interface Props {
-    containerId: string
+  interface RootConfig {
     rootPath: string
+    label: string
   }
 
-  let { containerId, rootPath }: Props = $props()
+  interface Props {
+    containerId: string
+    roots: RootConfig[]
+  }
 
-  let selectedFile = $state<string | null>(null)
+  let { containerId, roots }: Props = $props()
+
+  let selectedFile = $state(null as string | null)
+  let fileTreeRef = $state(null as InstanceType<typeof FileTree> | null)
+
+  export function scrollToRoot(rootPath: string): void {
+    fileTreeRef?.scrollToRoot(rootPath)
+  }
 </script>
 
 <div class="editor-pane">
   <div class="tree-panel">
-    <FileTree {containerId} {rootPath} onFileSelect={(path) => (selectedFile = path)} />
+    <FileTree bind:this={fileTreeRef} {containerId} {roots} onFileSelect={(path) => (selectedFile = path)} />
   </div>
   <div class="editor-panel">
     {#if selectedFile}

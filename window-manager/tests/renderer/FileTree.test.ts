@@ -22,7 +22,7 @@ describe('FileTree', () => {
     ])
     render(FileTree, {
       containerId: 'ctr1',
-      rootPath: '/workspace/myrepo',
+      roots: [{ rootPath: '/workspace/myrepo', label: 'myrepo' }],
       onFileSelect: vi.fn()
     })
     expect(mockListDir).toHaveBeenCalledWith('ctr1', '/workspace/myrepo')
@@ -34,7 +34,7 @@ describe('FileTree', () => {
     mockListDir
       .mockResolvedValueOnce([{ name: 'src', isDir: true }])
       .mockResolvedValueOnce([{ name: 'index.ts', isDir: false }])
-    render(FileTree, { containerId: 'c', rootPath: '/workspace/r', onFileSelect: vi.fn() })
+    render(FileTree, { containerId: 'c', roots: [{ rootPath: '/workspace/r', label: 'r' }], onFileSelect: vi.fn() })
     const srcBtn = await screen.findByText('src')
     await fireEvent.click(srcBtn)
     expect(mockListDir).toHaveBeenCalledWith('c', '/workspace/r/src')
@@ -44,7 +44,7 @@ describe('FileTree', () => {
   it('calls onFileSelect with the full path when a file is clicked', async () => {
     mockListDir.mockResolvedValue([{ name: 'app.ts', isDir: false }])
     const onFileSelect = vi.fn()
-    render(FileTree, { containerId: 'c', rootPath: '/workspace/r', onFileSelect })
+    render(FileTree, { containerId: 'c', roots: [{ rootPath: '/workspace/r', label: 'r' }], onFileSelect })
     await fireEvent.click(await screen.findByText('app.ts'))
     expect(onFileSelect).toHaveBeenCalledWith('/workspace/r/app.ts')
   })
@@ -53,7 +53,7 @@ describe('FileTree', () => {
     mockListDir
       .mockResolvedValueOnce([{ name: 'src', isDir: true }])
       .mockResolvedValueOnce([{ name: 'index.ts', isDir: false }])
-    render(FileTree, { containerId: 'c', rootPath: '/workspace/r', onFileSelect: vi.fn() })
+    render(FileTree, { containerId: 'c', roots: [{ rootPath: '/workspace/r', label: 'r' }], onFileSelect: vi.fn() })
     const srcBtn = await screen.findByText('src')
     await fireEvent.click(srcBtn) // expand (fetches children)
     await fireEvent.click(srcBtn) // collapse
@@ -65,11 +65,65 @@ describe('FileTree', () => {
     mockListDir
       .mockResolvedValueOnce([{ name: 'src', isDir: true }])
       .mockResolvedValueOnce([{ name: 'index.ts', isDir: false }])
-    render(FileTree, { containerId: 'c', rootPath: '/workspace/r', onFileSelect: vi.fn() })
+    render(FileTree, { containerId: 'c', roots: [{ rootPath: '/workspace/r', label: 'r' }], onFileSelect: vi.fn() })
     const srcBtn = await screen.findByText('src')
     await fireEvent.click(srcBtn) // expand
     expect(await screen.findByText('index.ts')).toBeInTheDocument()
     await fireEvent.click(srcBtn) // collapse
     expect(screen.queryByText('index.ts')).not.toBeInTheDocument()
+  })
+})
+
+describe('multi-root FileTree', () => {
+  it('renders a label for each root as a top-level collapsible node', async () => {
+    mockListDir
+      .mockResolvedValueOnce([{ name: 'file-a.ts', isDir: false }])
+      .mockResolvedValueOnce([{ name: 'file-b.ts', isDir: false }])
+    render(FileTree, {
+      containerId: 'ctr',
+      roots: [
+        { rootPath: '/workspace/project-a', label: 'project-a' },
+        { rootPath: '/workspace/project-b', label: 'project-b' }
+      ],
+      onFileSelect: vi.fn()
+    })
+    expect(await screen.findByText('project-a')).toBeInTheDocument()
+    expect(await screen.findByText('project-b')).toBeInTheDocument()
+  })
+
+  it('loads each root directory on mount', async () => {
+    mockListDir.mockResolvedValue([])
+    render(FileTree, {
+      containerId: 'ctr',
+      roots: [
+        { rootPath: '/workspace/a', label: 'a' },
+        { rootPath: '/workspace/b', label: 'b' }
+      ],
+      onFileSelect: vi.fn()
+    })
+    await screen.findByText('a')
+    expect(mockListDir).toHaveBeenCalledWith('ctr', '/workspace/a')
+    expect(mockListDir).toHaveBeenCalledWith('ctr', '/workspace/b')
+  })
+
+  it('single-root mode: backwards-compatible when roots has one entry', async () => {
+    mockListDir.mockResolvedValue([{ name: 'index.ts', isDir: false }])
+    render(FileTree, {
+      containerId: 'c',
+      roots: [{ rootPath: '/workspace/r', label: 'r' }],
+      onFileSelect: vi.fn()
+    })
+    expect(await screen.findByText('index.ts')).toBeInTheDocument()
+  })
+
+  it('scrollToRoot expands and is callable without throwing', async () => {
+    mockListDir.mockResolvedValue([])
+    const { component } = render(FileTree, {
+      containerId: 'c',
+      roots: [{ rootPath: '/workspace/a', label: 'a' }, { rootPath: '/workspace/b', label: 'b' }],
+      onFileSelect: vi.fn()
+    })
+    await screen.findByText('a')
+    expect(() => component.scrollToRoot('/workspace/b')).not.toThrow()
   })
 })
