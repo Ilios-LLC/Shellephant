@@ -171,8 +171,8 @@ export async function listRemoteBranches(
   for (const line of stdout.split('\n')) {
     const symrefMatch = line.match(/^ref: refs\/heads\/(\S+)\tHEAD$/)
     if (symrefMatch) { defaultBranch = symrefMatch[1]; continue }
-    const refMatch = line.match(/^[0-9a-f]+\trefs\/heads\/(.+)$/)
-    if (refMatch) branches.push(refMatch[1])
+    const refMatch = line.match(/^\S+\trefs\/heads\/(.+)$/)
+    if (refMatch) branches.push(refMatch[1].trim())
   }
 
   branches.sort()
@@ -180,7 +180,9 @@ export async function listRemoteBranches(
 
   return {
     defaultBranch,
-    branches: [defaultBranch, ...branches.filter(b => b !== defaultBranch)]
+    branches: branches.length === 0
+      ? []
+      : [defaultBranch, ...branches.filter(b => b !== defaultBranch)]
   }
 }
 
