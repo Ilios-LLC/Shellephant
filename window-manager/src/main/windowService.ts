@@ -107,7 +107,7 @@ async function cleanupDepContainers(
 ): Promise<void> {
   for (const { container } of depContainerRecords) {
     await container.stop({ t: 1 }).catch(() => {})
-    await container.remove({ force: true }).catch(() => {})
+    await container.remove({ force: true, v: true }).catch(() => {})
   }
   if (networkId) {
     await getDocker().getNetwork(networkId).remove().catch(() => {})
@@ -245,7 +245,7 @@ export async function createWindow(
     await cleanupDepContainers(depContainerRecords, networkId)
     if (container) {
       await container.stop({ t: 1 }).catch(() => {})
-      await container.remove({ force: true }).catch(() => {})
+      await container.remove({ force: true, v: true }).catch(() => {})
     }
     throw err
   }
@@ -416,7 +416,7 @@ export async function deleteWindow(id: number): Promise<void> {
   for (const dep of depContainers) {
     const c = getDocker().getContainer(dep.container_id)
     await c.stop({ t: 1 }).catch(() => {})
-    await c.remove({ force: true }).catch(() => {})
+    await c.remove({ force: true, v: true }).catch(() => {})
   }
 
   if (row.network_id) {
