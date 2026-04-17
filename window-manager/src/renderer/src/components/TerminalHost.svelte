@@ -12,7 +12,7 @@
   import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
   import { conversationSummary } from '../lib/conversationSummary'
-  import { panelLayout, resizePanels, reorderPanels, savePanelLayout } from '../lib/panelLayout'
+  import { panelLayout, togglePanel, resizePanels, reorderPanels, savePanelLayout } from '../lib/panelLayout'
   import type { PanelId } from '../lib/panelLayout'
 
   interface Props {
@@ -23,7 +23,17 @@
 
   let { win, project, onWindowDeleted = () => {} }: Props = $props()
 
-  const rootPath = $derived('/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''))
+  const editorRoots = $derived(
+    win.projects.length > 0
+      ? win.projects.map(wp => ({ rootPath: wp.clone_path, label: wp.project_name ?? wp.clone_path.split('/').pop() ?? wp.clone_path }))
+      : [{ rootPath: '/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''), label: project.name }]
+  )
+
+  const panelVisible = $derived({
+    claude:   $panelLayout.panels.find(p => p.id === 'claude')?.visible   ?? false,
+    terminal: $panelLayout.panels.find(p => p.id === 'terminal')?.visible ?? false,
+    editor:   $panelLayout.panels.find(p => p.id === 'editor')?.visible   ?? false
+  })
 
   // Claude terminal
   let claudeTerminalEl: HTMLDivElement
@@ -45,6 +55,9 @@
   let pushBusy = $state(false)
   let deleteBusy = $state(false)
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
+  let commitProjectId = $state(null as number | null)
+  let commitProjectPath = $state(null as string | null)
+  let editorPaneRef = $state(null as InstanceType<typeof EditorPane> | null)
 
   let contentAreaWidth = $state(0)
   // Not $state — only read inside event handlers, no re-render needed
@@ -113,10 +126,12 @@
   async function runCommit(v: { subject: string; body: string }): Promise<void> {
     commitBusy = true
     try {
-      const res = await window.api.commit(win.id, {
-        subject: v.subject,
-        body: v.body || undefined
-      })
+      const payload = { subject: v.subject, body: v.body || undefined }
+      const res = commitProjectId !== null
+        ? await window.api.commitProject(win.id, commitProjectId, payload)
+        : await window.api.commit(win.id, payload)
+      commitProjectId = null
+      commitProjectPath = null
       if (res.ok) {
         const subjectLine = res.stdout.split('\n').find((l: string) => /^\[.+\]/.test(l))
         pushToast({ level: 'success', title: 'Committed', body: subjectLine })
@@ -162,6 +177,27 @@
       pushToast({ level: 'error', title: 'Delete failed', body: (err as Error).message })
       deleteBusy = false
     }
+  }
+
+  async function runPushProject(projectId: number, clonePath: string): Promise<void> {
+    pushBusy = true
+    try {
+      const res = await window.api.pushProject(win.id, projectId)
+      if (res.ok) {
+        pushSuccessModal(res.prUrl)
+      } else {
+        pushToast({ level: 'error', title: 'Push failed', body: res.stdout || undefined })
+      }
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Push error', body: (err as Error).message })
+    } finally {
+      pushBusy = false
+    }
+  }
+
+  function handleEditorProject(clonePath: string): void {
+    if (!panelVisible.editor) togglePanel('editor')
+    editorPaneRef?.scrollToRoot(clonePath)
   }
 
   onMount(() => {
@@ -287,7 +323,7 @@
           {:else if panel.id === 'terminal'}
             <div class="terminal-inner" bind:this={terminalEl}></div>
           {:else if panel.id === 'editor'}
-            <EditorPane containerId={win.container_id} {rootPath} />
+            <EditorPane bind:this={editorPaneRef} containerId={win.container_id} roots={editorRoots} />
           {/if}
         </div>
       </div>
@@ -311,6 +347,9 @@
     commitDisabled={commitBusy || pushBusy || deleteBusy || (gitStatus !== null && !gitStatus.isDirty)}
     pushDisabled={commitBusy || pushBusy || deleteBusy}
     deleteDisabled={deleteBusy}
+    onCommitProject={(projectId, clonePath) => { commitProjectId = projectId; commitProjectPath = clonePath; commitOpen = true }}
+    onPushProject={runPushProject}
+    onEditorProject={handleEditorProject}
   />
   {#if commitOpen}
     <CommitModal
