@@ -260,6 +260,32 @@ describe('terminalService', () => {
       expect(mockKill).toHaveBeenCalledTimes(1)
       expect(mockSpawn).toHaveBeenCalledTimes(2)
     })
+
+    it('builds claude command with --dangerously-skip-permissions and --add-dir for each dir', async () => {
+      const fakePty = makeFakePty()
+      mockSpawn.mockReturnValue(fakePty)
+      mockGetClaudeToken.mockReturnValue('tok')
+
+      await openTerminal('ctr', makeFakeWin() as any, 80, 24, 'test', '/workspace/repo', 'claude', ['/workspace/repo'])
+
+      const spawnArgs = mockSpawn.mock.calls[0]
+      const tmuxCmd = spawnArgs[1][spawnArgs[1].length - 1] as string
+      expect(tmuxCmd).toContain('--dangerously-skip-permissions')
+      expect(tmuxCmd).toContain('--add-dir /workspace/repo')
+    })
+
+    it('builds claude command with multiple --add-dir flags for multi-project', async () => {
+      const fakePty = makeFakePty()
+      mockSpawn.mockReturnValue(fakePty)
+      mockGetClaudeToken.mockReturnValue('tok')
+
+      await openTerminal('ctr', makeFakeWin() as any, 80, 24, 'test', '/workspace', 'claude', ['/workspace/a', '/workspace/b'])
+
+      const spawnArgs = mockSpawn.mock.calls[0]
+      const tmuxCmd = spawnArgs[1][spawnArgs[1].length - 1] as string
+      expect(tmuxCmd).toContain('--add-dir /workspace/a')
+      expect(tmuxCmd).toContain('--add-dir /workspace/b')
+    })
   })
 
   describe('getSession', () => {

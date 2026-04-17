@@ -35,7 +35,8 @@ export function openTerminal(
   rows: number,
   displayName: string = '',
   workDir?: string,
-  sessionType: SessionType = 'terminal'
+  sessionType: SessionType = 'terminal',
+  addDirs: string[] = []
 ): Promise<void> {
   const key = sessionKey(containerId, sessionType)
   if (sessions.has(key)) {
@@ -63,9 +64,11 @@ export function openTerminal(
 
   let tmuxCmd: string
   if (sessionType === 'claude') {
+    const addDirArgs = addDirs.map(d => `--add-dir ${d}`).join(' ')
+    const claudeCmd = `claude --dangerously-skip-permissions${addDirArgs ? ' ' + addDirArgs : ''}`
     tmuxCmd = workDir
-      ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'bash -c "claude; exec bash"'`
-      : `exec tmux -u new-session -A -s cw-claude 'bash -c "claude; exec bash"'`
+      ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'bash -c "${claudeCmd}; exec bash"'`
+      : `exec tmux -u new-session -A -s cw-claude 'bash -c "${claudeCmd}; exec bash"'`
   } else {
     tmuxCmd = workDir
       ? `exec tmux -u new-session -A -s cw -c '${workDir}'`
