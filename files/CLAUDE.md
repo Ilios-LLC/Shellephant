@@ -109,9 +109,10 @@ Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `get
 - Tests: `window-manager/tests/main/windowService.test.ts` (50 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
 
 ### window-manager/src/main/gitOps.ts
-Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
+Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `listRemoteBranches`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
 - `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
+- `listRemoteBranches(sshUrl, pat)` — runs `git ls-remote --symref` on host, returns `{ defaultBranch, branches }` (sorted, default first). Scrubs PAT from errors. Used by `git:list-branches` IPC handler.
 - Tests live in `window-manager/tests/main/gitOps.test.ts`.
 
 ### window-manager/src/renderer/src/components/FileTree.svelte
