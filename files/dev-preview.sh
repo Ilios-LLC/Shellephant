@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
+trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
 # Start virtual framebuffer display
+export DISPLAY=:99
 Xvfb :99 -screen 0 1920x1080x24 -ac &
 sleep 1
 
@@ -14,6 +16,5 @@ websockify --web /usr/share/novnc 6080 localhost:5900 &
 echo "Dev preview ready: http://localhost:6080/vnc.html"
 
 # Start electron-vite dev on the virtual display
-export DISPLAY=:99
 cd /workspace/$(ls /workspace | head -1)/window-manager
 npx electron-vite dev -- --no-sandbox
