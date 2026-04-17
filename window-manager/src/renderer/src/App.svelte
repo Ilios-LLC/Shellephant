@@ -47,11 +47,11 @@
     view = 'default'
   }
 
-  async function handleNavigateToWindow(projectId: number, windowId: number): Promise<void> {
+  async function handleNavigateToWindow(projectId: number | null, windowId: number): Promise<void> {
     selectedProjectId = projectId
     selectedWindowId = null
     view = 'default'
-    windows = await window.api.listWindows(projectId)
+    windows = projectId === null ? [] : await window.api.listWindows(projectId)
     selectedWindowId = windowId
   }
 
@@ -204,7 +204,7 @@
   }
 
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
-  let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
+  let selectedWindow = $derived(allWindows.find((w) => w.id === selectedWindowId) ?? null)
   let filteredProjects = $derived(
     activeGroupId === 'ungrouped'
       ? projects.filter((p) => p.group_id === null)

@@ -603,25 +603,6 @@ describe('multi-project TerminalHost', () => {
     vi.clearAllMocks()
   })
 
-  it('handleEditorProject toggles editor panel when hidden and calls scrollToRoot', async () => {
-    mockPanelLayoutStore.set({
-      panels: [
-        { id: 'claude',   visible: true,  width: 100 },
-        { id: 'terminal', visible: false, width: 0   },
-        { id: 'editor',   visible: false, width: 0   }
-      ]
-    })
-    render(TerminalHost, { win: multiWin, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
-
-    // Find the per-project "Editor" buttons (in project-row, not toggle-row)
-    const editorBtns = screen.getAllByRole('button', { name: /^editor$/i })
-    // First is toggle-row Editor; remaining are per-project rows
-    await fireEvent.click(editorBtns[1])
-
-    expect(mockTogglePanel).toHaveBeenCalledWith('editor')
-  })
-
   it('runPushProject calls window.api.pushProject with correct args', async () => {
     render(TerminalHost, { win: multiWin, project: mockProject })
     await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
@@ -629,7 +610,7 @@ describe('multi-project TerminalHost', () => {
     const pushBtns = screen.getAllByRole('button', { name: /^push$/i })
     // First per-project push button corresponds to project_id 10 (Repo A row)
     // WindowDetailPane renders per-project rows with Push buttons
-    await fireEvent.click(pushBtns[pushBtns.length - 2]) // second-to-last: first project-row Push
+    await fireEvent.click(pushBtns[0])
 
     await vi.waitFor(() => {
       expect(mockApi.pushProject).toHaveBeenCalledWith(2, 10)

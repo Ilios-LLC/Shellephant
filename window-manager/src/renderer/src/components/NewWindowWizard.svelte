@@ -22,9 +22,7 @@
   let selectedProjectIds = $state<number[]>([])
 
   onMount(async () => {
-    if (isMultiMode) {
-      selectedProjectIds = projects.map(p => p.id)
-    } else if (project) {
+    if (!isMultiMode && project) {
       const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
       hasDeps = deps.length > 0
     }
@@ -53,7 +51,7 @@
       progress = step
     })
     try {
-      const ids = isMultiMode ? selectedProjectIds : [project!.id]
+      const ids = isMultiMode ? $state.snapshot(selectedProjectIds) : [project!.id]
       const record = await window.api.createWindow(trimmed, ids, withDeps)
       onCreated(record)
     } catch (err) {

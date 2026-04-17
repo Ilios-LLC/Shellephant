@@ -17,7 +17,7 @@
 
   interface Props {
     win: WindowRecord
-    project: ProjectRecord
+    project: ProjectRecord | null
     onWindowDeleted?: (id: number) => void
   }
 
@@ -26,7 +26,9 @@
   const editorRoots = $derived(
     win.projects.length > 0
       ? win.projects.map(wp => ({ rootPath: wp.clone_path, label: wp.project_name ?? wp.clone_path.split('/').pop() ?? wp.clone_path }))
-      : [{ rootPath: '/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''), label: project.name }]
+      : project
+        ? [{ rootPath: '/workspace/' + (project.git_url.split('/').pop() ?? 'unknown').replace(/\.git$/, ''), label: project.name }]
+        : []
   )
 
   const panelVisible = $derived({
@@ -193,11 +195,6 @@
     }
   }
 
-  function handleEditorProject(clonePath: string): void {
-    if (!panelVisible.editor) togglePanel('editor')
-    editorPaneRef?.scrollToRoot(clonePath)
-  }
-
   onMount(() => {
     if (!claudeTerminalEl) {
       console.warn('[TerminalHost] claudeTerminalEl not bound on mount; claude panel may be hidden')
@@ -347,7 +344,6 @@
     deleteDisabled={deleteBusy}
     onCommitProject={(projectId, _clonePath) => { commitProjectId = projectId; commitOpen = true }}
     onPushProject={runPushProject}
-    onEditorProject={handleEditorProject}
   />
   {#if commitOpen}
     <CommitModal

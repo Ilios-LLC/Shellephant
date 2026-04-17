@@ -88,36 +88,30 @@ describe('multi-project mode', () => {
     return { projects: [p1, p2, p3], onCreated: vi.fn(), onCancel: vi.fn(), ...overrides }
   }
 
-  it('renders checkboxes for each project, all checked by default', async () => {
+  it('renders checkboxes for each project, all unchecked by default', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => {
       const checkboxes = screen.getAllByRole('checkbox')
       expect(checkboxes).toHaveLength(3)
-      checkboxes.forEach(cb => expect((cb as HTMLInputElement).checked).toBe(true))
+      checkboxes.forEach(cb => expect((cb as HTMLInputElement).checked).toBe(false))
     })
   })
 
-  it('unchecking a project removes it from selection', async () => {
+  it('checking a project adds it to selection', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => screen.getAllByRole('checkbox'))
-    // Uncheck project-two by accessible name
-    const cb = screen.getByRole('checkbox', { name: 'project-two' })
-    await fireEvent.click(cb)
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-one' }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-three' }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', expect.not.arrayContaining([2]), false)
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false)
     )
   })
 
   it('Create button is disabled when no projects are selected', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => screen.getAllByRole('checkbox'))
-    const checkboxes = screen.getAllByRole('checkbox')
-    // Uncheck all
-    for (const cb of checkboxes) {
-      await fireEvent.click(cb)
-    }
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     const createBtn = screen.getByRole('button', { name: /create window/i })
     expect((createBtn as HTMLButtonElement).disabled).toBe(true)
@@ -126,8 +120,8 @@ describe('multi-project mode', () => {
   it('calls createWindow with selectedProjectIds when Create is clicked', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => screen.getAllByRole('checkbox'))
-    // Uncheck project-three by accessible name, leaving p1 and p2
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-three' }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-one' }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-two' }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>

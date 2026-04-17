@@ -17,7 +17,6 @@
     onGitStatus?: (status: { isDirty: boolean; added: number; deleted: number } | null) => void
     onCommitProject?: (projectId: number, clonePath: string) => void
     onPushProject?: (projectId: number, clonePath: string) => void
-    onEditorProject?: (clonePath: string) => void
   }
 
   let {
@@ -32,8 +31,7 @@
     summary = undefined,
     onGitStatus = () => {},
     onCommitProject = undefined,
-    onPushProject = undefined,
-    onEditorProject = undefined
+    onPushProject = undefined
   }: Props = $props()
 
   const isMulti = $derived(win.project_id === null && win.projects.length > 1)
@@ -231,17 +229,19 @@
   <div class="info-row">
     <div class="info">
       <span class="name">{win.name}</span>
-      <span class="sep">·</span>
-      <span class="project">{project?.name ?? ''}</span>
-      <span class="sep">·</span>
-      <span class="branch" title="current branch">{branch}</span>
-      {#if gitStatus !== null}
-        {#if gitStatus.isDirty && (gitStatus.added > 0 || gitStatus.deleted > 0)}
-          <span class="sep">·</span>
-          <span class="git-stat">+{gitStatus.added} −{gitStatus.deleted}</span>
-        {:else if !gitStatus.isDirty}
-          <span class="sep">·</span>
-          <span class="git-clean">(clean)</span>
+      {#if !isMulti}
+        <span class="sep">·</span>
+        <span class="project">{project?.name ?? ''}</span>
+        <span class="sep">·</span>
+        <span class="branch" title="current branch">{branch}</span>
+        {#if gitStatus !== null}
+          {#if gitStatus.isDirty && (gitStatus.added > 0 || gitStatus.deleted > 0)}
+            <span class="sep">·</span>
+            <span class="git-stat">+{gitStatus.added} −{gitStatus.deleted}</span>
+          {:else if !gitStatus.isDirty}
+            <span class="sep">·</span>
+            <span class="git-clean">(clean)</span>
+          {/if}
         {/if}
       {/if}
       <span class="sep">·</span>
@@ -252,8 +252,10 @@
       {/each}
     </div>
     <div class="actions">
-      <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
-      <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+      {#if !isMulti}
+        <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
+        <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+      {/if}
       {#if onDelete}
         <button
           type="button"
@@ -269,9 +271,8 @@
     {#each win.projects as wp}
       <div class="project-row">
         <span class="project-row-label">{wp.project_name ?? wp.clone_path.split('/').pop()}</span>
-        <button type="button" onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
-        <button type="button" onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
-        <button type="button" onclick={() => onEditorProject?.(wp.clone_path)}>Editor</button>
+        <button type="button" disabled={commitDisabled} onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
+        <button type="button" disabled={pushDisabled} onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
       </div>
     {/each}
   {/if}

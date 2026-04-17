@@ -147,7 +147,9 @@ export function registerIpcHandlers(): void {
     if (!branch || branch === 'HEAD') {
       throw new Error('Cannot push: detached HEAD or branch unknown')
     }
+    console.log('[git-push]', { windowId, projectId: null, clonePath: ctx.clonePath, gitUrl: ctx.gitUrl, branch })
     const result = await gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+    console.log('[git-push:done]', { windowId, projectId: null, clonePath: ctx.clonePath, ok: result.ok, code: result.code })
     return {
       ...result,
       prUrl: result.ok ? buildPrUrl(ctx.gitUrl, branch) : undefined
@@ -184,7 +186,9 @@ export function registerIpcHandlers(): void {
     const ctx = resolveWindowProjectGitContext(windowId, projectId)
     const branch = await getCurrentBranch(ctx.container, ctx.clonePath)
     if (!branch || branch === 'HEAD') throw new Error('Cannot push: detached HEAD or branch unknown')
+    console.log('[git-push]', { windowId, projectId, clonePath: ctx.clonePath, gitUrl: ctx.gitUrl, branch })
     const result = await gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+    console.log('[git-push:done]', { windowId, projectId, clonePath: ctx.clonePath, ok: result.ok, code: result.code })
     return { ...result, prUrl: result.ok ? buildPrUrl(ctx.gitUrl, branch) : undefined }
   })
 

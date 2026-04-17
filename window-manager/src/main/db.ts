@@ -35,23 +35,35 @@ function makeWindowProjectIdNullable(db: Database.Database): void {
   const projectIdCol = cols.find(c => c.name === 'project_id')
   if (!projectIdCol || projectIdCol.notnull === 0) return
 
-  db.exec(`
-    CREATE TABLE windows_new (
-      id           INTEGER PRIMARY KEY AUTOINCREMENT,
-      name         TEXT NOT NULL,
-      project_id   INTEGER REFERENCES projects(id),
-      container_id TEXT NOT NULL,
-      ports        TEXT DEFAULT NULL,
-      network_id   TEXT DEFAULT NULL,
-      created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
-      deleted_at   DATETIME DEFAULT NULL
-    );
-    INSERT INTO windows_new
-      SELECT id, name, project_id, container_id, ports, network_id, created_at, deleted_at
-      FROM windows;
-    DROP TABLE windows;
-    ALTER TABLE windows_new RENAME TO windows;
-  `)
+  db.pragma('foreign_keys = OFF')
+  try {
+    db.exec(`
+      BEGIN;
+      DROP TABLE IF EXISTS windows_new;
+      CREATE TABLE windows_new (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        name         TEXT NOT NULL,
+        project_id   INTEGER REFERENCES projects(id),
+        container_id TEXT NOT NULL,
+        ports        TEXT DEFAULT NULL,
+        network_id   TEXT DEFAULT NULL,
+        created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at   DATETIME DEFAULT NULL
+      );
+      INSERT INTO windows_new
+        SELECT id, name, project_id, container_id, ports, network_id, created_at, deleted_at
+        FROM windows;
+      DROP TABLE windows;
+      ALTER TABLE windows_new RENAME TO windows;
+      COMMIT;
+    `)
+    const violations = db.pragma('foreign_key_check') as unknown[]
+    if (violations.length > 0) {
+      throw new Error(`FK violations after windows migration: ${JSON.stringify(violations)}`)
+    }
+  } finally {
+    db.pragma('foreign_keys = ON')
+  }
 }
 
 function backfillWindowProjects(db: Database.Database): void {

@@ -472,17 +472,6 @@ describe('WindowDetailPane', () => {
       expect(onPushProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
     })
 
-    it('Editor button calls onEditorProject with clonePath', async () => {
-      getCurrentBranch.mockResolvedValue('main')
-      const onEditorProject = vi.fn()
-      render(WindowDetailPane, { props: { win: multiWin, project: null, onEditorProject } })
-      await tick()
-      const rows = document.querySelectorAll('.project-row')
-      const editorBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /editor/i })
-      await fireEvent.click(editorBtn)
-      expect(onEditorProject).toHaveBeenCalledWith('/workspace/repo-a')
-    })
-
     it('does not render project rows for single-project window', async () => {
       getCurrentBranch.mockResolvedValue('main')
       render(WindowDetailPane, { props: { win, project } })

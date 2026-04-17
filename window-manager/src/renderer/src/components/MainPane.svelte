@@ -29,7 +29,7 @@
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
     onWizardCancel: () => void
-    onNavigateToWindow: (projectId: number, windowId: number) => void
+    onNavigateToWindow: (projectId: number | null, windowId: number) => void
     groups: ProjectGroupRecord[]
     onProjectUpdated: (project: ProjectRecord) => void
   }
@@ -78,7 +78,7 @@
     <NewWindowWizard {projects} onCreated={onWindowCreated} onCancel={onWizardCancel} />
   {:else if selectedWindow}
     {#key selectedWindow.id}
-      <TerminalHost win={selectedWindow} project={project!} {onWindowDeleted} />
+      <TerminalHost win={selectedWindow} {project} {onWindowDeleted} />
     {/key}
   {:else if project}
     <ProjectView
