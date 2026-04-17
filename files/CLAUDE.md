@@ -203,7 +203,7 @@ Svelte 5 runes-mode wizard for creating a new window, supporting single-project 
 - Props: `project?: ProjectRecord`, `projects?: ProjectRecord[]`, `onCreated: (win: WindowRecord) => void`, `onCancel: () => void`
 - Single-project mode (when `project` is provided): shows name input, branch select, and optional deps toggle.
 - Multi-project mode (when `projects` array provided): shows checkboxes per project plus a branch select per project row; Create button disabled when no projects selected.
-- Branch selects: fetched via `window.api.listRemoteBranches(gitUrl)` in `onMount` for all projects. While loading, renders a `<span>` (not a select) so `waitFor` for the combobox only resolves after load completes. On success: enabled select with options, default branch pre-selected. On failure: disabled select with "(default)".
-- `branchSelections` and `defaultBranches` are plain (non-reactive) objects mutated directly; `branchOptions` and `branchLoading` are `$state` (trigger template re-renders).
-- `handleSubmit` builds `branchOverrides: Record<number, string>` by comparing each project's selection to its default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
+- Branch selects: fetched via `window.api.listRemoteBranches(gitUrl)` in `onMount` for all projects. While loading, renders a `<span>` (not a select) so `waitFor` for the combobox only resolves after load completes. On success: enabled select with options, default branch pre-selected. On failure (with `console.warn`): disabled select with "(default)".
+- `branchSelections`, `defaultBranches`, `branchOptions`, and `branchLoading` are all `$state`; updates use spread (`{ ...prev, [projectId]: value }`). No DOM refs used. `onchange` handlers call `handleBranchChange(id, e)` which spread-updates `branchSelections`.
+- `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
 - Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (15 tests).

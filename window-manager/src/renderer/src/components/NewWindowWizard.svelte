@@ -23,18 +23,18 @@
 
   let branchOptions = $state<Record<number, string[]>>({})
   let branchLoading = $state<Record<number, boolean>>({})
-  const branchSelections: Record<number, string> = {}
-  const defaultBranches: Record<number, string> = {}
-  let branchSelectRefs = $state<Record<number, HTMLSelectElement | null>>({})
+  let branchSelections = $state<Record<number, string>>({})
+  let defaultBranches = $state<Record<number, string>>({})
 
   async function fetchBranches(projectId: number, gitUrl: string): Promise<void> {
     branchLoading = { ...branchLoading, [projectId]: true }
     try {
       const result = await window.api.listRemoteBranches(gitUrl)
       branchOptions = { ...branchOptions, [projectId]: result.branches }
-      defaultBranches[projectId] = result.defaultBranch
-      branchSelections[projectId] = result.defaultBranch
-    } catch {
+      defaultBranches = { ...defaultBranches, [projectId]: result.defaultBranch }
+      branchSelections = { ...branchSelections, [projectId]: result.defaultBranch }
+    } catch (e) {
+      console.warn(`Failed to fetch branches for project ${projectId}:`, e)
       branchOptions = { ...branchOptions, [projectId]: [] }
     } finally {
       branchLoading = { ...branchLoading, [projectId]: false }
@@ -77,8 +77,7 @@
       const ids = isMultiMode ? $state.snapshot(selectedProjectIds) : [project!.id]
       const branchOverrides: Record<number, string> = {}
       for (const id of ids) {
-        const selectEl = branchSelectRefs[id]
-        const selected = selectEl ? selectEl.value : branchSelections[id]
+        const selected = branchSelections[id]
         const def = defaultBranches[id]
         if (selected && def && selected !== def) branchOverrides[id] = selected
       }
@@ -96,6 +95,11 @@
   function handleKey(e: KeyboardEvent): void {
     if (e.key === 'Enter') handleSubmit()
     else if (e.key === 'Escape') onCancel()
+  }
+
+  function handleBranchChange(projectId: number, e: Event): void {
+    const value = (e.target as HTMLSelectElement).value
+    branchSelections = { ...branchSelections, [projectId]: value }
   }
 </script>
 
@@ -133,8 +137,7 @@
             id="branch-select-{project.id}"
             aria-label="Branch"
             value={branchSelections[project.id]}
-            bind:this={branchSelectRefs[project.id]}
-            onchange={(e) => { branchSelections[project!.id] = (e.target as HTMLSelectElement).value }}
+            onchange={(e) => handleBranchChange(project!.id, e)}
             disabled={loading}
           >
             {#each branchOptions[project.id] as branch}
@@ -169,8 +172,7 @@
               <select
                 aria-label="Branch"
                 value={branchSelections[p.id]}
-                bind:this={branchSelectRefs[p.id]}
-                onchange={(e) => { branchSelections[p.id] = (e.target as HTMLSelectElement).value }}
+                onchange={(e) => handleBranchChange(p.id, e)}
                 disabled={loading}
                 class="branch-select-inline"
               >
