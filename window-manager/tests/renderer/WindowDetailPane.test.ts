@@ -15,7 +15,7 @@ vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
 }))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
@@ -76,7 +76,8 @@ const win = {
   project_id: 7,
   container_id: 'abc123def456',
   created_at: '2026-04-14T00:00:00Z',
-  status: 'running' as const
+  status: 'running' as const,
+  projects: [] as import('../../src/renderer/src/types').WindowProjectRecord[]
 }
 
 const winWithPorts = {
@@ -416,6 +417,77 @@ describe('WindowDetailPane', () => {
       const options = document.querySelectorAll('.dep-selector option')
       expect(options[0].textContent).toContain('?')
       expect(options[1].textContent).toContain('?')
+    })
+  })
+
+  describe('multi-project window', () => {
+    const multiWin = {
+      id: 2,
+      name: 'Multi Window',
+      project_id: null,
+      container_id: 'multi123',
+      created_at: '2026-04-14T00:00:00Z',
+      status: 'running' as const,
+      projects: [
+        { id: 10, window_id: 2, project_id: 1, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
+        { id: 11, window_id: 2, project_id: 2, clone_path: '/workspace/repo-b', project_name: 'Repo B' }
+      ]
+    }
+
+    it('renders project rows for multi-project window', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win: multiWin, project: null } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      expect(rows).toHaveLength(2)
+    })
+
+    it('shows project name in row label', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win: multiWin, project: null } })
+      await tick()
+      expect(screen.getByText('Repo A')).toBeInTheDocument()
+      expect(screen.getByText('Repo B')).toBeInTheDocument()
+    })
+
+    it('Commit button calls onCommitProject with projectId and clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onCommitProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onCommitProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const commitBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /commit/i })
+      await fireEvent.click(commitBtn)
+      expect(onCommitProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
+    })
+
+    it('Push button calls onPushProject with projectId and clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onPushProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onPushProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const pushBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /push/i })
+      await fireEvent.click(pushBtn)
+      expect(onPushProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
+    })
+
+    it('Editor button calls onEditorProject with clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onEditorProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onEditorProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const editorBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /editor/i })
+      await fireEvent.click(editorBtn)
+      expect(onEditorProject).toHaveBeenCalledWith('/workspace/repo-a')
+    })
+
+    it('does not render project rows for single-project window', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      expect(document.querySelector('.project-row')).toBeNull()
     })
   })
 })

@@ -486,6 +486,29 @@ describe('windowService', () => {
       getDb().prepare('UPDATE projects SET env_vars = ? WHERE id = ?').run('not-json', projectId)
       await expect(createWindow('test', projectId)).rejects.toThrow('malformed env_vars JSON')
     })
+
+    it('accepts projectIds array and writes window_projects rows', async () => {
+      const projectId1 = seedProject('git@github.com:org/repo-a.git', 'a')
+      const projectId2 = seedProject('git@github.com:org/repo-b.git', 'b')
+      const result = await createWindow('multi-win', [projectId1, projectId2])
+      expect(result.project_id).toBeNull()
+      expect(result.projects).toHaveLength(2)
+      expect(result.projects.map(p => p.project_id).sort()).toEqual([projectId1, projectId2].sort())
+    })
+
+    it('single-project array sets project_id on window', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      const result = await createWindow('solo-win', [projectId])
+      expect(result.project_id).toBe(projectId)
+      expect(result.projects).toHaveLength(1)
+      expect(result.projects[0].clone_path).toBe('/workspace/repo')
+    })
+
+    it('writes window_projects with correct clone_path per project', async () => {
+      const projectId = seedProject('git@github.com:org/my-project.git')
+      const result = await createWindow('win', [projectId])
+      expect(result.projects[0].clone_path).toBe('/workspace/my-project')
+    })
   })
 
   describe('listWindows', () => {
@@ -512,6 +535,25 @@ describe('windowService', () => {
       const filtered = listWindows(p1)
       expect(filtered).toHaveLength(1)
       expect(filtered[0].name).toBe('win-a')
+    })
+
+    it('includes projects array in each window record', async () => {
+      const projectId = seedProject('git@github.com:org/list-repo.git')
+      await createWindow('list-win', [projectId])
+      const wins = listWindows(projectId)
+      expect(wins[0].projects).toHaveLength(1)
+      expect(wins[0].projects[0].project_id).toBe(projectId)
+      expect(wins[0].projects[0].clone_path).toBe('/workspace/list-repo')
+    })
+
+    it('listWindows returns projects[] on multi-project window', async () => {
+      const p1 = seedProject('git@github.com:org/aa.git', 'aa')
+      const p2 = seedProject('git@github.com:org/bb.git', 'bb')
+      await createWindow('multi', [p1, p2])
+      const wins = listWindows()
+      const win = wins.find(w => w.name === 'multi')
+      expect(win).toBeDefined()
+      expect(win!.projects).toHaveLength(2)
     })
   })
 

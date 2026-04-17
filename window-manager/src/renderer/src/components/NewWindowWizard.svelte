@@ -3,12 +3,15 @@
   import type { ProjectRecord, WindowRecord, ProjectDependency } from '../types'
 
   interface Props {
-    project: ProjectRecord
+    project?: ProjectRecord
+    projects?: ProjectRecord[]
     onCreated: (win: WindowRecord) => void
     onCancel: () => void
   }
 
-  let { project, onCreated, onCancel }: Props = $props()
+  let { project, projects, onCreated, onCancel }: Props = $props()
+
+  const isMultiMode = $derived((projects?.length ?? 0) > 0)
 
   let name = $state('')
   let loading = $state(false)
@@ -16,15 +19,33 @@
   let error = $state('')
   let hasDeps = $state(false)
   let withDeps = $state(false)
+  let selectedProjectIds = $state<number[]>([])
 
   onMount(async () => {
-    const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
-    hasDeps = deps.length > 0
+    if (isMultiMode) {
+      selectedProjectIds = projects.map(p => p.id)
+    } else if (project) {
+      const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
+      hasDeps = deps.length > 0
+    }
   })
+
+  function toggleProject(id: number): void {
+    if (selectedProjectIds.includes(id)) {
+      selectedProjectIds = selectedProjectIds.filter(pid => pid !== id)
+    } else {
+      selectedProjectIds = [...selectedProjectIds, id]
+    }
+  }
+
+  const createDisabled = $derived(
+    !name.trim() || loading || (isMultiMode && selectedProjectIds.length === 0)
+  )
 
   async function handleSubmit(): Promise<void> {
     const trimmed = name.trim()
     if (!trimmed || loading) return
+    if (isMultiMode && selectedProjectIds.length === 0) return
     loading = true
     error = ''
     progress = 'Preparing…'
@@ -32,7 +53,8 @@
       progress = step
     })
     try {
-      const record = await window.api.createWindow(trimmed, project.id, withDeps)
+      const ids = isMultiMode ? selectedProjectIds : [project!.id]
+      const record = await window.api.createWindow(trimmed, ids, withDeps)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -53,7 +75,11 @@
   <div class="wizard-card">
     <header class="wizard-header">
       <h2>New Window</h2>
-      <p class="subtitle">Start a new container for <strong>{project.name}</strong>.</p>
+      {#if isMultiMode}
+        <p class="subtitle">Select projects for this window.</p>
+      {:else}
+        <p class="subtitle">Start a new container for <strong>{project?.name}</strong>.</p>
+      {/if}
     </header>
 
     <div class="field">
@@ -69,7 +95,24 @@
       />
     </div>
 
-    {#if hasDeps}
+    {#if isMultiMode}
+      <div class="project-list">
+        <span class="field-label">Projects</span>
+        {#each projects as p}
+          <label class="project-toggle">
+            <input
+              type="checkbox"
+              checked={selectedProjectIds.includes(p.id)}
+              onchange={() => toggleProject(p.id)}
+              disabled={loading}
+            />
+            {p.name}
+          </label>
+        {/each}
+      </div>
+    {/if}
+
+    {#if !isMultiMode && hasDeps}
       <label class="dep-toggle">
         <input type="checkbox" bind:checked={withDeps} disabled={loading} aria-label="Start with dependencies" />
         Start with dependencies
@@ -93,7 +136,7 @@
         type="button"
         class="submit"
         onclick={handleSubmit}
-        disabled={!name.trim() || loading}
+        disabled={createDisabled}
       >
         {loading ? 'Creating…' : 'Create Window'}
       </button>
@@ -153,6 +196,14 @@
     gap: 0.35rem;
   }
 
+  .field-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+  }
+
   label {
     font-size: 0.75rem;
     font-weight: 600;
@@ -175,6 +226,30 @@
 
   input:focus {
     border-color: var(--accent);
+  }
+
+  .project-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .project-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--fg-1);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: normal;
+  }
+
+  .project-toggle input {
+    width: auto;
+    cursor: pointer;
   }
 
   .actions {

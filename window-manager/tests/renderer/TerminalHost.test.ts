@@ -69,12 +69,15 @@ vi.mock('../../src/renderer/src/lib/conversationSummary', () => ({
 }))
 
 const mockPushToast = vi.fn()
+const mockPushSuccessModal = vi.fn()
 vi.mock('../../src/renderer/src/lib/toasts', () => ({
-  pushToast: (...args: unknown[]) => mockPushToast(...args)
+  pushToast: (...args: unknown[]) => mockPushToast(...args),
+  pushSuccessModal: (...args: unknown[]) => mockPushSuccessModal(...args)
 }))
 
+const mockScrollToRoot = vi.fn()
 vi.mock('../../src/renderer/src/components/EditorPane.svelte', () => ({
-  default: vi.fn(() => ({}))
+  default: vi.fn(() => ({ scrollToRoot: mockScrollToRoot }))
 }))
 
 import { writable } from 'svelte/store'
@@ -114,7 +117,8 @@ const mockWindow: WindowRecord = {
   project_id: 7,
   container_id: 'container123abc',
   created_at: '2026-01-01T00:00:00Z',
-  status: 'running'
+  status: 'running',
+  projects: []
 }
 
 const mockProject: ProjectRecord = {
@@ -140,6 +144,9 @@ describe('TerminalHost', () => {
     getGitStatus: ReturnType<typeof vi.fn>
     commit: ReturnType<typeof vi.fn>
     push: ReturnType<typeof vi.fn>
+    commitProject: ReturnType<typeof vi.fn>
+    pushProject: ReturnType<typeof vi.fn>
+    openExternal: ReturnType<typeof vi.fn>
   }
 
   beforeEach(() => {
@@ -158,6 +165,9 @@ describe('TerminalHost', () => {
       getGitStatus: vi.fn().mockResolvedValue({ isDirty: false, added: 0, deleted: 0 }),
       commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      commitProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      pushProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      openExternal: vi.fn().mockResolvedValue(undefined),
       listWindowDeps: vi.fn().mockResolvedValue([]),
       onDepLogsData: vi.fn(),
       offDepLogsData: vi.fn()
@@ -182,6 +192,7 @@ describe('TerminalHost', () => {
     mockResizePanels.mockReset()
     mockReorderPanels.mockReset()
     mockSavePanelLayout.mockReset()
+    mockScrollToRoot.mockReset()
   })
 
   afterEach(() => {
@@ -524,5 +535,142 @@ describe('TerminalHost', () => {
     mockApi.getGitStatus.mockReturnValue(new Promise(() => {})) // never resolves
     render(TerminalHost, { win: mockWindow, project: mockProject })
     expect(screen.getByRole('button', { name: /^commit$/i })).not.toBeDisabled()
+  })
+})
+
+describe('multi-project TerminalHost', () => {
+  const multiWin: WindowRecord = {
+    id: 2,
+    name: 'multi-test',
+    project_id: null,
+    container_id: 'container-multi',
+    created_at: '2026-01-01T00:00:00Z',
+    status: 'running',
+    projects: [
+      { id: 1, window_id: 2, project_id: 10, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
+      { id: 2, window_id: 2, project_id: 11, clone_path: '/workspace/repo-b', project_name: 'Repo B' }
+    ]
+  }
+
+  let mockApi: Record<string, ReturnType<typeof vi.fn>>
+
+  beforeEach(() => {
+    mockApi = {
+      openTerminal: vi.fn().mockResolvedValue(undefined),
+      sendTerminalInput: vi.fn(),
+      resizeTerminal: vi.fn(),
+      closeTerminal: vi.fn(),
+      onTerminalData: vi.fn(),
+      offTerminalData: vi.fn(),
+      onTerminalWaiting: vi.fn(),
+      offTerminalWaiting: vi.fn(),
+      onTerminalSummary: vi.fn(),
+      offTerminalSummary: vi.fn(),
+      getCurrentBranch: vi.fn().mockResolvedValue('main'),
+      getGitStatus: vi.fn().mockResolvedValue({ isDirty: true, added: 1, deleted: 0 }),
+      commit: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      push: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      commitProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      pushProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
+      openExternal: vi.fn().mockResolvedValue(undefined),
+      listWindowDeps: vi.fn().mockResolvedValue([]),
+      onDepLogsData: vi.fn(),
+      offDepLogsData: vi.fn()
+    }
+    vi.stubGlobal('api', mockApi)
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe = vi.fn()
+        unobserve = vi.fn()
+        disconnect = vi.fn()
+      }
+    )
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 50 },
+        { id: 'terminal', visible: false, width: 0  },
+        { id: 'editor',   visible: true,  width: 50 }
+      ]
+    })
+    mockTogglePanel.mockReset()
+    mockScrollToRoot.mockReset()
+  })
+
+  afterEach(() => {
+    cleanup()
+    vi.unstubAllGlobals()
+    vi.clearAllMocks()
+  })
+
+  it('handleEditorProject toggles editor panel when hidden and calls scrollToRoot', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true,  width: 100 },
+        { id: 'terminal', visible: false, width: 0   },
+        { id: 'editor',   visible: false, width: 0   }
+      ]
+    })
+    render(TerminalHost, { win: multiWin, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+
+    // Find the per-project "Editor" buttons (in project-row, not toggle-row)
+    const editorBtns = screen.getAllByRole('button', { name: /^editor$/i })
+    // First is toggle-row Editor; remaining are per-project rows
+    await fireEvent.click(editorBtns[1])
+
+    expect(mockTogglePanel).toHaveBeenCalledWith('editor')
+  })
+
+  it('runPushProject calls window.api.pushProject with correct args', async () => {
+    render(TerminalHost, { win: multiWin, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+
+    const pushBtns = screen.getAllByRole('button', { name: /^push$/i })
+    // First per-project push button corresponds to project_id 10 (Repo A row)
+    // WindowDetailPane renders per-project rows with Push buttons
+    await fireEvent.click(pushBtns[pushBtns.length - 2]) // second-to-last: first project-row Push
+
+    await vi.waitFor(() => {
+      expect(mockApi.pushProject).toHaveBeenCalledWith(2, 10)
+    })
+  })
+
+  it('onCommitProject sets commitProjectId and shows commit modal', async () => {
+    render(TerminalHost, { win: multiWin, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+
+    const commitBtns = screen.getAllByRole('button', { name: /^commit$/i })
+    // Last two are per-project rows; click the first per-project commit
+    await fireEvent.click(commitBtns[commitBtns.length - 2])
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /commit changes/i })).toBeTruthy()
+    })
+  })
+
+  it('CommitModal uses commitProject API when commitProjectId is set', async () => {
+    render(TerminalHost, { win: multiWin, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+
+    const commitBtns = screen.getAllByRole('button', { name: /^commit$/i })
+    await fireEvent.click(commitBtns[commitBtns.length - 2])
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('dialog', { name: /commit changes/i })).toBeTruthy()
+    })
+
+    const subjectInput = screen.getByPlaceholderText('Short summary') as HTMLInputElement
+    subjectInput.value = 'fix: something'
+    await fireEvent.input(subjectInput)
+
+    // Submit the form directly
+    const form = document.querySelector('form')
+    await fireEvent.submit(form!)
+
+    await vi.waitFor(() => {
+      expect(mockApi.commitProject).toHaveBeenCalledWith(2, 10, expect.objectContaining({ subject: 'fix: something' }))
+    })
+    expect(mockApi.commit).not.toHaveBeenCalled()
   })
 })
