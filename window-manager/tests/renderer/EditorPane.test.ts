@@ -20,6 +20,14 @@ afterEach(() => {
 })
 
 describe('EditorPane', () => {
+  it('shows a placeholder when no file is selected', () => {
+    const { container } = render(EditorPane, {
+      containerId: 'ctr',
+      roots: [{ rootPath: '/workspace/r', label: 'r' }]
+    })
+    expect(container.querySelector('.editor-default')).toBeInTheDocument()
+  })
+
   it('renders without error when given a single root', () => {
     const { container } = render(EditorPane, {
       containerId: 'ctr',

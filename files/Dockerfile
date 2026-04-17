@@ -77,6 +77,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN npx -y playwright-core install-deps chromium && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install virtual display stack for in-container Electron dev preview
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  xvfb \
+  x11vnc \
+  novnc \
+  websockify \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set up non-root user
 USER node
 
@@ -146,7 +154,8 @@ RUN claude plugin marketplace add JuliusBrussee/caveman && \
 USER root
 COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh && \
+COPY dev-preview.sh /usr/local/bin/dev-preview.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node

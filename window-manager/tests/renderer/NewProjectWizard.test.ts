@@ -81,7 +81,7 @@ describe('NewProjectWizard', () => {
 
   it('renders a ports input field', () => {
     render(NewProjectWizard, { onCreated: vi.fn(), onCancel: vi.fn() })
-    expect(screen.getByPlaceholderText('3000, 8080')).toBeInTheDocument()
+    expect(screen.getByPlaceholderText('3000, 8080:9000')).toBeInTheDocument()
   })
 
   it('passes parsed ports to createProject when ports field is filled', async () => {
@@ -91,7 +91,7 @@ describe('NewProjectWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
       target: { value: 'git@github.com:org/alpha.git' }
     })
-    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080:9000'), {
       target: { value: '3000, 8080' }
     })
     await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
@@ -100,7 +100,7 @@ describe('NewProjectWizard', () => {
       expect(mockCreateProject).toHaveBeenCalledWith(
         '',
         'git@github.com:org/alpha.git',
-        [3000, 8080]
+        [{ container: 3000 }, { container: 8080 }]
       )
     })
   })
@@ -128,13 +128,13 @@ describe('NewProjectWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
       target: { value: 'git@github.com:org/alpha.git' }
     })
-    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080:9000'), {
       target: { value: '3000, abc' }
     })
     await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/ports must be comma-separated numbers/i)).toBeInTheDocument()
+      expect(screen.getByText(/port must be a number/i)).toBeInTheDocument()
       expect(mockCreateProject).not.toHaveBeenCalled()
     })
   })
@@ -145,13 +145,13 @@ describe('NewProjectWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
       target: { value: 'git@github.com:org/alpha.git' }
     })
-    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080:9000'), {
       target: { value: '3000abc' }
     })
     await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
 
     await waitFor(() => {
-      expect(screen.getByText(/ports must be comma-separated numbers/i)).toBeInTheDocument()
+      expect(screen.getByText(/port must be a number/i)).toBeInTheDocument()
       expect(mockCreateProject).not.toHaveBeenCalled()
     })
   })
@@ -162,7 +162,7 @@ describe('NewProjectWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/git@github/i), {
       target: { value: 'git@github.com:org/alpha.git' }
     })
-    await fireEvent.input(screen.getByPlaceholderText('3000, 8080'), {
+    await fireEvent.input(screen.getByPlaceholderText('3000, 8080:9000'), {
       target: { value: '99999' }
     })
     await fireEvent.click(screen.getByRole('button', { name: /create project/i }))
