@@ -56,7 +56,6 @@
   let deleteBusy = $state(false)
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let commitProjectId = $state(null as number | null)
-  let commitProjectPath = $state(null as string | null)
   let editorPaneRef = $state(null as InstanceType<typeof EditorPane> | null)
 
   let contentAreaWidth = $state(0)
@@ -131,7 +130,6 @@
         ? await window.api.commitProject(win.id, commitProjectId, payload)
         : await window.api.commit(win.id, payload)
       commitProjectId = null
-      commitProjectPath = null
       if (res.ok) {
         const subjectLine = res.stdout.split('\n').find((l: string) => /^\[.+\]/.test(l))
         pushToast({ level: 'success', title: 'Committed', body: subjectLine })
@@ -179,7 +177,7 @@
     }
   }
 
-  async function runPushProject(projectId: number, clonePath: string): Promise<void> {
+  async function runPushProject(projectId: number, _clonePath: string): Promise<void> {
     pushBusy = true
     try {
       const res = await window.api.pushProject(win.id, projectId)
@@ -347,7 +345,7 @@
     commitDisabled={commitBusy || pushBusy || deleteBusy || (gitStatus !== null && !gitStatus.isDirty)}
     pushDisabled={commitBusy || pushBusy || deleteBusy}
     deleteDisabled={deleteBusy}
-    onCommitProject={(projectId, clonePath) => { commitProjectId = projectId; commitProjectPath = clonePath; commitOpen = true }}
+    onCommitProject={(projectId, _clonePath) => { commitProjectId = projectId; commitOpen = true }}
     onPushProject={runPushProject}
     onEditorProject={handleEditorProject}
   />
