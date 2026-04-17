@@ -76,7 +76,8 @@ const win = {
   project_id: 7,
   container_id: 'abc123def456',
   created_at: '2026-04-14T00:00:00Z',
-  status: 'running' as const
+  status: 'running' as const,
+  projects: [] as import('../../src/renderer/src/types').WindowProjectRecord[]
 }
 
 const winWithPorts = {
@@ -416,6 +417,77 @@ describe('WindowDetailPane', () => {
       const options = document.querySelectorAll('.dep-selector option')
       expect(options[0].textContent).toContain('?')
       expect(options[1].textContent).toContain('?')
+    })
+  })
+
+  describe('multi-project window', () => {
+    const multiWin = {
+      id: 2,
+      name: 'Multi Window',
+      project_id: null,
+      container_id: 'multi123',
+      created_at: '2026-04-14T00:00:00Z',
+      status: 'running' as const,
+      projects: [
+        { id: 10, window_id: 2, project_id: 1, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
+        { id: 11, window_id: 2, project_id: 2, clone_path: '/workspace/repo-b', project_name: 'Repo B' }
+      ]
+    }
+
+    it('renders project rows for multi-project window', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win: multiWin, project: null } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      expect(rows).toHaveLength(2)
+    })
+
+    it('shows project name in row label', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win: multiWin, project: null } })
+      await tick()
+      expect(screen.getByText('Repo A')).toBeInTheDocument()
+      expect(screen.getByText('Repo B')).toBeInTheDocument()
+    })
+
+    it('Commit button calls onCommitProject with projectId and clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onCommitProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onCommitProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const commitBtn = rows[0].querySelector('button')!
+      await fireEvent.click(commitBtn)
+      expect(onCommitProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
+    })
+
+    it('Push button calls onPushProject with projectId and clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onPushProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onPushProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const buttons = rows[0].querySelectorAll('button')
+      await fireEvent.click(buttons[1])
+      expect(onPushProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
+    })
+
+    it('Editor button calls onEditorProject with clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      const onEditorProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onEditorProject } })
+      await tick()
+      const rows = document.querySelectorAll('.project-row')
+      const buttons = rows[0].querySelectorAll('button')
+      await fireEvent.click(buttons[2])
+      expect(onEditorProject).toHaveBeenCalledWith('/workspace/repo-a')
+    })
+
+    it('does not render project rows for single-project window', async () => {
+      getCurrentBranch.mockResolvedValue('main')
+      render(WindowDetailPane, { props: { win, project } })
+      await tick()
+      expect(document.querySelector('.project-row')).toBeNull()
     })
   })
 })

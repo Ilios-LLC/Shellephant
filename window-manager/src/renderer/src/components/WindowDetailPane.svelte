@@ -6,7 +6,7 @@
 
   interface Props {
     win: WindowRecord
-    project: ProjectRecord
+    project: ProjectRecord | null
     onCommit?: () => void
     onPush?: () => void
     onDelete?: () => void
@@ -15,6 +15,9 @@
     deleteDisabled?: boolean
     summary?: ConversationSummary
     onGitStatus?: (status: { isDirty: boolean; added: number; deleted: number } | null) => void
+    onCommitProject?: (projectId: number, clonePath: string) => void
+    onPushProject?: (projectId: number, clonePath: string) => void
+    onEditorProject?: (clonePath: string) => void
   }
 
   let {
@@ -27,8 +30,13 @@
     pushDisabled = true,
     deleteDisabled = false,
     summary = undefined,
-    onGitStatus = () => {}
+    onGitStatus = () => {},
+    onCommitProject = undefined,
+    onPushProject = undefined,
+    onEditorProject = undefined
   }: Props = $props()
+
+  const isMulti = $derived(win.project_id === null && win.projects.length > 1)
 
   const panelVisible = $derived({
     claude:   $panelLayout.panels.find(p => p.id === 'claude')?.visible   ?? false,
@@ -106,6 +114,7 @@
   let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
 
   async function refreshBranch(): Promise<void> {
+    if (isMulti) return
     let next: string | null = null
     try {
       next = await window.api.getCurrentBranch(win.id)
@@ -223,7 +232,7 @@
     <div class="info">
       <span class="name">{win.name}</span>
       <span class="sep">·</span>
-      <span class="project">{project.name}</span>
+      <span class="project">{project?.name ?? ''}</span>
       <span class="sep">·</span>
       <span class="branch" title="current branch">{branch}</span>
       {#if gitStatus !== null}
@@ -256,6 +265,16 @@
       {/if}
     </div>
   </div>
+  {#if isMulti}
+    {#each win.projects as wp}
+      <div class="project-row">
+        <span class="project-row-label">{wp.project_name ?? wp.clone_path.split('/').pop()}</span>
+        <button onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
+        <button onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
+        <button onclick={() => onEditorProject?.(wp.clone_path)}>Editor</button>
+      </div>
+    {/each}
+  {/if}
   {#if summary}
     <div class="summary-row">
       <span class="summary-title">{summary.title}</span>
@@ -424,5 +443,20 @@
     background: var(--bg-2);
     padding: 0.35rem 0.5rem;
     border-radius: 4px;
+  }
+  .project-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.25rem 0.5rem;
+    border-top: 1px solid var(--border);
+  }
+  .project-row-label {
+    flex: 1;
+    font-size: 0.75rem;
+    color: var(--fg-1);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
