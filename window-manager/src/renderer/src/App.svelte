@@ -84,6 +84,16 @@
     view = 'new-window'
   }
 
+  function handleRequestMultiWindow(): void {
+    if (!patStatus.configured || !claudeStatus.configured) {
+      settingsRequiredFor = 'multi-window'
+      view = 'settings'
+      return
+    }
+    settingsRequiredFor = null
+    view = 'new-multi-window'
+  }
+
   function handleRequestSettings(): void {
     settingsRequiredFor = null
     view = 'settings'
@@ -102,6 +112,9 @@
     } else if (settingsRequiredFor === 'window') {
       settingsRequiredFor = null
       view = 'new-window'
+    } else if (settingsRequiredFor === 'multi-window') {
+      settingsRequiredFor = null
+      view = 'new-multi-window'
     }
   }
 
@@ -217,6 +230,7 @@
     onGroupSelect={handleGroupSelect}
     onGroupCreated={handleGroupCreated}
     onProjectSettingsClick={handleProjectSettingsClick}
+    onRequestMultiWindow={handleRequestMultiWindow}
   />
   <MainPane
     project={selectedProject}

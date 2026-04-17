@@ -17,6 +17,7 @@
     onGroupSelect: (id: number) => void
     onGroupCreated: (group: ProjectGroupRecord) => void
     onProjectSettingsClick: (project: ProjectRecord) => void
+    onRequestMultiWindow?: () => void
   }
 
   let {
@@ -31,7 +32,8 @@
     onWaitingWindowSelect,
     onGroupSelect,
     onGroupCreated,
-    onProjectSettingsClick
+    onProjectSettingsClick,
+    onRequestMultiWindow
   }: Props = $props()
 </script>
 
@@ -84,6 +86,13 @@
   </nav>
   {#if projects.length === 0}
     <p class="empty-hint">{activeGroupId !== null ? 'No projects in this group.' : 'No projects yet.'}</p>
+  {/if}
+  {#if projects.length >= 2 && onRequestMultiWindow}
+    <div class="multi-window-section">
+      <button type="button" class="multi-window-btn" onclick={onRequestMultiWindow}>
+        ＋ Multi-Project Window
+      </button>
+    </div>
   {/if}
   {#if $waitingWindows.length > 0}
     <div class="waiting-section">
@@ -179,6 +188,28 @@
     padding: 1rem 0.85rem;
     font-size: 0.78rem;
     color: var(--fg-2);
+  }
+
+  .multi-window-section {
+    padding: 0.35rem 0.6rem;
+  }
+
+  .multi-window-btn {
+    width: 100%;
+    padding: 0.35rem 0.65rem;
+    background: transparent;
+    border: 1px dashed var(--border);
+    border-radius: 4px;
+    color: var(--fg-2);
+    font-family: var(--font-ui);
+    font-size: 0.78rem;
+    cursor: pointer;
+    text-align: center;
+  }
+
+  .multi-window-btn:hover {
+    color: var(--accent-hi);
+    border-color: var(--accent);
   }
 
   .waiting-section {

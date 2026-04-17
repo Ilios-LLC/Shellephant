@@ -7,7 +7,7 @@
   import NewWindowWizard from './NewWindowWizard.svelte'
   import SettingsView, { type SettingsRequirement } from './SettingsView.svelte'
 
-  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'settings'
+  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'new-multi-window' | 'settings'
 
   interface Props {
     project: ProjectRecord | null
@@ -74,6 +74,8 @@
     <NewProjectWizard onCreated={onProjectCreated} onCancel={onWizardCancel} />
   {:else if view === 'new-window' && project}
     <NewWindowWizard {project} onCreated={onWindowCreated} onCancel={onWizardCancel} />
+  {:else if view === 'new-multi-window'}
+    <NewWindowWizard {projects} onCreated={onWindowCreated} onCancel={onWizardCancel} />
   {:else if selectedWindow}
     {#key selectedWindow.id}
       <TerminalHost win={selectedWindow} project={project!} {onWindowDeleted} />

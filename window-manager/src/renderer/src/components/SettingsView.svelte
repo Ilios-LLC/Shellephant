@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { TokenStatus } from '../types'
 
-  export type SettingsRequirement = null | 'project' | 'window'
+  export type SettingsRequirement = null | 'project' | 'window' | 'multi-window'
 
   interface Props {
     patStatus: TokenStatus
