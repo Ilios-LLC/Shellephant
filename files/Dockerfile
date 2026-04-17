@@ -128,7 +128,7 @@ ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
 COPY init-firewall.sh /usr/local/bin/
 COPY CLAUDE.md /home/node/.claude/
 
-# tmux config: no status bar, truecolor, mouse on
+# tmux config: no status bar, truecolor
 COPY --chown=node:node tmux.conf /home/node/.tmux.conf
 
 # Pre-seed Claude Code config so first run skips onboarding and has plugins pre-enabled.
