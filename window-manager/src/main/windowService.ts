@@ -116,8 +116,6 @@ async function cleanupDepContainers(
 
 interface ProjectConfig {
   gitUrl: string
-  pat: string
-  claudeToken: string
   slug: string
   clonePath: string
   projectPorts: PortMapping[]
@@ -130,11 +128,6 @@ function loadProjectConfig(projectId: number, name: string): ProjectConfig {
     .prepare('SELECT git_url, ports, env_vars FROM projects WHERE id = ? AND deleted_at IS NULL')
     .get(projectId) as { git_url: string; ports: string | null; env_vars: string | null } | undefined
   if (!project) throw new Error('Project not found')
-
-  const pat = getGitHubPat()
-  if (!pat) throw new Error('GitHub PAT not configured. Open Settings to add one.')
-  const claudeToken = getClaudeToken()
-  if (!claudeToken) throw new Error('Claude token not configured. Open Settings to add one.')
 
   const slug = toSlug(name)
   const repoName = extractRepoName(project.git_url)
@@ -153,8 +146,6 @@ function loadProjectConfig(projectId: number, name: string): ProjectConfig {
 
   return {
     gitUrl: project.git_url,
-    pat,
-    claudeToken,
     slug,
     clonePath: `/workspace/${repoName}`,
     projectPorts,
@@ -164,12 +155,26 @@ function loadProjectConfig(projectId: number, name: string): ProjectConfig {
 
 export async function createWindow(
   name: string,
-  projectId: number,
+  projectIds: number | number[],
   withDeps: boolean = false,
   onProgress: ProgressReporter = () => {}
 ): Promise<WindowRecord> {
-  const cfg = loadProjectConfig(projectId, name)
-  const { gitUrl, pat, claudeToken, slug, clonePath, projectPorts, projectEnvVars } = cfg
+  const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
+  if (ids.length === 0) throw new Error('At least one project required')
+
+  const pat = getGitHubPat()
+  if (!pat) throw new Error('GitHub PAT not configured. Open Settings to add one.')
+  const claudeToken = getClaudeToken()
+  if (!claudeToken) throw new Error('Claude token not configured. Open Settings to add one.')
+
+  const isMulti = ids.length > 1
+
+  const projectConfigs = ids.map(id => loadProjectConfig(id, name))
+
+  const primaryCfg = projectConfigs[0]
+  const { projectPorts, projectEnvVars } = isMulti
+    ? { projectPorts: [] as PortMapping[], projectEnvVars: [] as string[] }
+    : { projectPorts: primaryCfg.projectPorts, projectEnvVars: primaryCfg.projectEnvVars }
 
   const exposedPorts: Record<string, Record<string, never>> = {}
   const portBindings: Record<string, { HostPort: string }[]> = {}
@@ -179,15 +184,17 @@ export async function createWindow(
   }
 
   onProgress('Probing remote for branch…')
-  const remoteHasSlug = await remoteBranchExists(gitUrl, slug, pat)
+  const remoteChecks = await Promise.all(
+    projectConfigs.map(cfg => remoteBranchExists(cfg.gitUrl, cfg.slug, pat))
+  )
 
   let networkId: string | null = null
   const depContainerRecords: DepContainerRecord[] = []
   let container: Dockerode.Container | null = null
 
   try {
-    if (withDeps) {
-      const result = await createDepContainers(slug, projectId, onProgress)
+    if (withDeps && !isMulti) {
+      const result = await createDepContainers(primaryCfg.slug, ids[0], onProgress)
       if (result.networkId) {
         networkId = result.networkId
         depContainerRecords.push(...result.depContainerRecords)
@@ -211,25 +218,29 @@ export async function createWindow(
 
     const portsJson = await resolvePortsJson(container, projectPorts)
 
-    onProgress('Preparing workspace…')
-    const mkdir = await execInContainer(container, ['mkdir', '-p', clonePath])
-    if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
+    for (let i = 0; i < projectConfigs.length; i++) {
+      const cfg = projectConfigs[i]
+      const repoLabel = cfg.gitUrl.split('/').pop()?.replace(/\.git$/, '') ?? 'repo'
+      onProgress(isMulti ? `Preparing ${repoLabel}…` : 'Preparing workspace…')
+      const mkdir = await execInContainer(container, ['mkdir', '-p', cfg.clonePath])
+      if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
 
-    onProgress('Cloning repository in container…')
-    await cloneInContainer(container, gitUrl, pat, clonePath)
+      onProgress(isMulti ? `Cloning ${repoLabel}…` : 'Cloning repository in container…')
+      await cloneInContainer(container, cfg.gitUrl, pat, cfg.clonePath)
 
-    onProgress('Checking out branch…')
-    await checkoutSlug(container, clonePath, slug, remoteHasSlug)
+      onProgress('Checking out branch…')
+      await checkoutSlug(container, cfg.clonePath, cfg.slug, remoteChecks[i])
+    }
 
     try {
-      const { name, email } = await getIdentity(pat)
-      await applyGitIdentityInContainer(container, name, email)
+      const { name: gitName, email } = await getIdentity(pat)
+      await applyGitIdentityInContainer(container, gitName, email)
     } catch (err) {
       console.warn('Failed to set git identity in container:', err)
     }
 
     onProgress('Finalizing…')
-    return persistWindow(name, projectId, container, portsJson, networkId, depContainerRecords)
+    return persistWindow(name, ids, projectConfigs.map(c => c.clonePath), container, portsJson, networkId, depContainerRecords)
   } catch (err) {
     await cleanupDepContainers(depContainerRecords, networkId)
     if (container) {
@@ -242,18 +253,31 @@ export async function createWindow(
 
 function persistWindow(
   name: string,
-  projectId: number,
+  projectIds: number[],
+  clonePaths: string[],
   container: Dockerode.Container,
   portsJson: string | null,
   networkId: string | null,
   depContainerRecords: DepContainerRecord[]
 ): WindowRecord {
   const db = getDb()
+  const isMulti = projectIds.length > 1
+  const projectId = isMulti ? null : projectIds[0]
+
   const result = db
     .prepare('INSERT INTO windows (name, project_id, container_id, ports, network_id) VALUES (?, ?, ?, ?, ?)')
     .run(name, projectId, container.id, portsJson, networkId)
   const id = result.lastInsertRowid as number
   statusMap.set(id, 'running')
+
+  const insertWp = db.prepare(
+    'INSERT INTO window_projects (window_id, project_id, clone_path) VALUES (?, ?, ?)'
+  )
+  const wpRows: WindowProjectRecord[] = []
+  for (let i = 0; i < projectIds.length; i++) {
+    insertWp.run(id, projectIds[i], clonePaths[i])
+    wpRows.push({ id: 0, window_id: id, project_id: projectIds[i], clone_path: clonePaths[i] })
+  }
 
   for (const { depId, containerId } of depContainerRecords) {
     db.prepare(
@@ -268,7 +292,8 @@ function persistWindow(
     container_id: container.id,
     ports: portsJson ?? undefined,
     created_at: new Date().toISOString(),
-    status: 'running' as WindowStatus
+    status: 'running' as WindowStatus,
+    projects: wpRows
   }
 }
 
@@ -325,18 +350,33 @@ export async function reconcileWindows(): Promise<void> {
 
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
-  let query =
+  let windowQuery =
     'SELECT id, name, project_id, container_id, ports, network_id, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {
-    query += ' AND project_id = ?'
-    params.push(projectId)
+    windowQuery += ' AND (project_id = ? OR id IN (SELECT window_id FROM window_projects WHERE project_id = ?))'
+    params.push(projectId, projectId)
   }
 
-  return (db.prepare(query).all(...params) as Omit<WindowRecord, 'status'>[]).map((r) => ({
+  const windows = (db.prepare(windowQuery).all(...params) as Omit<WindowRecord, 'status' | 'projects'>[])
+
+  const wpRows = db.prepare(`
+    SELECT wp.id, wp.window_id, wp.project_id, wp.clone_path, p.name AS project_name, p.git_url
+    FROM window_projects wp JOIN projects p ON p.id = wp.project_id
+  `).all() as (WindowProjectRecord & { project_name: string; git_url: string })[]
+
+  const wpByWindow = new Map<number, WindowProjectRecord[]>()
+  for (const wp of wpRows) {
+    const arr = wpByWindow.get(wp.window_id) ?? []
+    arr.push(wp)
+    wpByWindow.set(wp.window_id, arr)
+  }
+
+  return windows.map((r) => ({
     ...r,
-    status: statusMap.get(r.id) ?? ('unknown' as WindowStatus)
+    status: statusMap.get(r.id) ?? ('unknown' as WindowStatus),
+    projects: wpByWindow.get(r.id) ?? []
   }))
 }
 
