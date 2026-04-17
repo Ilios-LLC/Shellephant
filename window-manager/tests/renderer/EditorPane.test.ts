@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe('EditorPane', () => {
   it('shows a placeholder when no file is selected', () => {
-    render(EditorPane, { containerId: 'ctr', rootPath: '/workspace/r' })
-    expect(screen.getByText(/select a file/i)).toBeInTheDocument()
+    const { container } = render(EditorPane, { containerId: 'ctr', rootPath: '/workspace/r' })
+    expect(container.querySelector('.editor-default')).toBeInTheDocument()
   })
 })
