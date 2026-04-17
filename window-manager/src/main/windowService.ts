@@ -210,7 +210,7 @@ export async function createWindow(
   onProgress('Probing remote for branch…')
   const remoteChecks = await Promise.all(
     projectConfigs.map((cfg, i) => {
-      if (branchOverrides[ids[i]]) return Promise.resolve(false)
+      if (branchOverrides[ids[i]]) return Promise.resolve(false) // unused when override present
       return remoteBranchExists(cfg.gitUrl, cfg.slug, pat)
     })
   )
