@@ -100,9 +100,9 @@ describe('multi-project mode', () => {
   it('unchecking a project removes it from selection', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => screen.getAllByRole('checkbox'))
-    const checkboxes = screen.getAllByRole('checkbox')
-    // Uncheck project-two (index 1)
-    await fireEvent.click(checkboxes[1])
+    // Uncheck project-two by accessible name
+    const cb = screen.getByRole('checkbox', { name: 'project-two' })
+    await fireEvent.click(cb)
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
@@ -126,9 +126,8 @@ describe('multi-project mode', () => {
   it('calls createWindow with selectedProjectIds when Create is clicked', async () => {
     render(NewWindowWizard, multiProps())
     await waitFor(() => screen.getAllByRole('checkbox'))
-    const checkboxes = screen.getAllByRole('checkbox')
-    // Uncheck project-three (index 2), leaving p1 and p2
-    await fireEvent.click(checkboxes[2])
+    // Uncheck project-three by accessible name, leaving p1 and p2
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-three' }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>

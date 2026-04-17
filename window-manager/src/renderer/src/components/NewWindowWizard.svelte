@@ -11,7 +11,7 @@
 
   let { project, projects, onCreated, onCancel }: Props = $props()
 
-  const isMultiMode = $derived((projects?.length ?? 0) > 1)
+  const isMultiMode = $derived((projects?.length ?? 0) > 0)
 
   let name = $state('')
   let loading = $state(false)
@@ -22,7 +22,7 @@
   let selectedProjectIds = $state<number[]>([])
 
   onMount(async () => {
-    if (isMultiMode && projects) {
+    if (isMultiMode) {
       selectedProjectIds = projects.map(p => p.id)
     } else if (project) {
       const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
@@ -95,7 +95,7 @@
       />
     </div>
 
-    {#if isMultiMode && projects}
+    {#if isMultiMode}
       <div class="project-list">
         <span class="field-label">Projects</span>
         {#each projects as p}
