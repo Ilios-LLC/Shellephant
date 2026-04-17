@@ -754,10 +754,14 @@ describe('listRemoteBranches', () => {
   })
 
   it('rejects with scrubbed error on git failure', async () => {
-    const err = Object.assign(new Error('auth failed for https://PAT@github.com/org/repo.git'), { code: 128 })
+    const err = Object.assign(new Error('auth failed for https://PAT@github.com/org/repo.git'), {
+      code: 128,
+      stderr: 'fatal: auth https://PAT@github.com/org/repo.git'
+    })
     mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) => cb(err, '', ''))
     const rejection = await listRemoteBranches('git@github.com:org/repo.git', 'PAT').catch(e => e)
     expect(rejection).toBeInstanceOf(Error)
     expect(rejection.message).not.toContain('PAT')
+    expect(rejection.stderr).not.toContain('PAT')
   })
 })

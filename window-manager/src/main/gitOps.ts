@@ -157,6 +157,10 @@ export async function listRemoteBranches(
           const scrubbed = new Error(scrubPat(err.message, pat))
           const origCode = (err as NodeJS.ErrnoException).code
           if (origCode !== undefined) (scrubbed as NodeJS.ErrnoException).code = origCode
+          const origStderr = (err as Error & { stderr?: string }).stderr
+          if (origStderr !== undefined) {
+            ;(scrubbed as Error & { stderr?: string }).stderr = scrubPat(origStderr, pat)
+          }
           reject(scrubbed)
         } else {
           resolve(String(out ?? ''))
