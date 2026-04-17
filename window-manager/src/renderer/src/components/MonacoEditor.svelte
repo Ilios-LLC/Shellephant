@@ -6,6 +6,7 @@
     line: number
     column: number
     language: string
+    isDirty: boolean
   }
 
   interface EditorRef {
@@ -55,6 +56,7 @@
       if (!isDirty) {
         isDirty = true
         onDirtyChange?.(path, true)
+        onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty: true })
       }
     })
   }
@@ -110,6 +112,7 @@
     lastContent = content
     isDirty = false
     onDirtyChange?.(filePath, false)
+    onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty: false })
   }
 
   async function pollFile(): Promise<void> {
@@ -152,12 +155,12 @@
     editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
       statusLine = e.position.lineNumber
       statusCol = e.position.column
-      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang })
+      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty })
     })
 
     editor.onDidChangeModelLanguage((e: { newLanguage: string }) => {
       statusLang = e.newLanguage
-      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang })
+      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty })
     })
 
     ref = {

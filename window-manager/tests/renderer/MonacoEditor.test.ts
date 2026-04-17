@@ -227,6 +227,30 @@ describe('MonacoEditor', () => {
     expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({ line: 5, column: 10 }))
   })
 
+  it('calls onStatusChange with isDirty=true when content changes', async () => {
+    const onStatusChange = vi.fn()
+    mockReadFile.mockResolvedValue('original')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onStatusChange })
+    await vi.waitFor(() => expect(getDidChangeContentCb()).not.toBeNull())
+    getDidChangeContentCb()!()
+    expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({ isDirty: true }))
+  })
+
+  it('calls onStatusChange with isDirty=false after save', async () => {
+    const onStatusChange = vi.fn()
+    mockReadFile.mockResolvedValue('hello')
+    mockGetValue.mockReturnValue('hello edited')
+    mockWriteFile.mockResolvedValue(undefined)
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onStatusChange })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    getDidChangeContentCb()?.()
+    const saveCallback = mockAddCommand.mock.calls[0][1] as () => void
+    saveCallback()
+    await vi.waitFor(() => {
+      expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({ isDirty: false }))
+    })
+  })
+
   it('populates ref.gotoLine which calls revealLineInCenter and setPosition', async () => {
     mockReadFile.mockResolvedValue('')
     let capturedRef: { gotoLine: (n: number) => void } | null = null
