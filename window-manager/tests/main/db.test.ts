@@ -394,3 +394,74 @@ describe('db migrations — docker dependencies', () => {
     expect(row.tag).toBe('latest')
   })
 })
+
+describe('db — window_projects', () => {
+  afterEach(() => closeDb())
+
+  it('creates window_projects table on init', () => {
+    initDb(':memory:')
+    const tables = (getDb().pragma('table_list') as { name: string }[]).map(t => t.name)
+    expect(tables).toContain('window_projects')
+  })
+
+  it('window_projects has expected columns', () => {
+    initDb(':memory:')
+    const cols = (getDb().pragma('table_info(window_projects)') as { name: string }[]).map(c => c.name)
+    expect(cols).toEqual(expect.arrayContaining(['id', 'window_id', 'project_id', 'clone_path']))
+  })
+
+  it('windows.project_id is nullable on fresh init', () => {
+    initDb(':memory:')
+    const cols = getDb().pragma('table_info(windows)') as { name: string; notnull: number }[]
+    const col = cols.find(c => c.name === 'project_id')
+    expect(col).toBeDefined()
+    expect(col!.notnull).toBe(0)
+  })
+
+  it('makeWindowProjectIdNullable migrates existing DB with NOT NULL project_id', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-nullable-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`CREATE TABLE project_groups (id INTEGER PRIMARY KEY, name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+    pre.exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, git_url TEXT NOT NULL UNIQUE, ports TEXT DEFAULT NULL, group_id INTEGER DEFAULT NULL, env_vars TEXT DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, deleted_at DATETIME DEFAULT NULL)`)
+    pre.exec(`
+      CREATE TABLE windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        container_id TEXT NOT NULL,
+        ports TEXT DEFAULT NULL,
+        network_id TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.exec(`CREATE TABLE project_dependencies (id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, image TEXT NOT NULL, tag TEXT NOT NULL DEFAULT 'latest', env_vars TEXT DEFAULT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+    pre.exec(`CREATE TABLE window_dependency_containers (id INTEGER PRIMARY KEY, window_id INTEGER NOT NULL, dependency_id INTEGER NOT NULL, container_id TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+    const projId = pre.prepare("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:org/myrepo.git')").run().lastInsertRowid
+    pre.prepare("INSERT INTO windows (name, project_id, container_id) VALUES ('w', ?, 'ctr1')").run(projId)
+    pre.close()
+
+    initDb(tmpPath)
+    const cols = getDb().pragma('table_info(windows)') as { name: string; notnull: number }[]
+    const projectIdCol = cols.find(c => c.name === 'project_id')
+    expect(projectIdCol!.notnull).toBe(0)
+
+    // Existing window data preserved
+    const wins = getDb().prepare('SELECT * FROM windows').all()
+    expect(wins).toHaveLength(1)
+
+    // Backfill: window_projects row created
+    const wps = getDb().prepare('SELECT * FROM window_projects').all() as { window_id: number; project_id: number; clone_path: string }[]
+    expect(wps).toHaveLength(1)
+    expect(wps[0].project_id).toBe(Number(projId))
+    expect(wps[0].clone_path).toBe('/workspace/myrepo')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
+})

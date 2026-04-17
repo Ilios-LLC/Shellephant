@@ -3,8 +3,8 @@
 
   interface Props {
     groups: ProjectGroupRecord[]
-    activeGroupId: number | null
-    onGroupSelect: (id: number) => void
+    activeGroupId: number | 'ungrouped' | null
+    onGroupSelect: (id: number | 'ungrouped') => void
     onGroupCreated: (group: ProjectGroupRecord) => void
   }
 
@@ -46,6 +46,14 @@
 </script>
 
 <div class="group-strip">
+  <button
+    type="button"
+    class="group-icon"
+    class:active={activeGroupId === 'ungrouped'}
+    title="No group"
+    aria-label="no group"
+    onclick={() => onGroupSelect('ungrouped')}
+  >∅</button>
   {#each groups as group (group.id)}
     <button
       type="button"

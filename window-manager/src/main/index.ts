@@ -8,6 +8,10 @@ import { getGitHubPat } from './settingsService'
 import { getIdentity } from './githubIdentity'
 import { applyGitIdentity } from './gitOps'
 
+if (process.env['DEVCONTAINER']) {
+  app.commandLine.appendSwitch('no-sandbox')
+}
+
 function createWindow(): BrowserWindow {
   const win = new BrowserWindow({
     width: 1200,

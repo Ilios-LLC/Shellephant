@@ -7,7 +7,7 @@
     onRequestNewProject?: () => void
     allWindows?: WindowRecord[]
     projects?: ProjectRecord[]
-    onNavigateToWindow?: (projectId: number, windowId: number) => void
+    onNavigateToWindow?: (projectId: number | null, windowId: number) => void
   }
 
   let { onRequestNewProject, allWindows = [], projects = [], onNavigateToWindow }: Props = $props()
@@ -19,8 +19,14 @@
 
   let runningWindows = $derived(allWindows.filter((w) => w.status === 'running'))
 
-  function projectName(projectId: number): string {
-    return projects.find((p) => p.id === projectId)?.name ?? 'Unknown'
+  function cardLabel(win: WindowRecord): string {
+    if (win.project_id !== null) {
+      return projects.find((p) => p.id === win.project_id)?.name ?? 'Unknown'
+    }
+    const names = win.projects
+      .map(wp => wp.project_name ?? projects.find(p => p.id === wp.project_id)?.name)
+      .filter((n): n is string => !!n)
+    return names.length > 0 ? names.join(', ') : 'Multi-project'
   }
 
   onMount(() => {
@@ -114,7 +120,7 @@
           class="window-card"
           onclick={() => onNavigateToWindow?.(win.project_id, win.id)}
         >
-          <span class="card-project">{projectName(win.project_id)}</span>
+          <span class="card-project">{cardLabel(win)}</span>
           <span class="card-name">{win.name}</span>
           <span class="card-status">
             <span class="status-dot" aria-hidden="true"></span>

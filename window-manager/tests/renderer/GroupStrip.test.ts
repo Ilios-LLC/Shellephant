@@ -27,7 +27,7 @@ describe('GroupStrip', () => {
   function baseProps(overrides: Record<string, unknown> = {}) {
     return {
       groups: [] as ProjectGroupRecord[],
-      activeGroupId: null as number | null,
+      activeGroupId: null as number | 'ungrouped' | null,
       onGroupSelect,
       onGroupCreated,
       ...overrides
@@ -37,6 +37,23 @@ describe('GroupStrip', () => {
   it('renders a "new group" button', () => {
     render(GroupStrip, baseProps())
     expect(screen.getByRole('button', { name: /new group/i })).toBeDefined()
+  })
+
+  it('renders a "no group" button', () => {
+    render(GroupStrip, baseProps())
+    expect(screen.getByRole('button', { name: /no group/i })).toBeDefined()
+  })
+
+  it('clicking "no group" button calls onGroupSelect with "ungrouped"', async () => {
+    render(GroupStrip, baseProps())
+    await fireEvent.click(screen.getByRole('button', { name: /no group/i }))
+    expect(onGroupSelect).toHaveBeenCalledWith('ungrouped')
+  })
+
+  it('"no group" button has active class when activeGroupId is "ungrouped"', () => {
+    const { container } = render(GroupStrip, baseProps({ activeGroupId: 'ungrouped' }))
+    const noGroupBtn = container.querySelector('[aria-label="no group"]')
+    expect(noGroupBtn?.classList.contains('active')).toBe(true)
   })
 
   it('renders one button per group showing first letter', () => {
@@ -59,8 +76,9 @@ describe('GroupStrip', () => {
       activeGroupId: 2
     }))
     const icons = container.querySelectorAll('.group-icon:not(.add-btn)')
-    expect(icons[0].classList.contains('active')).toBe(false)
-    expect(icons[1].classList.contains('active')).toBe(true)
+    // icons[0] = no-group button, icons[1] = Alpha, icons[2] = Beta
+    expect(icons[1].classList.contains('active')).toBe(false)
+    expect(icons[2].classList.contains('active')).toBe(true)
   })
 
   it('clicking "new group" button shows an input field', async () => {

@@ -5,6 +5,7 @@ import type { ProjectRecord, ProjectGroupRecord } from '../../src/renderer/src/t
 import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
 import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 
+
 function makeProject(id: number, name: string): ProjectRecord {
   return {
     id,
@@ -111,6 +112,51 @@ describe('Sidebar', () => {
     render(Sidebar, baseProps({ projects: [p] }))
     await fireEvent.click(screen.getByRole('button', { name: /project settings/i }))
     expect(onProjectSettingsClick).toHaveBeenCalledWith(p)
+  })
+
+  describe('multi-project window button', () => {
+    let onRequestMultiWindow: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      onRequestMultiWindow = vi.fn()
+    })
+
+    it('shows the button when there are 2 or more projects', () => {
+      render(Sidebar, baseProps({
+        projects: [makeProject(1, 'alpha'), makeProject(2, 'beta')],
+        onRequestMultiWindow
+      }))
+      expect(screen.getByRole('button', { name: /multi-project window/i })).toBeDefined()
+    })
+
+    it('hides the button when there is only 1 project', () => {
+      render(Sidebar, baseProps({
+        projects: [makeProject(1, 'alpha')],
+        onRequestMultiWindow
+      }))
+      expect(screen.queryByRole('button', { name: /multi-project window/i })).toBeNull()
+    })
+
+    it('hides the button when there are no projects', () => {
+      render(Sidebar, baseProps({ onRequestMultiWindow }))
+      expect(screen.queryByRole('button', { name: /multi-project window/i })).toBeNull()
+    })
+
+    it('clicking the button calls onRequestMultiWindow', async () => {
+      render(Sidebar, baseProps({
+        projects: [makeProject(1, 'alpha'), makeProject(2, 'beta')],
+        onRequestMultiWindow
+      }))
+      await fireEvent.click(screen.getByRole('button', { name: /multi-project window/i }))
+      expect(onRequestMultiWindow).toHaveBeenCalled()
+    })
+
+    it('does not show the button when onRequestMultiWindow is not provided', () => {
+      render(Sidebar, baseProps({
+        projects: [makeProject(1, 'alpha'), makeProject(2, 'beta')]
+      }))
+      expect(screen.queryByRole('button', { name: /multi-project window/i })).toBeNull()
+    })
   })
 
   describe('waiting section', () => {

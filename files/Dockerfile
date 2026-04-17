@@ -77,6 +77,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
 RUN npx -y playwright-core install-deps chromium && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
+# Install virtual display stack for in-container Electron dev preview
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  xvfb \
+  x11vnc \
+  novnc \
+  websockify \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
 # Set up non-root user
 USER node
 
@@ -123,12 +131,13 @@ ENV PLAYWRIGHT_MCP_BROWSER=chromium
 
 # Enable experimental agent teams feature in Claude Code
 ENV CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1
+ENV CLAUDE_CODE_ADDITIONAL_DIRECTORIES_CLAUDE_MD=1
 
 # Copy and set up firewall script
 COPY init-firewall.sh /usr/local/bin/
 COPY CLAUDE.md /home/node/.claude/
 
-# tmux config: no status bar, truecolor, mouse on
+# tmux config: no status bar, truecolor
 COPY --chown=node:node tmux.conf /home/node/.tmux.conf
 
 # Pre-seed Claude Code config so first run skips onboarding and has plugins pre-enabled.
@@ -145,7 +154,8 @@ RUN claude plugin marketplace add JuliusBrussee/caveman && \
 USER root
 COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh && \
+COPY dev-preview.sh /usr/local/bin/dev-preview.sh
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node

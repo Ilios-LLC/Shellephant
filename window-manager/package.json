@@ -20,6 +20,7 @@
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "pretest": "npm rebuild better-sqlite3",
     "test:main": "vitest run --config vitest.node.config.ts",
     "test:renderer": "vitest run --config vitest.renderer.config.ts",
     "test": "npm run test:main && npm run test:renderer"

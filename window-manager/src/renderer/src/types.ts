@@ -25,12 +25,13 @@ export interface ProjectRecord {
 export interface WindowRecord {
   id: number
   name: string
-  project_id: number
+  project_id: number | null
   container_id: string
   ports?: string
   network_id?: string | null
   created_at: string
   status: WindowStatus
+  projects: WindowProjectRecord[]
 }
 
 export interface TokenStatus {
@@ -56,6 +57,15 @@ export interface WindowDependencyContainer {
   tag: string
 }
 
+export interface WindowProjectRecord {
+  id: number
+  window_id: number
+  project_id: number
+  clone_path: string
+  project_name?: string
+  git_url?: string
+}
+
 export interface Api {
   // Projects
   createProject: (name: string, gitUrl: string, ports?: PortMapping[]) => Promise<ProjectRecord>
@@ -69,7 +79,7 @@ export interface Api {
   listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
-  createWindow: (name: string, projectId: number, withDeps?: boolean) => Promise<WindowRecord>
+  createWindow: (name: string, projectIds: number[], withDeps?: boolean) => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
   onWindowCreateProgress: (callback: (step: string) => void) => void
@@ -97,6 +107,10 @@ export interface Api {
     payload: { subject: string; body?: string }
   ) => Promise<{ ok: boolean; code: number; stdout: string }>
   push: (windowId: number) => Promise<{ ok: boolean; code: number; stdout: string; prUrl?: string }>
+  getCurrentBranchProject: (windowId: number, projectId: number) => Promise<string>
+  getGitStatusProject: (windowId: number, projectId: number) => Promise<{ isDirty: boolean; added: number; deleted: number } | null>
+  commitProject: (windowId: number, projectId: number, payload: { subject: string; body?: string }) => Promise<{ ok: boolean; code: number; stdout: string }>
+  pushProject: (windowId: number, projectId: number) => Promise<{ ok: boolean; code: number; stdout: string; prUrl?: string }>
 
   // Settings
   getGitHubPatStatus: () => Promise<TokenStatus>

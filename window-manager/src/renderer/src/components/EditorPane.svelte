@@ -5,19 +5,29 @@
   import StatusBar from './StatusBar.svelte'
   import FindInFiles from './FindInFiles.svelte'
 
-  interface Props {
-    containerId: string
+  interface RootConfig {
     rootPath: string
+    label: string
   }
 
-  let { containerId, rootPath }: Props = $props()
+  interface Props {
+    containerId: string
+    roots: RootConfig[]
+  }
 
+  let { containerId, roots }: Props = $props()
+
+  let fileTreeRef = $state(null as InstanceType<typeof FileTree> | null)
   let openTabs = $state<string[]>([])
   let activeTab = $state<string | null>(null)
   let dirtyTabs = $state(new Set<string>())
   let showFindInFiles = $state(false)
   let editorRef = $state<{ gotoLine: (n: number) => void } | null>(null)
   let status = $state({ line: 1, column: 1, language: '' })
+
+  export function scrollToRoot(rootPath: string): void {
+    fileTreeRef?.scrollToRoot(rootPath)
+  }
 
   function openTab(path: string): void {
     if (!openTabs.includes(path)) {
@@ -73,7 +83,7 @@
           onclick={() => (showFindInFiles = false)}
         >✕</button>
       </div>
-      <FindInFiles {containerId} {rootPath} onOpenFile={handleOpenFile} />
+      <FindInFiles {containerId} rootPath={roots[0]?.rootPath ?? ''} onOpenFile={handleOpenFile} />
     {:else}
       <div class="panel-header">
         <span>Files</span>
@@ -83,7 +93,7 @@
           onclick={() => (showFindInFiles = true)}
         >⌕</button>
       </div>
-      <FileTree {containerId} {rootPath} onFileSelect={openTab} />
+      <FileTree bind:this={fileTreeRef} {containerId} {roots} onFileSelect={openTab} />
     {/if}
   </div>
 

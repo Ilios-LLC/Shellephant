@@ -18,7 +18,7 @@
   let claudeStatus = $state<TokenStatus>({ configured: false, hint: null })
   let settingsRequiredFor = $state<SettingsRequirement>(null)
   let groups = $state<ProjectGroupRecord[]>([])
-  let activeGroupId = $state<number | null>(null)
+  let activeGroupId = $state<number | 'ungrouped' | null>(null)
   let settingsProject = $state<ProjectRecord | null>(null)
 
   onMount(async () => {
@@ -47,11 +47,11 @@
     view = 'default'
   }
 
-  async function handleNavigateToWindow(projectId: number, windowId: number): Promise<void> {
+  async function handleNavigateToWindow(projectId: number | null, windowId: number): Promise<void> {
     selectedProjectId = projectId
     selectedWindowId = null
     view = 'default'
-    windows = await window.api.listWindows(projectId)
+    windows = projectId === null ? [] : await window.api.listWindows(projectId)
     selectedWindowId = windowId
   }
 
@@ -84,6 +84,16 @@
     view = 'new-window'
   }
 
+  function handleRequestMultiWindow(): void {
+    if (!patStatus.configured || !claudeStatus.configured) {
+      settingsRequiredFor = 'multi-window'
+      view = 'settings'
+      return
+    }
+    settingsRequiredFor = null
+    view = 'new-multi-window'
+  }
+
   function handleRequestSettings(): void {
     settingsRequiredFor = null
     view = 'settings'
@@ -102,6 +112,9 @@
     } else if (settingsRequiredFor === 'window') {
       settingsRequiredFor = null
       view = 'new-window'
+    } else if (settingsRequiredFor === 'multi-window') {
+      settingsRequiredFor = null
+      view = 'new-multi-window'
     }
   }
 
@@ -162,7 +175,7 @@
     selectedWindowId = entry.windowId
   }
 
-  function handleGroupSelect(id: number): void {
+  function handleGroupSelect(id: number | 'ungrouped'): void {
     activeGroupId = activeGroupId === id ? null : id
   }
 
@@ -191,9 +204,13 @@
   }
 
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
-  let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
+  let selectedWindow = $derived(allWindows.find((w) => w.id === selectedWindowId) ?? null)
   let filteredProjects = $derived(
-    activeGroupId !== null ? projects.filter((p) => p.group_id === activeGroupId) : projects
+    activeGroupId === 'ungrouped'
+      ? projects.filter((p) => p.group_id === null)
+      : activeGroupId !== null
+        ? projects.filter((p) => p.group_id === activeGroupId)
+        : projects
   )
 
   // Keep main in sync with the container the user is currently viewing, so
@@ -217,6 +234,7 @@
     onGroupSelect={handleGroupSelect}
     onGroupCreated={handleGroupCreated}
     onProjectSettingsClick={handleProjectSettingsClick}
+    onRequestMultiWindow={handleRequestMultiWindow}
   />
   <MainPane
     project={selectedProject}
