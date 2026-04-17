@@ -32,6 +32,7 @@
         <span class="dirty-dot" aria-label="unsaved changes">●</span>
       {:else}
         <button
+          type="button"
           class="close-btn"
           aria-label="close {basename(tab)}"
           onclick={(e) => { e.stopPropagation(); onClose(tab) }}
