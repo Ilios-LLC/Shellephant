@@ -37,6 +37,8 @@
   let fitAddon: FitAddon | undefined
   let resizeObserver: ResizeObserver | undefined
   let terminalOpened = false
+  // Set in onMount so the first $effect run (which happens after onMount) skips reinit.
+  let postMountClaudeEffectPending = false
 
   let commitOpen = $state(false)
   let commitBusy = $state(false)
@@ -60,6 +62,28 @@
       selectionBackground: '#3f3f46'
     },
     scrollback: 1000
+  }
+
+  function reinitClaudeTerminal(): void {
+    claudeResizeObserver?.disconnect()
+    claudeResizeObserver = undefined
+    claudeTerm?.dispose()
+    claudeTerm = new XTerm(xtermOptions)
+    claudeFitAddon = new FitAddon()
+    claudeTerm.loadAddon(claudeFitAddon)
+    claudeTerm.loadAddon(new WebLinksAddon())
+    claudeTerm.open(claudeTerminalEl)
+    claudeFitAddon.fit()
+    claudeTerm.focus()
+    claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
+    claudeResizeObserver.observe(claudeTerminalEl)
+    claudeTerm.onData((data: string) => {
+      window.api.sendTerminalInput(win.container_id, data, 'claude')
+      waitingWindows.remove(win.container_id)
+    })
+    claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+      window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
+    })
   }
 
   function initTerminalSession(launchBackend = true): void {
@@ -154,6 +178,7 @@
     claudeTerm.reset()
     claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
     claudeResizeObserver.observe(claudeTerminalEl)
+    postMountClaudeEffectPending = true
     window.api.openTerminal(win.container_id, claudeTerm.cols, claudeTerm.rows, win.name, 'claude')
     claudeTerm.onData((data: string) => {
       window.api.sendTerminalInput(win.container_id, data, 'claude')
@@ -194,12 +219,18 @@
     const termPanel = panels.find(p => p.id === 'terminal')
     const claudePanel = panels.find(p => p.id === 'claude')
 
-    // Re-attach xterm if the DOM element was re-created by Svelte (fresh element has no children).
-    // xterm appends its canvas synchronously on open(), so no children = element is newly created.
+    // Re-attach when the DOM element was replaced by Svelte (panel hidden then re-shown creates a new node).
+    // postMountClaudeEffectPending skips the first $effect run (which fires after onMount) to avoid
+    // spurious reinit — in tests xterm mock never adds children so hasChildNodes() is always false.
     if (claudePanel?.visible && claudeTerminalEl && claudeTerm && !claudeTerminalEl.hasChildNodes()) {
-      claudeTerm.open(claudeTerminalEl)
+      if (postMountClaudeEffectPending) {
+        postMountClaudeEffectPending = false
+      } else {
+        reinitClaudeTerminal()
+      }
+    } else if (claudePanel?.visible) {
+      claudeFitAddon?.fit()
     }
-    if (claudePanel?.visible) claudeFitAddon?.fit()
 
     if (termPanel?.visible) {
       if (!terminalOpened) {
