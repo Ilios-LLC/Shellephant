@@ -8,13 +8,13 @@
     projects: ProjectRecord[]
     selectedProjectId: number | null
     groups: ProjectGroupRecord[]
-    activeGroupId: number | null
+    activeGroupId: number | 'ungrouped' | null
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
     onRequestHome: () => void
     onWaitingWindowSelect: (entry: WaitingEntry) => void
-    onGroupSelect: (id: number) => void
+    onGroupSelect: (id: number | 'ungrouped') => void
     onGroupCreated: (group: ProjectGroupRecord) => void
     onProjectSettingsClick: (project: ProjectRecord) => void
   }

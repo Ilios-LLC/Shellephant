@@ -18,7 +18,7 @@
   let claudeStatus = $state<TokenStatus>({ configured: false, hint: null })
   let settingsRequiredFor = $state<SettingsRequirement>(null)
   let groups = $state<ProjectGroupRecord[]>([])
-  let activeGroupId = $state<number | null>(null)
+  let activeGroupId = $state<number | 'ungrouped' | null>(null)
   let settingsProject = $state<ProjectRecord | null>(null)
 
   onMount(async () => {
@@ -162,7 +162,7 @@
     selectedWindowId = entry.windowId
   }
 
-  function handleGroupSelect(id: number): void {
+  function handleGroupSelect(id: number | 'ungrouped'): void {
     activeGroupId = activeGroupId === id ? null : id
   }
 
@@ -193,7 +193,11 @@
   let selectedProject = $derived(projects.find((p) => p.id === selectedProjectId) ?? null)
   let selectedWindow = $derived(windows.find((w) => w.id === selectedWindowId) ?? null)
   let filteredProjects = $derived(
-    activeGroupId !== null ? projects.filter((p) => p.group_id === activeGroupId) : projects
+    activeGroupId === 'ungrouped'
+      ? projects.filter((p) => p.group_id === null)
+      : activeGroupId !== null
+        ? projects.filter((p) => p.group_id === activeGroupId)
+        : projects
   )
 
   // Keep main in sync with the container the user is currently viewing, so
