@@ -21,10 +21,33 @@
   let withDeps = $state(false)
   let selectedProjectIds = $state<number[]>([])
 
+  let branchOptions = $state<Record<number, string[]>>({})
+  let branchLoading = $state<Record<number, boolean>>({})
+  const branchSelections: Record<number, string> = {}
+  const defaultBranches: Record<number, string> = {}
+  let branchSelectRefs = $state<Record<number, HTMLSelectElement | null>>({})
+
+  async function fetchBranches(projectId: number, gitUrl: string): Promise<void> {
+    branchLoading = { ...branchLoading, [projectId]: true }
+    try {
+      const result = await window.api.listRemoteBranches(gitUrl)
+      branchOptions = { ...branchOptions, [projectId]: result.branches }
+      defaultBranches[projectId] = result.defaultBranch
+      branchSelections[projectId] = result.defaultBranch
+    } catch {
+      branchOptions = { ...branchOptions, [projectId]: [] }
+    } finally {
+      branchLoading = { ...branchLoading, [projectId]: false }
+    }
+  }
+
   onMount(async () => {
     if (!isMultiMode && project) {
       const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
       hasDeps = deps.length > 0
+      fetchBranches(project.id, project.git_url)
+    } else if (isMultiMode && projects) {
+      for (const p of projects) fetchBranches(p.id, p.git_url)
     }
   })
 
@@ -52,7 +75,14 @@
     })
     try {
       const ids = isMultiMode ? $state.snapshot(selectedProjectIds) : [project!.id]
-      const record = await window.api.createWindow(trimmed, ids, withDeps)
+      const branchOverrides: Record<number, string> = {}
+      for (const id of ids) {
+        const selectEl = branchSelectRefs[id]
+        const selected = selectEl ? selectEl.value : branchSelections[id]
+        const def = defaultBranches[id]
+        if (selected && def && selected !== def) branchOverrides[id] = selected
+      }
+      const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -93,19 +123,67 @@
       />
     </div>
 
+    {#if !isMultiMode && project}
+      <div class="field">
+        <label for="branch-select-{project.id}">Branch</label>
+        {#if branchLoading[project.id] !== false}
+          <span class="branch-loading" aria-label="Branch">loading branches…</span>
+        {:else if branchOptions[project.id]?.length}
+          <select
+            id="branch-select-{project.id}"
+            aria-label="Branch"
+            value={branchSelections[project.id]}
+            bind:this={branchSelectRefs[project.id]}
+            onchange={(e) => { branchSelections[project!.id] = (e.target as HTMLSelectElement).value }}
+            disabled={loading}
+          >
+            {#each branchOptions[project.id] as branch}
+              <option value={branch}>{branch}</option>
+            {/each}
+          </select>
+        {:else}
+          <select id="branch-select-{project.id}" aria-label="Branch" disabled>
+            <option>(default)</option>
+          </select>
+        {/if}
+      </div>
+    {/if}
+
     {#if isMultiMode}
       <div class="project-list">
         <span class="field-label">Projects</span>
         {#each projects as p}
-          <label class="project-toggle">
-            <input
-              type="checkbox"
-              checked={selectedProjectIds.includes(p.id)}
-              onchange={() => toggleProject(p.id)}
-              disabled={loading}
-            />
-            {p.name}
-          </label>
+          <div class="project-row">
+            <label class="project-toggle">
+              <input
+                type="checkbox"
+                checked={selectedProjectIds.includes(p.id)}
+                onchange={() => toggleProject(p.id)}
+                disabled={loading}
+              />
+              {p.name}
+            </label>
+            {#if branchLoading[p.id] !== false}
+              <span class="branch-loading branch-select-inline">loading…</span>
+            {:else if branchOptions[p.id]?.length}
+              <select
+                aria-label="Branch"
+                value={branchSelections[p.id]}
+                bind:this={branchSelectRefs[p.id]}
+                onchange={(e) => { branchSelections[p.id] = (e.target as HTMLSelectElement).value }}
+                disabled={loading}
+                class="branch-select-inline"
+              >
+                {#each branchOptions[p.id] as branch}
+                  <option value={branch}>{branch}</option>
+                {/each}
+              </select>
+            {:else}
+              <select aria-label="Branch" disabled class="branch-select-inline">
+                <option>(default)</option>
+              </select>
+            {/if}
+          </div>
         {/each}
       </div>
     {/if}
@@ -210,7 +288,7 @@
     color: var(--fg-2);
   }
 
-  input {
+  input[type="text"] {
     width: 100%;
     padding: 0.5rem 0.65rem;
     background: var(--bg-2);
@@ -222,14 +300,41 @@
     outline: none;
   }
 
-  input:focus {
+  input[type="text"]:focus {
     border-color: var(--accent);
+  }
+
+  select {
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-0);
+    font-family: var(--font-ui);
+    font-size: 0.9rem;
+    outline: none;
+  }
+
+  select:focus {
+    border-color: var(--accent);
+  }
+
+  select:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
   }
 
   .project-list {
     display: flex;
     flex-direction: column;
     gap: 0.4rem;
+  }
+
+  .project-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   .project-toggle {
@@ -243,11 +348,19 @@
     text-transform: none;
     letter-spacing: normal;
     font-weight: normal;
+    flex: 1;
   }
 
   .project-toggle input {
     width: auto;
     cursor: pointer;
+  }
+
+  .branch-select-inline {
+    width: auto;
+    flex: 0 0 130px;
+    font-size: 0.78rem;
+    padding: 0.3rem 0.5rem;
   }
 
   .actions {
@@ -319,9 +432,7 @@
   }
 
   @keyframes spin {
-    to {
-      transform: rotate(360deg);
-    }
+    to { transform: rotate(360deg); }
   }
 
   .dep-toggle {
@@ -333,6 +444,7 @@
     cursor: pointer;
     font-family: var(--font-ui);
   }
+
   .dep-toggle input {
     width: auto;
     cursor: pointer;
