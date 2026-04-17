@@ -43,7 +43,8 @@ vi.mock('../../src/main/gitOps', () => ({
   push: vi.fn(),
   listContainerDir: vi.fn(),
   readContainerFile: vi.fn(),
-  writeFileInContainer: vi.fn()
+  writeFileInContainer: vi.fn(),
+  getGitStatus: vi.fn()
 }))
 
 vi.mock('../../src/main/settingsService', () => ({
@@ -67,9 +68,10 @@ vi.mock('../../src/main/docker', () => ({
 }))
 
 const mockDbGet = vi.fn()
+const mockDbAll = vi.fn()
 vi.mock('../../src/main/db', () => ({
   getDb: () => ({
-    prepare: () => ({ get: mockDbGet })
+    prepare: () => ({ get: mockDbGet, all: mockDbAll })
   })
 }))
 
@@ -83,7 +85,7 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
-import { getCurrentBranch, stageAndCommit, push, listContainerDir, readContainerFile, writeFileInContainer } from '../../src/main/gitOps'
+import { getCurrentBranch, stageAndCommit, push, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from '../../src/main/gitOps'
 import { getGitHubPat } from '../../src/main/settingsService'
 import { getIdentity } from '../../src/main/githubIdentity'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
@@ -108,6 +110,7 @@ describe('registerIpcHandlers', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockDbGet.mockReset()
+    mockDbAll.mockReset()
     mockGetContainer.mockClear()
     registerIpcHandlers()
   })
@@ -148,12 +151,13 @@ describe('registerIpcHandlers', () => {
       project_id: 1,
       container_id: 'abc',
       created_at: '2026-01-01',
-      status: 'running' as const
+      status: 'running' as const,
+      projects: []
     }
     vi.mocked(createWindow).mockResolvedValue(record)
     const fakeSender = { send: vi.fn() }
-    const result = await getHandler('window:create')({ sender: fakeSender }, 'test', 1)
-    expect(createWindow).toHaveBeenCalledWith('test', 1, false, expect.any(Function))
+    const result = await getHandler('window:create')({ sender: fakeSender }, 'test', [1], false)
+    expect(createWindow).toHaveBeenCalledWith('test', [1], false, expect.any(Function))
     expect(result).toEqual(record)
 
     // The progress callback should route to the event's sender.
@@ -181,23 +185,25 @@ describe('registerIpcHandlers', () => {
   it('registers terminal:open handler that calls openTerminal with sessionType', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    mockDbAll.mockReturnValue([])
     await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window', 'claude')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'claude')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'claude', [])
   })
 
   it('terminal:open defaults sessionType to terminal when omitted', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
+    mockDbAll.mockReturnValue([])
     await getHandler('terminal:open')({ sender: {} }, 'container-abc', 120, 40, 'my-window')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'terminal')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 120, 40, 'my-window', undefined, 'terminal', [])
   })
 
   it('terminal:open resolves workDir from DB and passes to openTerminal', async () => {
     vi.mocked(openTerminal).mockResolvedValue(undefined)
     vi.mocked(BrowserWindow.fromWebContents).mockReturnValue(mockWin)
-    mockDbGet.mockReturnValue({ git_url: 'git@github.com:org/my-repo.git' })
+    mockDbAll.mockReturnValue([{ clone_path: '/workspace/my-repo' }])
     await getHandler('terminal:open')({ sender: {} }, 'container-abc', 80, 24, 'win', 'terminal')
-    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 80, 24, 'win', '/workspace/my-repo', 'terminal')
+    expect(openTerminal).toHaveBeenCalledWith('container-abc', mockWin, 80, 24, 'win', '/workspace/my-repo', 'terminal', ['/workspace/my-repo'])
   })
 
   it('registers terminal:input listener that calls writeInput with sessionType', () => {
@@ -231,14 +237,15 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers git:current-branch handler that returns the trimmed branch', async () => {
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getCurrentBranch).mockResolvedValue('feature-x')
 
     const result = await getHandler('git:current-branch')({}, 42)
-    expect(mockDbGet).toHaveBeenCalledWith(42)
     expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
     expect(getCurrentBranch).toHaveBeenCalledWith(mockContainer, '/workspace/my-repo')
     expect(result).toBe('feature-x')
@@ -251,9 +258,11 @@ describe('registerIpcHandlers', () => {
 
   it('registers git:commit handler that scrubs PAT from stdout', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getIdentity).mockResolvedValue({ name: 'Octo', email: 'o@x' })
     vi.mocked(stageAndCommit).mockResolvedValue({
@@ -292,9 +301,11 @@ describe('registerIpcHandlers', () => {
 
   it('git:commit returns ok=false unchanged when stageAndCommit fails', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getIdentity).mockResolvedValue({ name: 'Octo', email: 'o@x' })
     vi.mocked(stageAndCommit).mockResolvedValue({
@@ -311,9 +322,11 @@ describe('registerIpcHandlers', () => {
 
   it('registers git:push handler that calls push with the resolved branch + gitUrl', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getCurrentBranch).mockResolvedValue('my-feature')
     vi.mocked(push).mockResolvedValue({
@@ -348,9 +361,11 @@ describe('registerIpcHandlers', () => {
 
   it('git:push throws on detached HEAD', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getCurrentBranch).mockResolvedValue('HEAD')
     await expect(getHandler('git:push')({}, 7)).rejects.toThrow(/detached HEAD|branch unknown/i)
@@ -358,9 +373,11 @@ describe('registerIpcHandlers', () => {
 
   it('git:push throws when the branch is empty', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getCurrentBranch).mockResolvedValue('')
     await expect(getHandler('git:push')({}, 7)).rejects.toThrow(/detached HEAD|branch unknown/i)
@@ -368,9 +385,11 @@ describe('registerIpcHandlers', () => {
 
   it('git:push passes push failures through (ok=false)', async () => {
     vi.mocked(getGitHubPat).mockReturnValue('my-pat')
-    mockDbGet.mockReturnValue({
+    mockDbGet.mockReturnValueOnce({ project_id: 5 })
+    mockDbGet.mockReturnValueOnce({
       containerId: 'container-xyz',
-      gitUrl: 'git@github.com:org/my-repo.git'
+      gitUrl: 'git@github.com:org/my-repo.git',
+      clonePath: '/workspace/my-repo'
     })
     vi.mocked(getCurrentBranch).mockResolvedValue('my-feature')
     vi.mocked(push).mockResolvedValue({
@@ -457,5 +476,42 @@ describe('registerIpcHandlers', () => {
     vi.mocked(updateProjectEnvVars).mockReturnValue(undefined)
     await getHandler('project:update-env-vars')({}, 1, { FOO: 'bar' })
     expect(updateProjectEnvVars).toHaveBeenCalledWith(1, { FOO: 'bar' })
+  })
+
+  describe('per-project git handlers', () => {
+    it('git:current-branch-project calls getCurrentBranch with project clone_path', async () => {
+      mockDbGet.mockReturnValue({ containerId: 'ctr1', gitUrl: 'git@github.com:org/repo.git', clonePath: '/workspace/repo' })
+      vi.mocked(getCurrentBranch).mockResolvedValue('main')
+      const result = await getHandler('git:current-branch-project')({}, 42, 10)
+      expect(getCurrentBranch).toHaveBeenCalledWith(expect.anything(), '/workspace/repo')
+      expect(result).toBe('main')
+    })
+
+    it('git:status-project calls getGitStatus with project clone_path', async () => {
+      mockDbGet.mockReturnValue({ containerId: 'ctr1', gitUrl: 'git@github.com:org/repo.git', clonePath: '/workspace/repo' })
+      vi.mocked(getGitStatus).mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
+      const result = await getHandler('git:status-project')({}, 42, 10)
+      expect(getGitStatus).toHaveBeenCalledWith(expect.anything(), '/workspace/repo')
+      expect(result).toEqual({ isDirty: false, added: 0, deleted: 0 })
+    })
+
+    it('git:commit-project calls stageAndCommit with project clone_path', async () => {
+      vi.mocked(getGitHubPat).mockReturnValue('pat123')
+      mockDbGet.mockReturnValue({ containerId: 'ctr1', gitUrl: 'git@github.com:org/repo.git', clonePath: '/workspace/repo' })
+      vi.mocked(getIdentity).mockResolvedValue({ name: 'Alice', email: 'a@b.com' })
+      vi.mocked(stageAndCommit).mockResolvedValue({ ok: true, code: 0, stdout: 'committed' })
+      const result = await getHandler('git:commit-project')({}, 42, 10, { subject: 'fix: bug' })
+      expect(stageAndCommit).toHaveBeenCalledWith(expect.anything(), '/workspace/repo', expect.objectContaining({ subject: 'fix: bug' }))
+      expect(result.ok).toBe(true)
+    })
+
+    it('git:push-project calls push with project clone_path', async () => {
+      vi.mocked(getGitHubPat).mockReturnValue('pat123')
+      mockDbGet.mockReturnValue({ containerId: 'ctr1', gitUrl: 'git@github.com:org/repo.git', clonePath: '/workspace/repo' })
+      vi.mocked(getCurrentBranch).mockResolvedValue('feature-branch')
+      vi.mocked(push).mockResolvedValue({ ok: true, code: 0, stdout: '' })
+      await getHandler('git:push-project')({}, 42, 10)
+      expect(push).toHaveBeenCalledWith(expect.anything(), '/workspace/repo', 'feature-branch', 'git@github.com:org/repo.git', 'pat123')
+    })
   })
 })

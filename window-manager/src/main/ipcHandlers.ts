@@ -14,7 +14,7 @@ import {
   clearClaudeToken
 } from './settingsService'
 import { getDb } from './db'
-import { extractRepoName, buildPrUrl } from './gitUrl'
+import { buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
 import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from './gitOps'
 import { getIdentity } from './githubIdentity'
@@ -35,20 +35,30 @@ interface WindowGitContext {
   gitUrl: string
 }
 
-function resolveWindowGitContext(windowId: number): WindowGitContext {
+function resolveWindowProjectGitContext(windowId: number, projectId: number): WindowGitContext {
   const row = getDb()
     .prepare(
-      `SELECT w.container_id AS containerId, p.git_url AS gitUrl
-       FROM windows w JOIN projects p ON p.id = w.project_id
+      `SELECT w.container_id AS containerId, p.git_url AS gitUrl, wp.clone_path AS clonePath
+       FROM windows w
+       JOIN window_projects wp ON wp.window_id = w.id AND wp.project_id = ?
+       JOIN projects p ON p.id = wp.project_id
        WHERE w.id = ? AND w.deleted_at IS NULL`
     )
-    .get(windowId) as { containerId: string; gitUrl: string } | undefined
-  if (!row) throw new Error('Window not found')
+    .get(projectId, windowId) as { containerId: string; gitUrl: string; clonePath: string } | undefined
+  if (!row) throw new Error('Window/project not found')
   return {
     container: getDocker().getContainer(row.containerId),
-    clonePath: `/workspace/${extractRepoName(row.gitUrl)}`,
+    clonePath: row.clonePath,
     gitUrl: row.gitUrl
   }
+}
+
+function resolveWindowGitContext(windowId: number): WindowGitContext {
+  const row = getDb()
+    .prepare(`SELECT project_id FROM window_projects WHERE window_id = ? LIMIT 1`)
+    .get(windowId) as { project_id: number } | undefined
+  if (!row) throw new Error('Window not found')
+  return resolveWindowProjectGitContext(windowId, row.project_id)
 }
 
 export function registerIpcHandlers(): void {
@@ -72,8 +82,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectId: number, withDeps = false) =>
-    createWindow(name, projectId, withDeps, (step) => event.sender.send('window:create-progress', step))
+  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false) =>
+    createWindow(name, projectIds, withDeps, (step) => event.sender.send('window:create-progress', step))
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
@@ -149,6 +159,40 @@ export function registerIpcHandlers(): void {
     return getGitStatus(ctx.container, ctx.clonePath)
   })
 
+  ipcMain.handle('git:current-branch-project', async (_, windowId: number, projectId: number) => {
+    const ctx = resolveWindowProjectGitContext(windowId, projectId)
+    return getCurrentBranch(ctx.container, ctx.clonePath)
+  })
+
+  ipcMain.handle('git:commit-project', async (_, windowId: number, projectId: number, payload: { subject: string; body?: string }) => {
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    const ctx = resolveWindowProjectGitContext(windowId, projectId)
+    const identity = await getIdentity(pat)
+    const result = await stageAndCommit(ctx.container, ctx.clonePath, {
+      subject: payload.subject,
+      body: payload.body,
+      name: identity.name,
+      email: identity.email
+    })
+    return { ...result, stdout: scrubPat(result.stdout, pat) }
+  })
+
+  ipcMain.handle('git:push-project', async (_, windowId: number, projectId: number) => {
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    const ctx = resolveWindowProjectGitContext(windowId, projectId)
+    const branch = await getCurrentBranch(ctx.container, ctx.clonePath)
+    if (!branch || branch === 'HEAD') throw new Error('Cannot push: detached HEAD or branch unknown')
+    const result = await gitPush(ctx.container, ctx.clonePath, branch, ctx.gitUrl, pat)
+    return { ...result, prUrl: result.ok ? buildPrUrl(ctx.gitUrl, branch) : undefined }
+  })
+
+  ipcMain.handle('git:status-project', async (_, windowId: number, projectId: number) => {
+    const ctx = resolveWindowProjectGitContext(windowId, projectId)
+    return getGitStatus(ctx.container, ctx.clonePath)
+  })
+
   // Shell handlers
   ipcMain.handle('shell:openExternal', (_, url: string) => shell.openExternal(url))
 
@@ -176,14 +220,20 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string, sessionType: SessionType = 'terminal') => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) throw new Error('No window found for terminal:open')
-    const row = getDb()
+
+    const wpRows = getDb()
       .prepare(
-        `SELECT p.git_url FROM windows w JOIN projects p ON p.id = w.project_id
-         WHERE w.container_id = ? AND w.deleted_at IS NULL LIMIT 1`
+        `SELECT wp.clone_path FROM windows w
+         JOIN window_projects wp ON wp.window_id = w.id
+         WHERE w.container_id = ? AND w.deleted_at IS NULL
+         ORDER BY wp.id`
       )
-      .get(containerId) as { git_url: string } | undefined
-    const workDir = row ? `/workspace/${extractRepoName(row.git_url)}` : undefined
-    return openTerminal(containerId, win, cols, rows, displayName, workDir, sessionType)
+      .all(containerId) as { clone_path: string }[]
+
+    const clonePaths = wpRows.map(r => r.clone_path)
+    const workDir = clonePaths.length === 1 ? clonePaths[0] : (clonePaths.length > 1 ? '/workspace' : undefined)
+
+    return openTerminal(containerId, win, cols, rows, displayName, workDir, sessionType, clonePaths)
   })
   ipcMain.on('terminal:input', (_, containerId: string, data: string, sessionType: SessionType = 'terminal') =>
     writeInput(containerId, data, sessionType)
