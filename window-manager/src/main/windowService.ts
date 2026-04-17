@@ -12,15 +12,25 @@ import type { PortMapping } from './projectService'
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
+export interface WindowProjectRecord {
+  id: number
+  window_id: number
+  project_id: number
+  clone_path: string
+  project_name?: string
+  git_url?: string
+}
+
 export interface WindowRecord {
   id: number
   name: string
-  project_id: number
+  project_id: number | null
   container_id: string
   ports?: string
   network_id?: string
   created_at: string
   status: WindowStatus
+  projects: WindowProjectRecord[]
 }
 
 const statusMap = new Map<number, WindowStatus>()
