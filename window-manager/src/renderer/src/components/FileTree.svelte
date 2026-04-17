@@ -6,15 +6,19 @@
     isDir: boolean
   }
 
+  interface RootConfig {
+    rootPath: string
+    label: string
+  }
+
   interface Props {
     containerId: string
-    rootPath: string
+    roots: RootConfig[]
     onFileSelect: (path: string) => void
   }
 
-  let { containerId, rootPath, onFileSelect }: Props = $props()
+  let { containerId, roots, onFileSelect }: Props = $props()
 
-  // childrenMap: dirPath → loaded entries (undefined = not yet loaded)
   let childrenMap = $state(new Map<string, FileEntry[]>())
   let expanded = $state(new Set<string>())
   let loading = $state(new Set<string>())
@@ -50,6 +54,8 @@
     name: string
     isDir: boolean
     depth: number
+    isRootLabel?: boolean
+    rootPath?: string
   }
 
   function flattenVisible(dirPath: string, depth: number): RenderEntry[] {
@@ -65,17 +71,60 @@
     return result
   }
 
-  const flatList = $derived(flattenVisible(rootPath, 0))
+  function computeFlatList(): RenderEntry[] {
+    if (roots.length === 1) {
+      return flattenVisible(roots[0].rootPath, 0)
+    }
+    const result: RenderEntry[] = []
+    for (const root of roots) {
+      result.push({ path: root.rootPath, name: root.label, isDir: true, depth: 0, isRootLabel: true, rootPath: root.rootPath })
+      if (expanded.has(root.rootPath)) {
+        result.push(...flattenVisible(root.rootPath, 1))
+      }
+    }
+    return result
+  }
+
+  const flatList = $derived(computeFlatList())
+
+  export function scrollToRoot(rootPath: string): void {
+    if (!expanded.has(rootPath)) {
+      expanded = new Set([...expanded, rootPath])
+    }
+    const el = document.querySelector(`[data-root-path="${rootPath}"]`) as HTMLElement | null
+    if (el && typeof el.scrollIntoView === 'function') {
+      el.scrollIntoView({ block: 'nearest' })
+    }
+  }
 
   onMount(() => {
-    expanded = new Set([rootPath])
-    void loadDir(rootPath)
+    if (roots.length === 1) {
+      expanded = new Set([roots[0].rootPath])
+      void loadDir(roots[0].rootPath)
+    } else {
+      for (const root of roots) {
+        expanded = new Set([...expanded, root.rootPath])
+        void loadDir(root.rootPath)
+      }
+    }
   })
 </script>
 
 <div class="file-tree">
   {#each flatList as entry (entry.path)}
-    {#if entry.isDir}
+    {#if entry.isRootLabel}
+      <button
+        type="button"
+        class="tree-entry dir root-label"
+        class:expanded={expanded.has(entry.path)}
+        data-root-path={entry.rootPath}
+        style:padding-left="8px"
+        onclick={() => toggleDir(entry.path)}
+      >
+        <span class="chevron" aria-hidden="true">{expanded.has(entry.path) ? '▾' : '▸'}</span>
+        {entry.name}
+      </button>
+    {:else if entry.isDir}
       <button
         type="button"
         class="tree-entry dir"
@@ -110,7 +159,6 @@
     font-family: var(--font-mono);
     font-size: 0.8rem;
   }
-
   .tree-entry {
     display: flex;
     align-items: center;
@@ -128,23 +176,25 @@
     overflow: hidden;
     text-overflow: ellipsis;
   }
-
   .tree-entry:hover {
     background: var(--bg-2);
     color: var(--fg-0);
   }
-
   .tree-entry.selected {
     background: color-mix(in srgb, var(--accent) 20%, transparent);
     color: var(--fg-0);
   }
-
+  .root-label {
+    font-weight: 600;
+    color: var(--fg-0);
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-ui);
+  }
   .chevron {
     font-size: 0.65rem;
     width: 10px;
     flex-shrink: 0;
   }
-
   .loading-dot {
     color: var(--fg-3);
     margin-left: 0.2rem;
