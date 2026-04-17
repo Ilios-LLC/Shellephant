@@ -269,9 +269,9 @@
     {#each win.projects as wp}
       <div class="project-row">
         <span class="project-row-label">{wp.project_name ?? wp.clone_path.split('/').pop()}</span>
-        <button onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
-        <button onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
-        <button onclick={() => onEditorProject?.(wp.clone_path)}>Editor</button>
+        <button type="button" onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
+        <button type="button" onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
+        <button type="button" onclick={() => onEditorProject?.(wp.clone_path)}>Editor</button>
       </div>
     {/each}
   {/if}

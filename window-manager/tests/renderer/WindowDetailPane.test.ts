@@ -15,7 +15,7 @@ vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
 }))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/svelte'
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
 import type { ConversationSummary } from '../../src/renderer/src/lib/conversationSummary'
@@ -456,7 +456,7 @@ describe('WindowDetailPane', () => {
       render(WindowDetailPane, { props: { win: multiWin, project: null, onCommitProject } })
       await tick()
       const rows = document.querySelectorAll('.project-row')
-      const commitBtn = rows[0].querySelector('button')!
+      const commitBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /commit/i })
       await fireEvent.click(commitBtn)
       expect(onCommitProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
     })
@@ -467,8 +467,8 @@ describe('WindowDetailPane', () => {
       render(WindowDetailPane, { props: { win: multiWin, project: null, onPushProject } })
       await tick()
       const rows = document.querySelectorAll('.project-row')
-      const buttons = rows[0].querySelectorAll('button')
-      await fireEvent.click(buttons[1])
+      const pushBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /push/i })
+      await fireEvent.click(pushBtn)
       expect(onPushProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
     })
 
@@ -478,8 +478,8 @@ describe('WindowDetailPane', () => {
       render(WindowDetailPane, { props: { win: multiWin, project: null, onEditorProject } })
       await tick()
       const rows = document.querySelectorAll('.project-row')
-      const buttons = rows[0].querySelectorAll('button')
-      await fireEvent.click(buttons[2])
+      const editorBtn = within(rows[0] as HTMLElement).getByRole('button', { name: /editor/i })
+      await fireEvent.click(editorBtn)
       expect(onEditorProject).toHaveBeenCalledWith('/workspace/repo-a')
     })
 
