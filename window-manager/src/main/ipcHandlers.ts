@@ -16,7 +16,7 @@ import {
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 import {
@@ -266,5 +266,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('fs:write-file', async (_, containerId: string, path: string, content: string) => {
     const container = getDocker().getContainer(containerId)
     return writeFileInContainer(container, path, content)
+  })
+
+  ipcMain.handle('fs:exec', async (_, containerId: string, cmd: string[]) => {
+    const ALLOWED_CMDS = new Set(['grep'])
+    if (!cmd[0] || !ALLOWED_CMDS.has(cmd[0])) {
+      throw new Error(`fs:exec: command '${cmd[0]}' not permitted`)
+    }
+    const container = getDocker().getContainer(containerId)
+    const result = await execInContainer(container, cmd)
+    return { ok: result.ok, code: result.code, stdout: result.stdout }
   })
 }

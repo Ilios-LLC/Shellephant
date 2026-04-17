@@ -2,12 +2,36 @@
   import { onMount, onDestroy } from 'svelte'
   import { initMonaco } from '../lib/monacoConfig'
 
+  interface EditorStatus {
+    line: number
+    column: number
+    language: string
+    isDirty: boolean
+  }
+
+  interface EditorRef {
+    gotoLine: (n: number) => void
+  }
+
   interface Props {
     containerId: string
     filePath: string
+    tabDirty?: boolean
+    onDirtyChange?: (path: string, dirty: boolean) => void
+    onStatusChange?: (status: EditorStatus) => void
+    onCloseTab?: () => void
+    onCycleNext?: () => void
+    onCyclePrev?: () => void
+    onToggleFind?: () => void
+    ref?: EditorRef | null
   }
 
-  let { containerId, filePath }: Props = $props()
+  let {
+    containerId, filePath, tabDirty = false,
+    onDirtyChange, onStatusChange,
+    onCloseTab, onCycleNext, onCyclePrev, onToggleFind,
+    ref = $bindable(null)
+  }: Props = $props()
 
   let editorEl: HTMLDivElement
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -18,30 +42,67 @@
   let contentListener: any | undefined
   let isDirty = $state(false)
   let lastContent = ''
+  let statusLine = $state(1)
+  let statusCol = $state(1)
+  let statusLang = $state('')
   let pollTimer: ReturnType<typeof setInterval> | undefined
   let mounted = false
 
-  // Build a model with a URI carrying the file extension so Monaco picks the
-  // language (json/ts/py/…). Without this the model defaults to plaintext and
-  // no syntax highlighting is applied. Disposes the old model first.
-  function swapModel(path: string, content: string): void {
-    if (!editor || !monacoRef) return
+  // Attach content listener to the current model and wire up dirty tracking.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function attachContentListener(model: any, path: string): void {
     contentListener?.dispose()
-    const previous = editor.getModel()
-    const uri = monacoRef.Uri.parse(`inmemory://container/${containerId}${path}`)
-    const model =
-      monacoRef.editor.getModel(uri) ?? monacoRef.editor.createModel('', undefined, uri)
-    model.setValue(content)
-    editor.setModel(model)
-    if (previous && previous !== model) previous.dispose()
-    contentListener = model.onDidChangeContent(() => { isDirty = true })
+    contentListener = model.onDidChangeContent(() => {
+      if (!isDirty) {
+        isDirty = true
+        onDirtyChange?.(path, true)
+        onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty: true })
+      }
+    })
   }
 
-  async function loadFile(path: string): Promise<void> {
+  // Load a file for the first time (always reads from disk).
+  async function loadFileFromDisk(path: string): Promise<void> {
+    if (!editor || !monacoRef) return
+    const uri = monacoRef.Uri.parse(`inmemory://container/${containerId}${path}`)
     const content = await window.api.readContainerFile(containerId, path)
     lastContent = content
-    swapModel(path, content)
+    const model = monacoRef.editor.createModel('', undefined, uri)
+    model.setValue(content)
+    editor.setModel(model)
+    statusLang = model.getLanguageId?.() ?? ''
     isDirty = false
+    onDirtyChange?.(path, false)
+    attachContentListener(model, path)
+  }
+
+  // Switch to a file by path. If a Monaco model already exists for that URI
+  // (previously opened tab), reuse it without reading from disk — preserving
+  // any unsaved edits. Otherwise read from disk and create a new model.
+  async function loadFile(path: string): Promise<void> {
+    if (!editor || !monacoRef) return
+    const uri = monacoRef.Uri.parse(`inmemory://container/${containerId}${path}`)
+    const existingModel = monacoRef.editor.getModel(uri)
+
+    if (existingModel) {
+      contentListener?.dispose()
+      editor.setModel(existingModel)
+      isDirty = tabDirty
+      statusLang = existingModel.getLanguageId?.() ?? ''
+      lastContent = existingModel.getValue?.() ?? ''
+      attachContentListener(existingModel, path)
+      return
+    }
+
+    const content = await window.api.readContainerFile(containerId, path)
+    lastContent = content
+    const model = monacoRef.editor.createModel('', undefined, uri)
+    model.setValue(content)
+    editor.setModel(model)
+    statusLang = model.getLanguageId?.() ?? ''
+    isDirty = false
+    onDirtyChange?.(path, false)
+    attachContentListener(model, path)
   }
 
   async function saveFile(): Promise<void> {
@@ -50,6 +111,8 @@
     await window.api.writeContainerFile(containerId, filePath, content)
     lastContent = content
     isDirty = false
+    onDirtyChange?.(filePath, false)
+    onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty: false })
   }
 
   async function pollFile(): Promise<void> {
@@ -66,7 +129,7 @@
         }
       }
     } catch {
-      // Ignore transient poll errors (e.g. container busy)
+      // Ignore transient poll errors
     }
   }
 
@@ -83,12 +146,31 @@
       fontSize: 13
     })
 
-    editor.addCommand(
-      monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS,
-      () => { void saveFile() }
-    )
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => { void saveFile() })
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyW, () => onCloseTab?.())
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.Tab, () => onCycleNext?.())
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Tab, () => onCyclePrev?.())
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyF, () => onToggleFind?.())
 
-    await loadFile(filePath)
+    editor.onDidChangeCursorPosition((e: { position: { lineNumber: number; column: number } }) => {
+      statusLine = e.position.lineNumber
+      statusCol = e.position.column
+      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty })
+    })
+
+    editor.onDidChangeModelLanguage((e: { newLanguage: string }) => {
+      statusLang = e.newLanguage
+      onStatusChange?.({ line: statusLine, column: statusCol, language: statusLang, isDirty })
+    })
+
+    ref = {
+      gotoLine: (n: number) => {
+        editor?.revealLineInCenter(n)
+        editor?.setPosition({ lineNumber: n, column: 1 })
+      }
+    }
+
+    await loadFileFromDisk(filePath)
     mounted = true
     pollTimer = setInterval(() => void pollFile(), 2000)
   })
@@ -96,11 +178,10 @@
   onDestroy(() => {
     if (pollTimer) clearInterval(pollTimer)
     contentListener?.dispose()
-    editor?.getModel()?.dispose()
+    monacoRef?.editor.getModels().forEach((m: any) => m.dispose())
     editor?.dispose()
   })
 
-  // Reload when filePath prop changes after initial mount
   $effect(() => {
     const path = filePath
     if (mounted && editor && path) {
@@ -110,7 +191,6 @@
 </script>
 
 <div class="monaco-wrap">
-  <div class="file-path-bar" title={filePath}>{filePath}</div>
   <div class="editor-body" bind:this={editorEl}></div>
 </div>
 
@@ -120,19 +200,6 @@
     flex-direction: column;
     height: 100%;
     background: #011627;
-  }
-
-  .file-path-bar {
-    font-family: var(--font-mono);
-    font-size: 0.75rem;
-    color: var(--fg-2);
-    padding: 0.25rem 0.75rem;
-    background: var(--bg-1);
-    border-bottom: 1px solid var(--border);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    flex-shrink: 0;
   }
 
   .editor-body {

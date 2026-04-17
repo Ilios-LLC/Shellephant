@@ -44,6 +44,7 @@ vi.mock('../../src/main/gitOps', () => ({
   listContainerDir: vi.fn(),
   readContainerFile: vi.fn(),
   writeFileInContainer: vi.fn(),
+  execInContainer: vi.fn(),
   getGitStatus: vi.fn()
 }))
 
@@ -85,7 +86,7 @@ import {
   resizeTerminal,
   closeTerminal
 } from '../../src/main/terminalService'
-import { getCurrentBranch, stageAndCommit, push, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus } from '../../src/main/gitOps'
+import { getCurrentBranch, stageAndCommit, push, listContainerDir, readContainerFile, writeFileInContainer, execInContainer, getGitStatus } from '../../src/main/gitOps'
 import { getGitHubPat } from '../../src/main/settingsService'
 import { getIdentity } from '../../src/main/githubIdentity'
 import { registerIpcHandlers } from '../../src/main/ipcHandlers'
@@ -432,6 +433,27 @@ describe('registerIpcHandlers', () => {
     await getHandler('fs:write-file')({}, 'container-xyz', '/workspace/r/file.ts', 'new content')
     expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
     expect(writeFileInContainer).toHaveBeenCalledWith(mockContainer, '/workspace/r/file.ts', 'new content')
+  })
+
+  it('registers fs:exec handler that calls execInContainer for allowed command', async () => {
+    vi.mocked(execInContainer).mockResolvedValue({ ok: true, code: 0, stdout: 'result' })
+    const cmd = ['grep', '-rn', 'foo', '/workspace/r']
+    const result = await getHandler('fs:exec')({}, 'container-xyz', cmd)
+    expect(mockGetContainer).toHaveBeenCalledWith('container-xyz')
+    expect(execInContainer).toHaveBeenCalledWith(mockContainer, cmd)
+    expect(result).toEqual({ ok: true, code: 0, stdout: 'result' })
+  })
+
+  it('fs:exec throws for disallowed command', async () => {
+    await expect(
+      getHandler('fs:exec')({}, 'container-xyz', ['rm', '-rf', '/'])
+    ).rejects.toThrow("not permitted")
+  })
+
+  it('fs:exec throws for empty command array', async () => {
+    await expect(
+      getHandler('fs:exec')({}, 'container-xyz', [])
+    ).rejects.toThrow("not permitted")
   })
 
   it('registers project:update handler that calls updateProject', async () => {
