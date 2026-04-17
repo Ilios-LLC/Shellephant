@@ -90,7 +90,7 @@
   {#if projects.length >= 2 && onRequestMultiWindow}
     <div class="multi-window-section">
       <button type="button" class="multi-window-btn" onclick={onRequestMultiWindow}>
-        ＋ Multi-Project Window
+        + Multi-Project Window
       </button>
     </div>
   {/if}

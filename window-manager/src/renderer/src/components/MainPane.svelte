@@ -74,7 +74,7 @@
     <NewProjectWizard onCreated={onProjectCreated} onCancel={onWizardCancel} />
   {:else if view === 'new-window' && project}
     <NewWindowWizard {project} onCreated={onWindowCreated} onCancel={onWizardCancel} />
-  {:else if view === 'new-multi-window'}
+  {:else if view === 'new-multi-window' && projects.length >= 2}
     <NewWindowWizard {projects} onCreated={onWindowCreated} onCancel={onWizardCancel} />
   {:else if selectedWindow}
     {#key selectedWindow.id}
