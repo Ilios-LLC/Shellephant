@@ -27,7 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   vim \
   tmux \
   python3.11-venv \
+  python3.11-dev \
   python3-pip \
+  build-essential \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install uvicorn

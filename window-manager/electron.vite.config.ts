@@ -5,6 +5,9 @@ export default defineConfig({
   main: {},
   preload: {},
   renderer: {
-    plugins: [svelte()]
+    plugins: [svelte()],
+    server: {
+      port: 5174
+    }
   }
 })
