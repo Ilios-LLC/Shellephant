@@ -16,7 +16,7 @@ import {
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
 import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 import {
@@ -82,8 +82,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false) =>
-    createWindow(name, projectIds, withDeps, (step) => event.sender.send('window:create-progress', step))
+  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}) =>
+    createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step))
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
@@ -195,6 +195,12 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('git:status-project', async (_, windowId: number, projectId: number) => {
     const ctx = resolveWindowProjectGitContext(windowId, projectId)
     return getGitStatus(ctx.container, ctx.clonePath)
+  })
+
+  ipcMain.handle('git:list-branches', async (_, gitUrl: string) => {
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    return listRemoteBranches(gitUrl, pat)
   })
 
   // Shell handlers

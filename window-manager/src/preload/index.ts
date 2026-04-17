@@ -19,8 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectIds: number[], withDeps: boolean = false) =>
-    ipcRenderer.invoke('window:create', name, projectIds, withDeps),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}) =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -33,6 +33,8 @@ contextBridge.exposeInMainWorld('api', {
   commit: (windowId: number, payload: { subject: string; body?: string }) =>
     ipcRenderer.invoke('git:commit', windowId, payload),
   push: (windowId: number) => ipcRenderer.invoke('git:push', windowId),
+  listRemoteBranches: (gitUrl: string) =>
+    ipcRenderer.invoke('git:list-branches', gitUrl),
   getCurrentBranchProject: (windowId: number, projectId: number) =>
     ipcRenderer.invoke('git:current-branch-project', windowId, projectId),
   getGitStatusProject: (windowId: number, projectId: number) =>
