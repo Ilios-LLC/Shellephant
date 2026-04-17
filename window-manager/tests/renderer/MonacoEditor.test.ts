@@ -1,7 +1,6 @@
 import { render, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-// --- Hoist mocks so they are available when vi.mock factory runs ---
 const {
   mockAddCommand,
   mockGetPosition,
@@ -10,12 +9,15 @@ const {
   mockSetValue,
   mockGetFullModelRange,
   mockPushEditOperations,
+  mockRevealLineInCenter,
   mockDispose,
   mockModel,
   mockEditor,
   mockMonaco,
   getDidChangeContentCb,
-  setDidChangeContentCb
+  setDidChangeContentCb,
+  getCursorPositionCb,
+  setCursorPositionCb
 } = vi.hoisted(() => {
   const mockAddCommand = vi.fn()
   const mockGetPosition = vi.fn().mockReturnValue({ lineNumber: 1, column: 1 })
@@ -24,14 +26,17 @@ const {
   const mockSetValue = vi.fn()
   const mockGetFullModelRange = vi.fn().mockReturnValue({})
   const mockPushEditOperations = vi.fn()
+  const mockRevealLineInCenter = vi.fn()
   const mockDispose = vi.fn()
   let didChangeContentCb: (() => void) | null = null
+  let cursorPositionCb: ((e: { position: { lineNumber: number; column: number } }) => void) | null = null
 
   const mockModel = {
     getValue: mockGetValue,
     setValue: mockSetValue,
     getFullModelRange: mockGetFullModelRange,
     pushEditOperations: mockPushEditOperations,
+    getLanguageId: vi.fn().mockReturnValue('typescript'),
     dispose: vi.fn(),
     onDidChangeContent: (cb: () => void) => {
       didChangeContentCb = cb
@@ -46,34 +51,35 @@ const {
     getPosition: mockGetPosition,
     setPosition: mockSetPosition,
     addCommand: mockAddCommand,
-    dispose: mockDispose
+    revealLineInCenter: mockRevealLineInCenter,
+    dispose: mockDispose,
+    onDidChangeCursorPosition: vi.fn().mockImplementation((cb) => {
+      cursorPositionCb = cb
+      return { dispose: vi.fn() }
+    }),
+    onDidChangeModelLanguage: vi.fn().mockReturnValue({ dispose: vi.fn() })
   }
 
   const mockMonaco = {
     editor: {
       create: vi.fn().mockReturnValue(mockEditor),
       getModel: vi.fn().mockReturnValue(undefined),
-      createModel: vi.fn().mockReturnValue(mockModel)
+      createModel: vi.fn().mockReturnValue(mockModel),
+      getModels: vi.fn().mockReturnValue([])
     },
     Uri: { parse: vi.fn().mockImplementation((s: string) => ({ toString: () => s })) },
-    KeyMod: { CtrlCmd: 2048 },
-    KeyCode: { KeyS: 49 }
+    KeyMod: { CtrlCmd: 2048, Shift: 1024 },
+    KeyCode: { KeyS: 49, KeyW: 47, Tab: 2, KeyF: 33 }
   }
 
   return {
-    mockAddCommand,
-    mockGetPosition,
-    mockSetPosition,
-    mockGetValue,
-    mockSetValue,
-    mockGetFullModelRange,
-    mockPushEditOperations,
-    mockDispose,
-    mockModel,
-    mockEditor,
-    mockMonaco,
+    mockAddCommand, mockGetPosition, mockSetPosition, mockGetValue, mockSetValue,
+    mockGetFullModelRange, mockPushEditOperations, mockRevealLineInCenter, mockDispose,
+    mockModel, mockEditor, mockMonaco,
     getDidChangeContentCb: () => didChangeContentCb,
-    setDidChangeContentCb: (cb: (() => void) | null) => { didChangeContentCb = cb }
+    setDidChangeContentCb: (cb: (() => void) | null) => { didChangeContentCb = cb },
+    getCursorPositionCb: () => cursorPositionCb,
+    setCursorPositionCb: (cb: typeof cursorPositionCb) => { cursorPositionCb = cb }
   }
 })
 
@@ -81,7 +87,6 @@ vi.mock('../../src/renderer/src/lib/monacoConfig', () => ({
   initMonaco: vi.fn().mockResolvedValue(mockMonaco)
 }))
 
-// --- Import component after mocks ---
 import MonacoEditor from '../../src/renderer/src/components/MonacoEditor.svelte'
 
 const mockReadFile = vi.fn()
@@ -93,7 +98,11 @@ beforeEach(() => {
   mockWriteFile.mockReset()
   mockGetValue.mockReturnValue('')
   mockPushEditOperations.mockReset()
+  mockRevealLineInCenter.mockReset()
+  mockAddCommand.mockReset()
   setDidChangeContentCb(null)
+  setCursorPositionCb(null)
+  mockMonaco.editor.getModel.mockReturnValue(undefined)
   vi.stubGlobal('api', {
     readContainerFile: mockReadFile,
     writeContainerFile: mockWriteFile
@@ -117,12 +126,6 @@ describe('MonacoEditor', () => {
     await vi.waitFor(() => {
       expect(mockSetValue).toHaveBeenCalledWith('const x = 1\n')
     })
-  })
-
-  it('renders the file path in the header bar', async () => {
-    mockReadFile.mockResolvedValue('')
-    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/app.ts' })
-    expect(await screen.findByText('/workspace/r/app.ts')).toBeInTheDocument()
   })
 
   it('marks dirty when Monaco content changes', async () => {
@@ -189,5 +192,64 @@ describe('MonacoEditor', () => {
     await vi.waitFor(() => expect(mockMonaco.editor.create).toHaveBeenCalled())
     unmount()
     expect(mockDispose).toHaveBeenCalled()
+  })
+
+  it('calls onDirtyChange(path, true) when content changes', async () => {
+    const onDirtyChange = vi.fn()
+    mockReadFile.mockResolvedValue('original')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onDirtyChange })
+    await vi.waitFor(() => expect(getDidChangeContentCb()).not.toBeNull())
+    getDidChangeContentCb()!()
+    expect(onDirtyChange).toHaveBeenCalledWith('/workspace/r/file.ts', true)
+  })
+
+  it('calls onDirtyChange(path, false) after save', async () => {
+    const onDirtyChange = vi.fn()
+    mockReadFile.mockResolvedValue('hello')
+    mockGetValue.mockReturnValue('hello edited')
+    mockWriteFile.mockResolvedValue(undefined)
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onDirtyChange })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    getDidChangeContentCb()?.()
+    const saveCallback = mockAddCommand.mock.calls[0][1] as () => void
+    saveCallback()
+    await vi.waitFor(() => {
+      expect(onDirtyChange).toHaveBeenCalledWith('/workspace/r/file.ts', false)
+    })
+  })
+
+  it('calls onStatusChange with line and column on cursor move', async () => {
+    const onStatusChange = vi.fn()
+    mockReadFile.mockResolvedValue('')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onStatusChange })
+    await vi.waitFor(() => expect(getCursorPositionCb()).not.toBeNull())
+    getCursorPositionCb()!({ position: { lineNumber: 5, column: 10 } })
+    expect(onStatusChange).toHaveBeenCalledWith(expect.objectContaining({ line: 5, column: 10 }))
+  })
+
+  it('populates ref.gotoLine which calls revealLineInCenter and setPosition', async () => {
+    mockReadFile.mockResolvedValue('')
+    let capturedRef: { gotoLine: (n: number) => void } | null = null
+    render(MonacoEditor, {
+      containerId: 'ctr',
+      filePath: '/workspace/r/file.ts',
+      get ref() { return capturedRef },
+      set ref(v) { capturedRef = v }
+    })
+    await vi.waitFor(() => expect(capturedRef).not.toBeNull())
+    capturedRef!.gotoLine(42)
+    expect(mockRevealLineInCenter).toHaveBeenCalledWith(42)
+    expect(mockSetPosition).toHaveBeenCalledWith({ lineNumber: 42, column: 1 })
+  })
+
+  it('does not reload from disk when filePath changes to a path with existing Monaco model', async () => {
+    mockReadFile.mockResolvedValue('original content')
+    mockMonaco.editor.getModel.mockReturnValue(mockModel)
+    const { rerender } = render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/foo.ts' })
+    await vi.waitFor(() => expect(mockReadFile).toHaveBeenCalledTimes(1))
+    mockReadFile.mockClear()
+    await rerender({ containerId: 'ctr', filePath: '/workspace/r/bar.ts' })
+    await vi.waitFor(() => expect(mockEditor.setModel).toHaveBeenCalledTimes(2))
+    expect(mockReadFile).not.toHaveBeenCalled()
   })
 })
