@@ -124,4 +124,14 @@ describe('FindInFiles', () => {
       expect(screen.getByText('exec failed')).toBeInTheDocument()
     })
   })
+
+  it('includes --include flag when glob filter is not the default *', async () => {
+    mockExecInContainer.mockResolvedValue({ ok: true, code: 0, stdout: '' })
+    render(FindInFiles, { containerId: 'ctr', rootPath: '/workspace/r', onOpenFile: vi.fn() })
+    await fireEvent.input(screen.getByLabelText('file filter'), { target: { value: '*.ts' } })
+    await fireEvent.input(screen.getByLabelText('search query'), { target: { value: 'foo' } })
+    await vi.advanceTimersByTimeAsync(400)
+    const cmd: string[] = mockExecInContainer.mock.calls[0][1]
+    expect(cmd).toContain('--include=*.ts')
+  })
 })

@@ -104,6 +104,7 @@
       type="text"
       placeholder="*.ts"
       bind:value={glob}
+      oninput={handleInput}
       aria-label="file filter"
     />
   </div>
