@@ -94,7 +94,6 @@
 
     const content = await window.api.readContainerFile(containerId, path)
     lastContent = content
-    contentListener?.dispose()
     const model = monacoRef.editor.createModel('', undefined, uri)
     model.setValue(content)
     editor.setModel(model)

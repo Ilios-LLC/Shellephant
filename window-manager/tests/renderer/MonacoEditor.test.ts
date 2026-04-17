@@ -1,4 +1,4 @@
-import { render, screen, cleanup } from '@testing-library/svelte'
+import { render, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
@@ -251,5 +251,53 @@ describe('MonacoEditor', () => {
     await rerender({ containerId: 'ctr', filePath: '/workspace/r/bar.ts' })
     await vi.waitFor(() => expect(mockEditor.setModel).toHaveBeenCalledTimes(2))
     expect(mockReadFile).not.toHaveBeenCalled()
+  })
+
+  it('Ctrl+W command calls onCloseTab', async () => {
+    const onCloseTab = vi.fn()
+    mockReadFile.mockResolvedValue('')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onCloseTab })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    // Find the command registered with CtrlCmd | KeyW (2048 | 47 = 2095)
+    const call = mockAddCommand.mock.calls.find((c) => c[0] === (2048 | 47))
+    expect(call).toBeDefined()
+    call![1]()
+    expect(onCloseTab).toHaveBeenCalled()
+  })
+
+  it('Ctrl+Tab command calls onCycleNext', async () => {
+    const onCycleNext = vi.fn()
+    mockReadFile.mockResolvedValue('')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onCycleNext })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    // CtrlCmd | Tab (2048 | 2 = 2050)
+    const call = mockAddCommand.mock.calls.find((c) => c[0] === (2048 | 2))
+    expect(call).toBeDefined()
+    call![1]()
+    expect(onCycleNext).toHaveBeenCalled()
+  })
+
+  it('Ctrl+Shift+Tab command calls onCyclePrev', async () => {
+    const onCyclePrev = vi.fn()
+    mockReadFile.mockResolvedValue('')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onCyclePrev })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    // CtrlCmd | Shift | Tab (2048 | 1024 | 2 = 3074)
+    const call = mockAddCommand.mock.calls.find((c) => c[0] === (2048 | 1024 | 2))
+    expect(call).toBeDefined()
+    call![1]()
+    expect(onCyclePrev).toHaveBeenCalled()
+  })
+
+  it('Ctrl+Shift+F command calls onToggleFind', async () => {
+    const onToggleFind = vi.fn()
+    mockReadFile.mockResolvedValue('')
+    render(MonacoEditor, { containerId: 'ctr', filePath: '/workspace/r/file.ts', onToggleFind })
+    await vi.waitFor(() => expect(mockAddCommand).toHaveBeenCalled())
+    // CtrlCmd | Shift | KeyF (2048 | 1024 | 33 = 3105)
+    const call = mockAddCommand.mock.calls.find((c) => c[0] === (2048 | 1024 | 33))
+    expect(call).toBeDefined()
+    call![1]()
+    expect(onToggleFind).toHaveBeenCalled()
   })
 })
