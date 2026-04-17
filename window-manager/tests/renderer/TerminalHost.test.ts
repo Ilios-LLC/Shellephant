@@ -297,6 +297,26 @@ describe('TerminalHost', () => {
     expect(mockFocus).toHaveBeenCalled()
   })
 
+  it('disposes and reinitializes claude xterm when panel is hidden then re-shown (no backend reopen)', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    mockDispose.mockClear()
+    mockApi.openTerminal.mockClear()
+    mockFocus.mockClear()
+
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'claude' ? { ...p, visible: false, width: 0 } : p)
+    }))
+    mockPanelLayoutStore.update(layout => ({
+      panels: layout.panels.map(p => p.id === 'claude' ? { ...p, visible: true, width: 50 } : p)
+    }))
+
+    await new Promise(r => setTimeout(r, 10))
+    expect(mockDispose).toHaveBeenCalled()
+    expect(mockApi.openTerminal).not.toHaveBeenCalled()
+    expect(mockFocus).toHaveBeenCalled()
+  })
+
   it('routes onTerminalData to claude session when sessionType is claude', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
