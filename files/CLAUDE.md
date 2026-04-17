@@ -101,17 +101,18 @@ When writing a plan according to superpowers:writing-plans, always write it to t
 
 ### window-manager/src/main/windowService.ts
 Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `getWaitingInfoByContainerId`, `__resetStatusMapForTests`, types `WindowRecord`, `WindowStatus`, `ProgressReporter`.
-- `createWindow(name, projectId, withDeps?, onProgress?)` — creates a dev container for a project window. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
+- `createWindow(name, projectIds, withDeps?, branchOverrides?, onProgress?)` — creates a dev container for a project window. `branchOverrides` is a `Record<number, string>` mapping projectId to a branch name; if provided for a project, that branch is checked out (with `remoteHasSlug=true`) instead of the slug-derived branch, and `remoteBranchExists` is skipped for that project. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
 - `deleteWindow(id)` — soft-deletes window, stops/removes dep containers via `listWindowDepContainers`, removes bridge network, stops main container, closes terminal session.
 - `listWindows(projectId?)` — queries including `network_id` column; merges `statusMap` for status field.
 - `WindowRecord` includes optional `network_id` field.
-- Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`. All functions under 100 lines.
-- Tests: `window-manager/tests/main/windowService.test.ts` (45 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific).
+- Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`, `setupProjectWorkspace`. All functions under 100 lines.
+- Tests: `window-manager/tests/main/windowService.test.ts` (50 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
 
 ### window-manager/src/main/gitOps.ts
-Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
+Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `listRemoteBranches`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
 - `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
+- `listRemoteBranches(sshUrl, pat)` — runs `git ls-remote --symref` on host, returns `{ defaultBranch, branches }` (sorted, default first). Scrubs PAT from errors. Used by `git:list-branches` IPC handler.
 - Tests live in `window-manager/tests/main/gitOps.test.ts`.
 
 ### window-manager/src/renderer/src/components/FileTree.svelte
@@ -197,3 +198,13 @@ Top-level window component hosting claude/terminal/editor panels in a split-pane
 - `$effect` also re-attaches xterm instance if panel element is re-created by Svelte (checked via `hasChildNodes()`).
 - Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
 - Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (23 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` via stub.
+
+### window-manager/src/renderer/src/components/NewWindowWizard.svelte
+Svelte 5 runes-mode wizard for creating a new window, supporting single-project and multi-project modes.
+- Props: `project?: ProjectRecord`, `projects?: ProjectRecord[]`, `onCreated: (win: WindowRecord) => void`, `onCancel: () => void`
+- Single-project mode (when `project` is provided): shows name input, branch select, and optional deps toggle.
+- Multi-project mode (when `projects` array provided): shows checkboxes per project plus a branch select per project row; Create button disabled when no projects selected.
+- Branch selects: fetched via `window.api.listRemoteBranches(gitUrl)` in `onMount` for all projects. While loading, renders a `<span>` (not a select) so `waitFor` for the combobox only resolves after load completes. On success: enabled select with options, default branch pre-selected. On failure (with `console.warn`): disabled select with "(default)".
+- `branchSelections`, `defaultBranches`, `branchOptions`, and `branchLoading` are all `$state`; updates use spread (`{ ...prev, [projectId]: value }`). No DOM refs used. `onchange` handlers call `handleBranchChange(id, e)` which spread-updates `branchSelections`.
+- `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
+- Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (15 tests).

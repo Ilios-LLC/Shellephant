@@ -142,6 +142,54 @@ export async function remoteBranchExists(
   return stdout.trim().length > 0
 }
 
+export async function listRemoteBranches(
+  sshUrl: string,
+  pat: string
+): Promise<{ defaultBranch: string; branches: string[] }> {
+  const httpsUrl = sshUrlToHttps(sshUrl, pat)
+  const stdout = await new Promise<string>((resolve, reject) => {
+    execFile(
+      'git',
+      ['ls-remote', '--symref', httpsUrl, 'HEAD', 'refs/heads/*'],
+      { timeout: 15_000 },
+      (err, out) => {
+        if (err) {
+          const scrubbed = new Error(scrubPat(err.message, pat))
+          const origCode = (err as NodeJS.ErrnoException).code
+          if (origCode !== undefined) (scrubbed as NodeJS.ErrnoException).code = origCode
+          const origStderr = (err as Error & { stderr?: string }).stderr
+          if (origStderr !== undefined) {
+            ;(scrubbed as Error & { stderr?: string }).stderr = scrubPat(origStderr, pat)
+          }
+          reject(scrubbed)
+        } else {
+          resolve(String(out ?? ''))
+        }
+      }
+    )
+  })
+
+  let defaultBranch = ''
+  const branches: string[] = []
+
+  for (const line of stdout.split('\n')) {
+    const symrefMatch = line.match(/^ref: refs\/heads\/(\S+)\tHEAD$/)
+    if (symrefMatch) { defaultBranch = symrefMatch[1]; continue }
+    const refMatch = line.match(/^\S+\trefs\/heads\/(.+)$/)
+    if (refMatch) branches.push(refMatch[1].trim())
+  }
+
+  branches.sort()
+  if (!defaultBranch) defaultBranch = branches[0] ?? 'main'
+
+  return {
+    defaultBranch,
+    branches: branches.length === 0
+      ? []
+      : [defaultBranch, ...branches.filter(b => b !== defaultBranch)]
+  }
+}
+
 export async function cloneInContainer(
   container: Container,
   sshUrl: string,

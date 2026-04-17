@@ -10,7 +10,8 @@ import {
   execInContainer,
   cloneInContainer,
   checkoutSlug,
-  getCurrentBranch
+  getCurrentBranch,
+  listRemoteBranches
 } from '../../src/main/gitOps'
 
 function makeContainer() {
@@ -693,5 +694,74 @@ describe('writeFileInContainer', () => {
     // @ts-expect-error mock
     await expect(writeFileInContainer(container, '/workspace/r/file.ts', 'content'))
       .rejects.toThrow(/writeFileInContainer failed/)
+  })
+})
+
+describe('listRemoteBranches', () => {
+  beforeEach(() => {
+    mockExecFile.mockReset()
+  })
+
+  it('parses defaultBranch from symref line', async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\nabc123\trefs/heads/main\ndef456\trefs/heads/develop\n', '')
+    )
+    const result = await listRemoteBranches('git@github.com:org/repo.git', 'PAT')
+    expect(result.defaultBranch).toBe('main')
+  })
+
+  it('returns branch list sorted with default branch first', async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, 'ref: refs/heads/main\tHEAD\nabc123\tHEAD\ndef456\trefs/heads/develop\nabc123\trefs/heads/main\nghi789\trefs/heads/feature/x\n', '')
+    )
+    const result = await listRemoteBranches('git@github.com:org/repo.git', 'PAT')
+    expect(result.branches[0]).toBe('main')
+    expect(result.branches).toContain('develop')
+    expect(result.branches).toContain('feature/x')
+  })
+
+  it('falls back to first alphabetical branch when no symref line present', async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, 'abc123\tHEAD\nabc123\trefs/heads/main\ndef456\trefs/heads/develop\n', '')
+    )
+    const result = await listRemoteBranches('git@github.com:org/repo.git', 'PAT')
+    expect(result.defaultBranch).toBe('develop')
+  })
+
+  it('returns defaultBranch "main" and empty branches for empty output', async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, '', '')
+    )
+    const result = await listRemoteBranches('git@github.com:org/repo.git', 'PAT')
+    expect(result.defaultBranch).toBe('main')
+    expect(result.branches).toEqual([])
+  })
+
+  it('uses HTTPS URL with PAT and passes --symref flag', async () => {
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
+      cb(null, '', '')
+    )
+    await listRemoteBranches('git@github.com:org/repo.git', 'PAT')
+    const call = mockExecFile.mock.calls[0]
+    expect(call[0]).toBe('git')
+    expect(call[1]).toEqual([
+      'ls-remote',
+      '--symref',
+      'https://PAT@github.com/org/repo.git',
+      'HEAD',
+      'refs/heads/*'
+    ])
+  })
+
+  it('rejects with scrubbed error on git failure', async () => {
+    const err = Object.assign(new Error('auth failed for https://PAT@github.com/org/repo.git'), {
+      code: 128,
+      stderr: 'fatal: auth https://PAT@github.com/org/repo.git'
+    })
+    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) => cb(err, '', ''))
+    const rejection = await listRemoteBranches('git@github.com:org/repo.git', 'PAT').catch(e => e)
+    expect(rejection).toBeInstanceOf(Error)
+    expect(rejection.message).not.toContain('PAT')
+    expect(rejection.stderr).not.toContain('PAT')
   })
 })

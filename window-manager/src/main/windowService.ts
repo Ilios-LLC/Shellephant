@@ -122,6 +122,29 @@ interface ProjectConfig {
   projectEnvVars: string[]
 }
 
+async function setupProjectWorkspace(
+  container: Dockerode.Container,
+  cfg: ProjectConfig,
+  pat: string,
+  remoteHasSlug: boolean,
+  branchOverride: string | undefined,
+  onProgress: ProgressReporter,
+  isMulti: boolean
+): Promise<void> {
+  const repoLabel = cfg.gitUrl.split('/').pop()?.replace(/\.git$/, '') ?? 'repo'
+  onProgress(isMulti ? `Preparing ${repoLabel}…` : 'Preparing workspace…')
+  const mkdir = await execInContainer(container, ['mkdir', '-p', cfg.clonePath])
+  if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
+  onProgress(isMulti ? `Cloning ${repoLabel}…` : 'Cloning repository in container…')
+  await cloneInContainer(container, cfg.gitUrl, pat, cfg.clonePath)
+  onProgress('Checking out branch…')
+  if (branchOverride) {
+    await checkoutSlug(container, cfg.clonePath, branchOverride, true)
+  } else {
+    await checkoutSlug(container, cfg.clonePath, cfg.slug, remoteHasSlug)
+  }
+}
+
 function loadProjectConfig(projectId: number, name: string): ProjectConfig {
   const db = getDb()
   const project = db
@@ -157,6 +180,7 @@ export async function createWindow(
   name: string,
   projectIds: number | number[],
   withDeps: boolean = false,
+  branchOverrides: Record<number, string> = {},
   onProgress: ProgressReporter = () => {}
 ): Promise<WindowRecord> {
   const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
@@ -185,7 +209,10 @@ export async function createWindow(
 
   onProgress('Probing remote for branch…')
   const remoteChecks = await Promise.all(
-    projectConfigs.map(cfg => remoteBranchExists(cfg.gitUrl, cfg.slug, pat))
+    projectConfigs.map((cfg, i) => {
+      if (branchOverrides[ids[i]]) return Promise.resolve(false) // unused when override present
+      return remoteBranchExists(cfg.gitUrl, cfg.slug, pat)
+    })
   )
 
   let networkId: string | null = null
@@ -220,16 +247,8 @@ export async function createWindow(
 
     for (let i = 0; i < projectConfigs.length; i++) {
       const cfg = projectConfigs[i]
-      const repoLabel = cfg.gitUrl.split('/').pop()?.replace(/\.git$/, '') ?? 'repo'
-      onProgress(isMulti ? `Preparing ${repoLabel}…` : 'Preparing workspace…')
-      const mkdir = await execInContainer(container, ['mkdir', '-p', cfg.clonePath])
-      if (!mkdir.ok) throw new Error(`mkdir failed: ${mkdir.stdout}`)
-
-      onProgress(isMulti ? `Cloning ${repoLabel}…` : 'Cloning repository in container…')
-      await cloneInContainer(container, cfg.gitUrl, pat, cfg.clonePath)
-
-      onProgress('Checking out branch…')
-      await checkoutSlug(container, cfg.clonePath, cfg.slug, remoteChecks[i])
+      const branchOverride = branchOverrides[ids[i]]
+      await setupProjectWorkspace(container, cfg, pat, remoteChecks[i], branchOverride, onProgress, isMulti)
     }
 
     try {

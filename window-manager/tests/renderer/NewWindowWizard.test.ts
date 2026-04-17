@@ -19,17 +19,23 @@ let mockListDeps: ReturnType<typeof vi.fn>
 let mockCreateWindow: ReturnType<typeof vi.fn>
 let mockOnProgress: ReturnType<typeof vi.fn>
 let mockOffProgress: ReturnType<typeof vi.fn>
+let mockListRemoteBranches: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   mockListDeps = vi.fn().mockResolvedValue([])
   mockCreateWindow = vi.fn().mockResolvedValue(mockWindow)
   mockOnProgress = vi.fn()
   mockOffProgress = vi.fn()
+  mockListRemoteBranches = vi.fn().mockResolvedValue({
+    defaultBranch: 'main',
+    branches: ['main', 'develop', 'feature/x']
+  })
   vi.stubGlobal('api', {
     listDependencies: mockListDeps,
     createWindow: mockCreateWindow,
     onWindowCreateProgress: mockOnProgress,
-    offWindowCreateProgress: mockOffProgress
+    offWindowCreateProgress: mockOffProgress,
+    listRemoteBranches: mockListRemoteBranches
   })
 })
 afterEach(() => {
@@ -55,6 +61,53 @@ describe('NewWindowWizard', () => {
     )
   })
 
+  it('shows branch select with options loaded from listRemoteBranches', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => {
+      const select = screen.getByRole('combobox', { name: /branch/i })
+      expect(select).toBeDefined()
+      expect((select as HTMLSelectElement).options.length).toBe(3)
+    })
+  })
+
+  it('default branch is pre-selected in branch select', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => {
+      const select = screen.getByRole('combobox', { name: /branch/i }) as HTMLSelectElement
+      expect(select.value).toBe('main')
+    })
+  })
+
+  it('shows disabled select with "(default)" text when branch fetch fails', async () => {
+    mockListRemoteBranches.mockRejectedValue(new Error('network error'))
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => {
+      const select = screen.getByRole('combobox', { name: /branch/i }) as HTMLSelectElement
+      expect(select.disabled).toBe(true)
+    })
+  })
+
+  it('calls createWindow with empty branchOverrides when default branch selected', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('combobox', { name: /branch/i }))
+    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {})
+    )
+  })
+
+  it('calls createWindow with branchOverrides when non-default branch selected', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('combobox', { name: /branch/i }))
+    await fireEvent.change(screen.getByRole('combobox', { name: /branch/i }), { target: { value: 'develop' } })
+    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' })
+    )
+  })
+
   it('calls createWindow with withDeps=false when toggle unchecked', async () => {
     mockListDeps.mockResolvedValue([
       { id: 1, project_id: 1, image: 'redis', tag: 'latest', env_vars: null, created_at: '' }
@@ -63,7 +116,7 @@ describe('NewWindowWizard', () => {
     await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}))
   })
 
   it('calls createWindow with withDeps=true when toggle is checked', async () => {
@@ -75,7 +128,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}))
   })
 })
 
@@ -105,7 +158,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false)
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {})
     )
   })
 
@@ -125,7 +178,29 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false)
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {})
+    )
+  })
+
+  it('each project row has a branch select loaded from listRemoteBranches', async () => {
+    render(NewWindowWizard, multiProps())
+    await waitFor(() => {
+      const selects = screen.getAllByRole('combobox')
+      expect(selects).toHaveLength(3)
+    })
+  })
+
+  it('passes branchOverrides for project where non-default branch selected', async () => {
+    render(NewWindowWizard, multiProps())
+    await waitFor(() => screen.getAllByRole('combobox'))
+    const selects = screen.getAllByRole('combobox') as HTMLSelectElement[]
+    await fireEvent.change(selects[1], { target: { value: 'develop' } })
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-one' }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'project-two' }))
+    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' })
     )
   })
 })
