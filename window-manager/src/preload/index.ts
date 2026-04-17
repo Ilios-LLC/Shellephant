@@ -19,8 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectId: number, withDeps: boolean = false) =>
-    ipcRenderer.invoke('window:create', name, projectId, withDeps),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false) =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -33,6 +33,14 @@ contextBridge.exposeInMainWorld('api', {
   commit: (windowId: number, payload: { subject: string; body?: string }) =>
     ipcRenderer.invoke('git:commit', windowId, payload),
   push: (windowId: number) => ipcRenderer.invoke('git:push', windowId),
+  getCurrentBranchProject: (windowId: number, projectId: number) =>
+    ipcRenderer.invoke('git:current-branch-project', windowId, projectId),
+  getGitStatusProject: (windowId: number, projectId: number) =>
+    ipcRenderer.invoke('git:status-project', windowId, projectId),
+  commitProject: (windowId: number, projectId: number, payload: { subject: string; body?: string }) =>
+    ipcRenderer.invoke('git:commit-project', windowId, projectId, payload),
+  pushProject: (windowId: number, projectId: number) =>
+    ipcRenderer.invoke('git:push-project', windowId, projectId),
 
   // Settings API
   getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),
