@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="logo.svg" alt="Shellephant" width="180" />
+</p>
+
 # Shellephant
 
 Containerized development environment manager with Claude Code, terminal, and file editor — one window per project.
