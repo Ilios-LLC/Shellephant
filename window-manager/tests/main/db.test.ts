@@ -379,6 +379,50 @@ describe('db migrations', () => {
     closeDb()
     fs.rmSync(tmpPath, { force: true })
   })
+
+  it('preserves window_type through makeWindowProjectIdNullable migration', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-wtype-migrate-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`CREATE TABLE project_groups (id INTEGER PRIMARY KEY, name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+    pre.exec(`
+      CREATE TABLE projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        git_url TEXT NOT NULL UNIQUE,
+        ports TEXT DEFAULT NULL,
+        group_id INTEGER DEFAULT NULL,
+        env_vars TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        container_id TEXT NOT NULL,
+        ports TEXT DEFAULT NULL,
+        network_id TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const cols = migrated.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('window_type')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
 })
 
 describe('db migrations — docker dependencies', () => {
@@ -483,7 +527,8 @@ describe('assisted_messages table', () => {
     db.exec(`INSERT INTO windows (name, project_id, container_id) VALUES ('w2', ${projId}, 'c4')`)
     const winId = (db.prepare('SELECT id FROM windows WHERE container_id = ?').get('c4') as { id: number }).id
     const meta = JSON.stringify({ session_id: 'abc123', complete: true })
-    db.exec(`INSERT INTO assisted_messages (window_id, role, content, metadata) VALUES (${winId}, 'tool_result', 'output', '${meta}')`)
+    db.prepare('INSERT INTO assisted_messages (window_id, role, content, metadata) VALUES (?, ?, ?, ?)')
+      .run(winId, 'tool_result', 'output', meta)
     const row = db.prepare('SELECT metadata FROM assisted_messages WHERE window_id = ?').get(winId) as { metadata: string }
     expect(JSON.parse(row.metadata).session_id).toBe('abc123')
   })

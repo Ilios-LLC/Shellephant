@@ -53,11 +53,14 @@ function makeWindowProjectIdNullable(db: Database.Database): void {
         container_id TEXT NOT NULL,
         ports        TEXT DEFAULT NULL,
         network_id   TEXT DEFAULT NULL,
+        window_type  TEXT NOT NULL DEFAULT 'manual',
         created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
         deleted_at   DATETIME DEFAULT NULL
       );
       INSERT INTO windows_new
-        SELECT id, name, project_id, container_id, ports, network_id, created_at, deleted_at
+        SELECT id, name, project_id, container_id, ports, network_id,
+               COALESCE(window_type, 'manual'),
+               created_at, deleted_at
         FROM windows;
       DROP TABLE windows;
       ALTER TABLE windows_new RENAME TO windows;
