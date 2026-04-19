@@ -107,14 +107,20 @@ Schema notes:
 - Column migrations run via `runColumnMigrations(db)` using `col(db, table).includes(colName)` guard pattern.
 - Tests live in `window-manager/tests/main/db.test.ts` (34 tests).
 
+### window-manager/src/main/settingsService.ts
+Exports: `getGitHubPat`, `getGitHubPatStatus`, `setGitHubPat`, `clearGitHubPat`, `getClaudeToken`, `getClaudeTokenStatus`, `setClaudeToken`, `clearClaudeToken`, `getFireworksKey`, `getFireworksKeyStatus`, `setFireworksKey`, `clearFireworksKey`, `getKimiSystemPrompt`, `setKimiSystemPrompt`. Type: `TokenStatus`.
+- Secrets (PAT, Claude token, Fireworks key) stored via `safeStorage` (OS keychain encryption); `statusFor(key)` returns `{ configured, hint }` with last-4-chars hint.
+- Kimi system prompt stored as plain UTF-8 text via `getPlainSetting`/`setPlainSetting` helpers (no encryption needed).
+- Tests live in `window-manager/tests/main/settingsService.test.ts` (includes Fireworks key and Kimi prompt suites).
+
 ### window-manager/src/main/windowService.ts
 Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `getWaitingInfoByContainerId`, `__resetStatusMapForTests`, types `WindowRecord`, `WindowStatus`, `ProgressReporter`.
-- `createWindow(name, projectIds, withDeps?, branchOverrides?, onProgress?)` — creates a dev container for a project window. `branchOverrides` is a `Record<number, string>` mapping projectId to a branch name; if provided for a project, that branch is checked out (with `remoteHasSlug=true`) instead of the slug-derived branch, and `remoteBranchExists` is skipped for that project. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
+- `createWindow(name, projectIds, withDeps?, branchOverrides?, onProgress?, windowType?)` — creates a dev container for a project window. `windowType` is `'manual' | 'assisted'` (default `'manual'`), persisted to the `window_type` DB column. `branchOverrides` is a `Record<number, string>` mapping projectId to a branch name; if provided for a project, that branch is checked out (with `remoteHasSlug=true`) instead of the slug-derived branch, and `remoteBranchExists` is skipped for that project. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
 - `deleteWindow(id)` — soft-deletes window, stops/removes dep containers via `listWindowDepContainers`, removes bridge network, stops main container, closes terminal session.
-- `listWindows(projectId?)` — queries including `network_id` column; merges `statusMap` for status field.
-- `WindowRecord` includes optional `network_id` and `window_type` fields.
+- `listWindows(projectId?)` — queries including `network_id`, `window_type` columns; merges `statusMap` for status field.
+- `WindowRecord` includes optional `network_id` and required `window_type: 'manual' | 'assisted'` fields.
 - Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`, `setupProjectWorkspace`. All functions under 100 lines.
-- Tests: `window-manager/tests/main/windowService.test.ts` (50 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
+- Tests: `window-manager/tests/main/windowService.test.ts` (53 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
 
 ### window-manager/src/main/gitOps.ts
 Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `listRemoteBranches`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
