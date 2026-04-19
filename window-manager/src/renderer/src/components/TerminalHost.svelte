@@ -75,7 +75,10 @@
       cursor: '#8b5cf6',
       selectionBackground: '#3f3f46'
     },
-    scrollback: 1000
+    scrollback: 5000,
+    scrollSensitivity: 3,
+    fastScrollSensitivity: 10,
+    fastScrollModifier: 'shift' as const
   }
 
   function reinitClaudeTerminal(): void {
@@ -410,6 +413,5 @@
   .terminal-inner {
     flex: 1;
     overflow: hidden;
-    padding: 0.5rem;
   }
 </style>

@@ -196,6 +196,7 @@ Top-level window component hosting claude/terminal/editor panels in a split-pane
 - `ResizeHandle` between adjacent panels calls `resizePanels(leftId, delta)` on drag, `savePanelLayout()` on release.
 - Claude terminal opened eagerly in `onMount`; terminal session opened lazily in `$effect` when `terminal` panel becomes visible (guarded by `terminalOpened` flag).
 - `$effect` also re-attaches xterm instance if panel element is re-created by Svelte (checked via `hasChildNodes()`).
+- xterm options: `scrollback: 5000`, `scrollSensitivity: 3`, `fastScrollSensitivity: 10`, `fastScrollModifier: 'shift'`. `.terminal-inner` has no padding — padding on the xterm container causes FitAddon to miscalculate dimensions (measures padded clientHeight but xterm renders in content box), clipping rows.
 - Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
 - Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (23 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` via stub.
 
