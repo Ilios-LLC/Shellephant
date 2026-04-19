@@ -1,3 +1,5 @@
+FROM smallstep/step-cli:0.28.2 AS step-cli
+
 FROM node:24
 
 ARG TZ
@@ -58,11 +60,7 @@ RUN GOBIN=/usr/local/bin go install github.com/go-task/task/v3/cmd/task@latest &
     GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@latest
 
 # Install step CLI (step-ca cert inspection for mTLS dev stack)
-ARG STEP_VERSION=0.28.2
-RUN ARCH=$(dpkg --print-architecture) && \
-    wget -q "https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step-cli_${STEP_VERSION}_${ARCH}.deb" && \
-    dpkg -i "step-cli_${STEP_VERSION}_${ARCH}.deb" && \
-    rm "step-cli_${STEP_VERSION}_${ARCH}.deb"
+COPY --from=step-cli /usr/local/bin/step /usr/local/bin/step
 
 # Install OpenBao CLI (transit engine for envelope encryption — replaces AWS KMS)
 ARG OPENBAO_VERSION=2.1.1
