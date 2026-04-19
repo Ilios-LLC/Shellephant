@@ -28,6 +28,7 @@ export interface WindowRecord {
   container_id: string
   ports?: string
   network_id?: string
+  window_type: 'manual' | 'assisted'
   created_at: string
   status: WindowStatus
   projects: WindowProjectRecord[]
@@ -181,7 +182,8 @@ export async function createWindow(
   projectIds: number | number[],
   withDeps: boolean = false,
   branchOverrides: Record<number, string> = {},
-  onProgress: ProgressReporter = () => {}
+  onProgress: ProgressReporter = () => {},
+  windowType: 'manual' | 'assisted' = 'manual'
 ): Promise<WindowRecord> {
   const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
   if (ids.length === 0) throw new Error('At least one project required')
@@ -259,7 +261,7 @@ export async function createWindow(
     }
 
     onProgress('Finalizing…')
-    return persistWindow(name, ids, projectConfigs.map(c => c.clonePath), container, portsJson, networkId, depContainerRecords)
+    return persistWindow(name, ids, projectConfigs.map(c => c.clonePath), container, portsJson, networkId, depContainerRecords, windowType)
   } catch (err) {
     await cleanupDepContainers(depContainerRecords, networkId)
     if (container) {
@@ -277,15 +279,16 @@ function persistWindow(
   container: Dockerode.Container,
   portsJson: string | null,
   networkId: string | null,
-  depContainerRecords: DepContainerRecord[]
+  depContainerRecords: DepContainerRecord[],
+  windowType: 'manual' | 'assisted' = 'manual'
 ): WindowRecord {
   const db = getDb()
   const isMulti = projectIds.length > 1
   const projectId = isMulti ? null : projectIds[0]
 
   const result = db
-    .prepare('INSERT INTO windows (name, project_id, container_id, ports, network_id) VALUES (?, ?, ?, ?, ?)')
-    .run(name, projectId, container.id, portsJson, networkId)
+    .prepare('INSERT INTO windows (name, project_id, container_id, ports, network_id, window_type) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(name, projectId, container.id, portsJson, networkId, windowType)
   const id = result.lastInsertRowid as number
   statusMap.set(id, 'running')
 
@@ -310,6 +313,7 @@ function persistWindow(
     project_id: projectId,
     container_id: container.id,
     ports: portsJson ?? undefined,
+    window_type: windowType,
     created_at: new Date().toISOString(),
     status: 'running' as WindowStatus,
     projects: wpRows
@@ -370,7 +374,7 @@ export async function reconcileWindows(): Promise<void> {
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
   let windowQuery =
-    'SELECT id, name, project_id, container_id, ports, network_id, created_at FROM windows WHERE deleted_at IS NULL'
+    'SELECT id, name, project_id, container_id, ports, network_id, window_type, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {

@@ -12,6 +12,7 @@ import {
   getClaudeTokenStatus,
   setClaudeToken,
   clearClaudeToken,
+  getFireworksKey,
   getFireworksKeyStatus,
   setFireworksKey,
   clearFireworksKey,
@@ -88,8 +89,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}) =>
-    createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step))
+  ipcMain.handle(
+    'window:create',
+    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual') => {
+      if (windowType === 'assisted') {
+        if (!getFireworksKey()) {
+          throw new Error('Fireworks API key not configured. Set it in Settings.')
+        }
+      }
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), windowType)
+    }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))

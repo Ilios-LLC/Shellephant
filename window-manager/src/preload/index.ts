@@ -19,8 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}) =>
-    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual') =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, windowType),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
