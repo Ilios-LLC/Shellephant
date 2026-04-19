@@ -147,6 +147,9 @@ describe('TerminalHost', () => {
     commitProject: ReturnType<typeof vi.fn>
     pushProject: ReturnType<typeof vi.fn>
     openExternal: ReturnType<typeof vi.fn>
+    getPhoneServerStatus: ReturnType<typeof vi.fn>
+    startPhoneServer: ReturnType<typeof vi.fn>
+    stopPhoneServer: ReturnType<typeof vi.fn>
   }
 
   beforeEach(() => {
@@ -168,6 +171,9 @@ describe('TerminalHost', () => {
       commitProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       pushProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       openExternal: vi.fn().mockResolvedValue(undefined),
+      getPhoneServerStatus: vi.fn().mockResolvedValue({ active: false }),
+      startPhoneServer: vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' }),
+      stopPhoneServer: vi.fn().mockResolvedValue(undefined),
       listWindowDeps: vi.fn().mockResolvedValue([]),
       onDepLogsData: vi.fn(),
       offDepLogsData: vi.fn()
@@ -573,6 +579,9 @@ describe('multi-project TerminalHost', () => {
       commitProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       pushProject: vi.fn().mockResolvedValue({ ok: true, code: 0, stdout: '' }),
       openExternal: vi.fn().mockResolvedValue(undefined),
+      getPhoneServerStatus: vi.fn().mockResolvedValue({ active: false }),
+      startPhoneServer: vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' }),
+      stopPhoneServer: vi.fn().mockResolvedValue(undefined),
       listWindowDeps: vi.fn().mockResolvedValue([]),
       onDepLogsData: vi.fn(),
       offDepLogsData: vi.fn()

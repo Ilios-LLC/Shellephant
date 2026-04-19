@@ -121,5 +121,13 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.send('window:dep-logs-stop', containerId),
   onDepLogsData: (callback: (containerId: string, chunk: string) => void) =>
     ipcRenderer.on('window:dep-logs-data', (_, containerId, chunk) => callback(containerId, chunk)),
-  offDepLogsData: () => ipcRenderer.removeAllListeners('window:dep-logs-data')
+  offDepLogsData: () => ipcRenderer.removeAllListeners('window:dep-logs-data'),
+
+  // Phone server API
+  startPhoneServer: (): Promise<{ url: string }> =>
+    ipcRenderer.invoke('phone-server:start'),
+  stopPhoneServer: (): Promise<void> =>
+    ipcRenderer.invoke('phone-server:stop'),
+  getPhoneServerStatus: (): Promise<{ active: boolean; url?: string }> =>
+    ipcRenderer.invoke('phone-server:status')
 })

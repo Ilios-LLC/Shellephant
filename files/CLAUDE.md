@@ -209,3 +209,20 @@ Svelte 5 runes-mode wizard for creating a new window, supporting single-project 
 - `branchSelections`, `defaultBranches`, `branchOptions`, and `branchLoading` are all `$state`; updates use spread (`{ ...prev, [projectId]: value }`). No DOM refs used. `onchange` handlers call `handleBranchChange(id, e)` which spread-updates `branchSelections`.
 - `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
 - Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (15 tests).
+
+### window-manager/src/main/phoneServerHtml.ts
+Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
+- Contains xterm.js CDN script tag, WebSocket connection code, and `/api/windows` fetch.
+- Tests live in `window-manager/tests/main/phoneServer.test.ts` (first 3 tests).
+
+### window-manager/src/main/phoneServer.ts
+Exports: `startPhoneServer(port?)`, `stopPhoneServer()`, `getPhoneServerStatus()`, `getTailscaleIp()`.
+- `getTailscaleIp()` — scans `networkInterfaces()` for a `100.x.x.x` IPv4 address (Tailscale); returns null if not found.
+- `startPhoneServer(port?)` — starts HTTP + WebSocket server bound to `0.0.0.0`. Returns `{ url }` with Tailscale IP. Idempotent: returns same URL if already running. Throws `'Tailscale IP not found'` if no Tailscale interface.
+- `stopPhoneServer()` — closes all WebSocket clients, WSS, and HTTP server; resets state.
+- `getPhoneServerStatus()` — returns `{ active: true, url }` or `{ active: false }`.
+- HTTP `GET /` — serves `getPhoneServerHtml()`.
+- HTTP `GET /api/windows` — returns JSON from `listWindows()`.
+- WebSocket `ws://.../ws/:containerId` — bridges to PTY session via `getSession(containerId, 'claude')`. Sends `ERROR:` message and closes if no session. Pipes PTY `onData` to WebSocket and WebSocket messages to `pty.write`. Disposes listeners on close.
+- Uses named import `import { networkInterfaces } from 'os'` for testability.
+- Tests live in `window-manager/tests/main/phoneServer.test.ts` (17 tests total; 13 server tests added in Task 3). Test file uses `vi.mock('os', ...)` factory to make `networkInterfaces` spyable in ESM.

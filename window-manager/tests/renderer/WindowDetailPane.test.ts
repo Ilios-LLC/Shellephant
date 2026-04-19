@@ -31,6 +31,10 @@ let mockStopDepLogs: ReturnType<typeof vi.fn>
 let mockOnDepLogsData: ReturnType<typeof vi.fn>
 let mockOffDepLogsData: ReturnType<typeof vi.fn>
 let mockGetDepContainersStatus: ReturnType<typeof vi.fn>
+let mockGetPhoneServerStatus: ReturnType<typeof vi.fn>
+let mockStartPhoneServer: ReturnType<typeof vi.fn>
+let mockStopPhoneServer: ReturnType<typeof vi.fn>
+let mockOpenExternal: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -52,6 +56,10 @@ beforeEach(() => {
   mockOnDepLogsData = vi.fn()
   mockOffDepLogsData = vi.fn()
   mockGetDepContainersStatus = vi.fn().mockResolvedValue({})
+  mockGetPhoneServerStatus = vi.fn().mockResolvedValue({ active: false, url: undefined })
+  mockStartPhoneServer = vi.fn().mockResolvedValue({ url: 'http://localhost:4000' })
+  mockStopPhoneServer = vi.fn().mockResolvedValue(undefined)
+  mockOpenExternal = vi.fn()
   // @ts-expect-error test bridge
   globalThis.window.api = {
     getCurrentBranch,
@@ -62,7 +70,11 @@ beforeEach(() => {
     stopDepLogs: mockStopDepLogs,
     onDepLogsData: mockOnDepLogsData,
     offDepLogsData: mockOffDepLogsData,
-    getDepContainersStatus: mockGetDepContainersStatus
+    getDepContainersStatus: mockGetDepContainersStatus,
+    getPhoneServerStatus: mockGetPhoneServerStatus,
+    startPhoneServer: mockStartPhoneServer,
+    stopPhoneServer: mockStopPhoneServer,
+    openExternal: mockOpenExternal
   }
 })
 afterEach(() => {

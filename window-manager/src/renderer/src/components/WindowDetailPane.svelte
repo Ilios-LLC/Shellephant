@@ -47,6 +47,30 @@
 
   let deleteArmed = $state(false)
   let armTimer: ReturnType<typeof setTimeout> | undefined
+  let phoneActive = $state(false)
+  let phoneUrl = $state<string | null>(null)
+  let phoneError = $state<string | null>(null)
+
+  async function togglePhone(): Promise<void> {
+    phoneError = null
+    if (phoneActive) {
+      try {
+        await window.api.stopPhoneServer()
+      } catch {
+        // ignore stop errors — clear state regardless
+      }
+      phoneActive = false
+      phoneUrl = null
+    } else {
+      try {
+        const result = await window.api.startPhoneServer()
+        phoneActive = true
+        phoneUrl = result.url
+      } catch (e) {
+        phoneError = e instanceof Error ? e.message : 'Failed to start'
+      }
+    }
+  }
 
   function handleDelete(): void {
     if (!deleteArmed) {
@@ -158,7 +182,12 @@
   onMount(async () => {
     void refreshBranch()
     timer = setInterval(refreshBranch, 5000)
-    const containers = await window.api.listWindowDeps(win.id)
+    const [containers, phoneStatus] = await Promise.all([
+      window.api.listWindowDeps(win.id),
+      window.api.getPhoneServerStatus()
+    ])
+    phoneActive = phoneStatus.active
+    phoneUrl = phoneStatus.url ?? null
     depContainers = containers
     if (containers.length > 0) {
       selectedDepContainerId = containers[0].container_id
@@ -198,6 +227,24 @@
         onclick={() => togglePanel(id)}
       >{id === 'claude' ? 'Claude' : id === 'terminal' ? 'Terminal' : 'Editor'}</button>
     {/each}
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={phoneActive}
+      aria-label="Phone Access"
+      onclick={togglePhone}
+    >Phone</button>
+    {#if phoneActive && phoneUrl}
+      <button
+        type="button"
+        class="phone-url-btn"
+        title={phoneUrl}
+        onclick={() => window.api.openExternal(phoneUrl!)}
+      >{phoneUrl}</button>
+    {/if}
+    {#if phoneError}
+      <span class="phone-error">{phoneError}</span>
+    {/if}
     {#if depContainers.length > 0}
       <button
         type="button"
@@ -459,5 +506,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .phone-url-btn {
+    font-family: var(--font-ui);
+    font-size: 0.7rem;
+    padding: 0.18rem 0.45rem;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--accent);
+    border-radius: 4px;
+    cursor: pointer;
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .phone-error {
+    font-size: 0.7rem;
+    color: #e55;
   }
 </style>
