@@ -182,10 +182,11 @@ Thin vertical drag handle (4px) between adjacent visible panels in TerminalHost.
 Footer pane showing window info and panel toggle buttons. Svelte 5 runes mode.
 - Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`
 - Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`.
+- Phone button: `aria-pressed={phoneActive}`, `aria-label="Phone Access"`; toggles phone server via `window.api.startPhoneServer/stopPhoneServer`; shows URL button and error text alongside.
 - `panelVisible` derived object and `visibleCount` derived count computed from `$panelLayout.panels`.
 - Polls `window.api.getCurrentBranch` and `window.api.getGitStatus` on mount + every 5s.
 - Two-click delete pattern (arms 3s timeout, second click fires `onDelete`).
-- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (24 tests).
+- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (28 tests, includes 4 Phone server toggle tests).
 
 ### window-manager/src/renderer/src/components/TerminalHost.svelte
 Top-level window component hosting claude/terminal/editor panels in a split-pane layout. Svelte 5 runes mode.
@@ -215,13 +216,13 @@ Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
 - Tests live in `window-manager/tests/main/phoneServer.test.ts` (first 3 tests).
 
 ### window-manager/src/main/phoneServer.ts
-Exports: `startPhoneServer(port?)`, `stopPhoneServer()`, `getPhoneServerStatus()`, `getTailscaleIp()`.
+Exports: `startPhoneServer(port?, bindHost?)`, `stopPhoneServer()`, `getPhoneServerStatus()`, `getTailscaleIp()`.
 - `getTailscaleIp()` — scans `networkInterfaces()` for a `100.x.x.x` IPv4 address (Tailscale); returns null if not found.
-- `startPhoneServer(port?)` — starts HTTP + WebSocket server bound to `0.0.0.0`. Returns `{ url }` with Tailscale IP. Idempotent: returns same URL if already running. Throws `'Tailscale IP not found'` if no Tailscale interface.
+- `startPhoneServer(port?, bindHost?)` — starts HTTP + WebSocket server. `bindHost` defaults to Tailscale IP (security: binds only to Tailscale interface in production; tests pass `'127.0.0.1'`). Returns `{ url }` with Tailscale IP. Idempotent: returns same URL if already running. Throws `'Tailscale IP not found'` if no Tailscale interface.
 - `stopPhoneServer()` — closes all WebSocket clients, WSS, and HTTP server; resets state.
 - `getPhoneServerStatus()` — returns `{ active: true, url }` or `{ active: false }`.
 - HTTP `GET /` — serves `getPhoneServerHtml()`.
 - HTTP `GET /api/windows` — returns JSON from `listWindows()`.
 - WebSocket `ws://.../ws/:containerId` — bridges to PTY session via `getSession(containerId, 'claude')`. Sends `ERROR:` message and closes if no session. Pipes PTY `onData` to WebSocket and WebSocket messages to `pty.write`. Disposes listeners on close.
 - Uses named import `import { networkInterfaces } from 'os'` for testability.
-- Tests live in `window-manager/tests/main/phoneServer.test.ts` (17 tests total; 13 server tests added in Task 3). Test file uses `vi.mock('os', ...)` factory to make `networkInterfaces` spyable in ESM.
+- Tests live in `window-manager/tests/main/phoneServer.test.ts` (17 tests). Test file uses `vi.mock('os', ...)` factory to make `networkInterfaces` spyable in ESM; all `startPhoneServer` calls pass `bindHost='127.0.0.1'`.
