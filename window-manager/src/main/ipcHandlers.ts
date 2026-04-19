@@ -28,6 +28,7 @@ import {
 } from './dependencyService'
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
+import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -283,4 +284,9 @@ export function registerIpcHandlers(): void {
     const result = await execInContainer(container, cmd)
     return { ok: result.ok, code: result.code, stdout: result.stdout }
   })
+
+  // Phone server handlers
+  ipcMain.handle('phone-server:start', () => startPhoneServer())
+  ipcMain.handle('phone-server:stop', () => stopPhoneServer())
+  ipcMain.handle('phone-server:status', () => getPhoneServerStatus())
 }
