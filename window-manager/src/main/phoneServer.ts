@@ -50,10 +50,11 @@ async function handleHttpRequest(req: http.IncomingMessage, res: http.ServerResp
   res.end(getPhoneServerHtml())
 }
 
-export async function startPhoneServer(port = DEFAULT_PORT): Promise<{ url: string }> {
+export async function startPhoneServer(port = DEFAULT_PORT, bindHost?: string): Promise<{ url: string }> {
   if (httpServer) return { url: serverUrl! }
   const ip = getTailscaleIp()
   if (!ip) throw new Error('Tailscale IP not found (expected 100.x.x.x)')
+  const host = bindHost ?? ip
   httpServer = http.createServer((req, res) => {
     handleHttpRequest(req, res).catch(() => {
       if (!res.headersSent) { res.writeHead(500); res.end('Internal Server Error') }
@@ -62,7 +63,7 @@ export async function startPhoneServer(port = DEFAULT_PORT): Promise<{ url: stri
   wss = new WebSocketServer({ server: httpServer })
   wss.on('connection', handleWsConnection)
   await new Promise<void>((resolve, reject) => {
-    httpServer!.listen(port, '0.0.0.0', resolve)
+    httpServer!.listen(port, host, resolve)
     httpServer!.once('error', reject)
   })
   const actualPort = (httpServer!.address() as AddressInfo).port

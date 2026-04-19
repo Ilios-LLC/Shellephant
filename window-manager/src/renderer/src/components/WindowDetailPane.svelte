@@ -231,6 +231,7 @@
       type="button"
       class="toggle-btn"
       class:active={phoneActive}
+      aria-pressed={phoneActive}
       aria-label="Phone Access"
       onclick={togglePhone}
     >Phone</button>

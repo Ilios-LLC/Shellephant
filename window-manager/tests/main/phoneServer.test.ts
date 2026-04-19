@@ -77,13 +77,13 @@ describe('phoneServer lifecycle', () => {
   afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
 
   it('starts and returns url with tailscale ip', async () => {
-    const result = await startPhoneServer(0)
+    const result = await startPhoneServer(0, '127.0.0.1')
     expect(result.url).toMatch(/^http:\/\/100\.1\.2\.3:\d+$/)
   })
 
   it('returns same url if already running', async () => {
-    const first = await startPhoneServer(0)
-    const second = await startPhoneServer(0)
+    const first = await startPhoneServer(0, '127.0.0.1')
+    const second = await startPhoneServer(0, '127.0.0.1')
     expect(first.url).toBe(second.url)
   })
 
@@ -93,14 +93,14 @@ describe('phoneServer lifecycle', () => {
   })
 
   it('getPhoneServerStatus returns active after start', async () => {
-    await startPhoneServer(0)
+    await startPhoneServer(0, '127.0.0.1')
     const status = getPhoneServerStatus()
     expect(status.active).toBe(true)
     expect(status.url).toMatch(/^http:\/\/100\.1\.2\.3/)
   })
 
   it('getPhoneServerStatus returns inactive after stop', async () => {
-    await startPhoneServer(0)
+    await startPhoneServer(0, '127.0.0.1')
     stopPhoneServer()
     expect(getPhoneServerStatus()).toEqual({ active: false })
   })
@@ -115,7 +115,7 @@ describe('GET /api/windows', () => {
   it('returns JSON from listWindows', async () => {
     const windows = [{ id: 1, name: 'test', status: 'running', container_id: 'abc' }]
     mockListWindows.mockResolvedValue(windows as any)
-    const { url } = await startPhoneServer(0)
+    const { url } = await startPhoneServer(0, '127.0.0.1')
     const port = new URL(url).port
     const res = await fetch(`http://localhost:${port}/api/windows`)
     expect(res.headers.get('content-type')).toContain('application/json')
@@ -131,7 +131,7 @@ describe('GET /', () => {
   afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
 
   it('returns HTML containing xterm', async () => {
-    const { url } = await startPhoneServer(0)
+    const { url } = await startPhoneServer(0, '127.0.0.1')
     const port = new URL(url).port
     const res = await fetch(`http://localhost:${port}/`)
     expect(await res.text()).toContain('xterm')
@@ -144,7 +144,7 @@ describe('WebSocket /ws/:containerId', () => {
   beforeEach(async () => {
     vi.spyOn(os, 'networkInterfaces').mockReturnValue(MOCK_IFACES as any)
     mockListWindows.mockResolvedValue([])
-    const { url } = await startPhoneServer(0)
+    const { url } = await startPhoneServer(0, '127.0.0.1')
     port = parseInt(new URL(url).port)
   })
   afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })

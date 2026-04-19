@@ -432,6 +432,43 @@ describe('WindowDetailPane', () => {
     })
   })
 
+  const baseProps = { win, project }
+
+  describe('Phone server toggle', () => {
+    it('shows Phone button in toggle row', async () => {
+      render(WindowDetailPane, { props: baseProps })
+      await screen.findByRole('button', { name: 'Phone Access' })
+    })
+
+    it('starts server and shows URL on click', async () => {
+      mockStartPhoneServer.mockResolvedValue({ url: 'http://100.1.2.3:8765' })
+      render(WindowDetailPane, { props: baseProps })
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByTitle('http://100.1.2.3:8765')
+    })
+
+    it('stops server and hides URL on second click', async () => {
+      mockGetPhoneServerStatus.mockResolvedValue({ active: true, url: 'http://100.1.2.3:8765' })
+      render(WindowDetailPane, { props: baseProps })
+      await screen.findByTitle('http://100.1.2.3:8765')
+      mockStopPhoneServer.mockResolvedValue(undefined)
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.queryByTitle('http://100.1.2.3:8765')).toBeNull()
+      })
+    })
+
+    it('shows error message when start fails', async () => {
+      mockStartPhoneServer.mockRejectedValue(new Error('Tailscale IP not found'))
+      render(WindowDetailPane, { props: baseProps })
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByText('Tailscale IP not found')
+    })
+  })
+
   describe('multi-project window', () => {
     const multiWin = {
       id: 2,
