@@ -99,12 +99,20 @@ When writing a plan according to superpowers:writing-plans, always write it to t
 
 ## Codebase Structure
 
+### window-manager/src/main/db.ts
+Schema notes:
+- `windows` table: has `window_type TEXT NOT NULL DEFAULT 'manual'` column (values: 'manual' | 'assisted') and `network_id TEXT DEFAULT NULL`.
+- `projects` table: has `kimi_system_prompt TEXT DEFAULT NULL` column.
+- `assisted_messages` table: `id`, `window_id` (FK → windows), `role`, `content`, `metadata` (JSON TEXT, nullable), `created_at`.
+- Column migrations run via `runColumnMigrations(db)` using `col(db, table).includes(colName)` guard pattern.
+- Tests live in `window-manager/tests/main/db.test.ts` (34 tests).
+
 ### window-manager/src/main/windowService.ts
 Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `getWaitingInfoByContainerId`, `__resetStatusMapForTests`, types `WindowRecord`, `WindowStatus`, `ProgressReporter`.
 - `createWindow(name, projectIds, withDeps?, branchOverrides?, onProgress?)` — creates a dev container for a project window. `branchOverrides` is a `Record<number, string>` mapping projectId to a branch name; if provided for a project, that branch is checked out (with `remoteHasSlug=true`) instead of the slug-derived branch, and `remoteBranchExists` is skipped for that project. When `withDeps=true`, creates a Docker bridge network and starts dependency containers (from `listDependencies`) before the main container; persists `network_id` and `window_dependency_containers` rows. On failure, cleans up dep containers and network before rethrowing.
 - `deleteWindow(id)` — soft-deletes window, stops/removes dep containers via `listWindowDepContainers`, removes bridge network, stops main container, closes terminal session.
 - `listWindows(projectId?)` — queries including `network_id` column; merges `statusMap` for status field.
-- `WindowRecord` includes optional `network_id` field.
+- `WindowRecord` includes optional `network_id` and `window_type` fields.
 - Helper functions extracted for size: `loadProjectConfig`, `createDepContainers`, `cleanupDepContainers`, `pullImage`, `persistWindow`, `resolvePortsJson`, `setupProjectWorkspace`. All functions under 100 lines.
 - Tests: `window-manager/tests/main/windowService.test.ts` (50 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
 
