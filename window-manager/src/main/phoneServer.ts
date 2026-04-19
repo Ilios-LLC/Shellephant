@@ -2,8 +2,10 @@ import http from 'http'
 import { networkInterfaces } from 'os'
 import type { AddressInfo } from 'net'
 import { WebSocketServer, WebSocket } from 'ws'
+import type { IPty } from 'node-pty'
 import { listWindows } from './windowService'
-import { getSession } from './terminalService'
+import { spawnClaudePty } from './terminalService'
+import { getDb } from './db'
 import { getPhoneServerHtml } from './phoneServerHtml'
 
 const DEFAULT_PORT = 8765
@@ -21,22 +23,49 @@ export function getTailscaleIp(): string | null {
   return null
 }
 
+function lookupClonePaths(containerId: string): string[] {
+  try {
+    const rows = getDb()
+      .prepare(
+        `SELECT wp.clone_path FROM windows w
+         JOIN window_projects wp ON wp.window_id = w.id
+         WHERE w.container_id = ? AND w.deleted_at IS NULL
+         ORDER BY wp.id`
+      )
+      .all(containerId) as { clone_path: string }[]
+    return rows.map(r => r.clone_path)
+  } catch {
+    return []
+  }
+}
+
 function handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
   const match = req.url?.match(/^\/ws\/([^/]+)$/)
   if (!match) { ws.close(); return }
-  const session = getSession(match[1], 'claude')
-  if (!session) {
-    ws.send('ERROR: No active claude session')
+  const containerId = match[1]
+  const clonePaths = lookupClonePaths(containerId)
+  const workDir = clonePaths.length === 1 ? clonePaths[0] : (clonePaths.length > 1 ? '/workspace' : undefined)
+
+  let ptyProc: IPty
+  try {
+    ptyProc = spawnClaudePty(containerId, 80, 24, workDir, clonePaths)
+  } catch (e) {
+    ws.send(`ERROR: Failed to start claude session: ${e instanceof Error ? e.message : 'unknown'}`)
     ws.close()
     return
   }
-  const onData = session.pty.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
-  const onExit = session.pty.onExit(({ exitCode }) => {
+
+  const onData = ptyProc.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
+  const onExit = ptyProc.onExit(({ exitCode }) => {
     if (ws.readyState === WebSocket.OPEN) ws.send(`\r\n[process exited: ${exitCode}]\r\n`)
     ws.close()
   })
-  ws.on('message', msg => session.pty.write(msg.toString()))
-  ws.on('close', () => { onData.dispose(); onExit.dispose() })
+  ws.on('message', msg => ptyProc.write(msg.toString()))
+  ws.on('close', () => {
+    onData.dispose()
+    onExit.dispose()
+    try { ptyProc.kill() } catch { /* already dead */ }
+  })
 }
 
 async function handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
