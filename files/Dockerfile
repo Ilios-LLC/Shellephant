@@ -141,6 +141,9 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 # Install pnpm (Svelte frontend package manager)
 RUN npm install -g pnpm
 
+# Install Claude Code SDK for programmatic access by assisted windows
+RUN npm install -g @anthropic-ai/claude-code
+
 # Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh
 
@@ -204,7 +207,8 @@ USER root
 COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY dev-preview.sh /usr/local/bin/dev-preview.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh && \
+COPY cw-claude-sdk.js /usr/local/bin/cw-claude-sdk.js
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh /usr/local/bin/cw-claude-sdk.js && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node
