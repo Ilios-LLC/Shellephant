@@ -54,7 +54,11 @@
   async function togglePhone(): Promise<void> {
     phoneError = null
     if (phoneActive) {
-      await window.api.stopPhoneServer()
+      try {
+        await window.api.stopPhoneServer()
+      } catch {
+        // ignore stop errors — clear state regardless
+      }
       phoneActive = false
       phoneUrl = null
     } else {
