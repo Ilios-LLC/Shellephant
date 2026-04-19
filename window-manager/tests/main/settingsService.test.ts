@@ -2,13 +2,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { initDb, closeDb, getDb } from '../../src/main/db'
 
 const mockIsAvailable = vi.fn().mockReturnValue(true)
-const mockEncrypt = vi.fn((s: string) => Buffer.from(`enc:${s}`, 'utf8'))
+const mockEncryptInstance = vi.fn((s: string) => Buffer.from(`enc:${s}`, 'utf8'))
 const mockDecrypt = vi.fn((buf: Buffer) => buf.toString('utf8').replace(/^enc:/, ''))
 
 vi.mock('electron', () => ({
   safeStorage: {
     isEncryptionAvailable: () => mockIsAvailable(),
-    encryptString: (s: string) => mockEncrypt(s),
+    encryptString: (s: string) => mockEncryptInstance(s),
     decryptString: (b: Buffer) => mockDecrypt(b)
   }
 }))
@@ -53,7 +53,7 @@ describe('settingsService', () => {
 
     it('setGitHubPat encrypts via safeStorage and persists ciphertext', () => {
       setGitHubPat('ghp_abcdefgh')
-      expect(mockEncrypt).toHaveBeenCalledWith('ghp_abcdefgh')
+      expect(mockEncryptInstance).toHaveBeenCalledWith('ghp_abcdefgh')
       const row = getDb()
         .prepare('SELECT value FROM settings WHERE key = ?')
         .get('github_pat') as { value: Buffer }
@@ -189,6 +189,7 @@ describe('Fireworks key', () => {
     initDb(':memory:')
     vi.clearAllMocks()
     mockIsAvailable.mockReturnValue(true)
+    mockEncryptInstance.mockClear()
   })
 
   afterEach(() => {
@@ -206,6 +207,7 @@ describe('Fireworks key', () => {
     const status = getFireworksKeyStatus()
     expect(status.configured).toBe(true)
     expect(status.hint).toBe('1234')
+    expect(mockEncryptInstance).toHaveBeenCalledWith('fw-test-key-1234')
   })
 
   it('clearFireworksKey removes key', async () => {
@@ -219,6 +221,7 @@ describe('Fireworks key', () => {
 describe('Kimi system prompt', () => {
   beforeEach(() => {
     initDb(':memory:')
+    mockEncryptInstance.mockClear()
   })
 
   afterEach(() => {
@@ -234,5 +237,6 @@ describe('Kimi system prompt', () => {
     const { setKimiSystemPrompt, getKimiSystemPrompt } = await import('../../src/main/settingsService')
     setKimiSystemPrompt('You are a helpful assistant.')
     expect(getKimiSystemPrompt()).toBe('You are a helpful assistant.')
+    expect(mockEncryptInstance).not.toHaveBeenCalled()
   })
 })
