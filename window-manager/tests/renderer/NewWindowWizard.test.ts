@@ -93,7 +93,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {})
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, '')
     )
   })
 
@@ -104,7 +104,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' })
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' }, '')
     )
   })
 
@@ -116,7 +116,7 @@ describe('NewWindowWizard', () => {
     await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, ''))
   })
 
   it('calls createWindow with withDeps=true when toggle is checked', async () => {
@@ -128,7 +128,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}, ''))
   })
 })
 
@@ -158,7 +158,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {})
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {}, '')
     )
   })
 
@@ -178,7 +178,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {})
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {}, '')
     )
   })
 
@@ -200,7 +200,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' })
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' }, '')
     )
   })
 })

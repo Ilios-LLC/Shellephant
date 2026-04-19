@@ -19,6 +19,7 @@
   let error = $state('')
   let hasDeps = $state(false)
   let withDeps = $state(false)
+  let networkName = $state('')
   let selectedProjectIds = $state<number[]>([])
 
   let branchOptions = $state<Record<number, string[]>>({})
@@ -81,7 +82,8 @@
         const def = defaultBranches[id]
         if (selected && def && selected !== def) branchOverrides[id] = selected
       }
-      const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides)
+      const netArg = withDeps ? '' : networkName.trim()
+      const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides, netArg)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -197,6 +199,23 @@
       </label>
     {/if}
 
+    <div class="field">
+      <label for="network-name">Docker Network (optional)</label>
+      <input
+        id="network-name"
+        type="text"
+        placeholder="existing-bridge-network"
+        bind:value={networkName}
+        disabled={loading || withDeps}
+        onkeydown={handleKey}
+      />
+      {#if withDeps}
+        <span class="hint">Ignored when starting with dependencies (a dedicated network is created).</span>
+      {:else}
+        <span class="hint">Name of an existing Docker network to attach this container to.</span>
+      {/if}
+    </div>
+
     {#if loading && progress}
       <p class="progress" aria-live="polite">
         <span class="spinner" aria-hidden="true"></span>
@@ -304,6 +323,19 @@
 
   input[type="text"]:focus {
     border-color: var(--accent);
+  }
+
+  input[type="text"]:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .hint {
+    font-size: 0.72rem;
+    color: var(--fg-2);
+    font-weight: normal;
+    letter-spacing: normal;
+    text-transform: none;
   }
 
   select {
