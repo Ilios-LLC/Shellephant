@@ -16,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   man-db \
   unzip \
   gnupg2 \
+  ca-certificates \
   gh \
   iptables \
   ipset \
@@ -30,10 +31,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   python3.11-dev \
   python3-pip \
   build-essential \
+  postgresql-client \
+  redis-tools \
+  kcat \
+  httpie \
+  openssl \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install uvicorn
-RUN pip3 install --break-system-packages uvicorn
+# Install uvicorn + uv (Python package manager used by Chorale Python services)
+RUN pip3 install --break-system-packages uvicorn uv
 
 # Install Go
 ARG GO_VERSION=1.24.2
@@ -45,6 +51,45 @@ ENV PATH=$PATH:/usr/local/go/bin:/home/node/go/bin
 
 # Install air (Go hot reload)
 RUN GOBIN=/usr/local/bin go install github.com/air-verse/air@latest
+
+# Install go-task (Taskfile runner), oapi-codegen, buf (contract codegen pipeline)
+RUN GOBIN=/usr/local/bin go install github.com/go-task/task/v3/cmd/task@latest && \
+    GOBIN=/usr/local/bin go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest && \
+    GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@latest
+
+# Install step CLI (step-ca cert inspection for mTLS dev stack)
+ARG STEP_VERSION=0.28.2
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget -q "https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step-cli_${STEP_VERSION}_${ARCH}.deb" && \
+    dpkg -i "step-cli_${STEP_VERSION}_${ARCH}.deb" && \
+    rm "step-cli_${STEP_VERSION}_${ARCH}.deb"
+
+# Install OpenBao CLI (transit engine for envelope encryption — replaces AWS KMS)
+ARG OPENBAO_VERSION=2.1.1
+RUN ARCH=$(dpkg --print-architecture) && \
+    wget -q "https://github.com/openbao/openbao/releases/download/v${OPENBAO_VERSION}/bao_${OPENBAO_VERSION}_linux_${ARCH}.deb" && \
+    dpkg -i "bao_${OPENBAO_VERSION}_linux_${ARCH}.deb" && \
+    rm "bao_${OPENBAO_VERSION}_linux_${ARCH}.deb"
+
+# Install websocat (SSE + websocket smoke tests)
+ARG WEBSOCAT_VERSION=1.13.0
+RUN ARCH=$(dpkg --print-architecture) && \
+    case "$ARCH" in \
+      amd64) WSARCH=x86_64 ;; \
+      arm64) WSARCH=aarch64 ;; \
+      *) echo "unsupported arch $ARCH" && exit 1 ;; \
+    esac && \
+    wget -q "https://github.com/vi/websocat/releases/download/v${WEBSOCAT_VERSION}/websocat.${WSARCH}-unknown-linux-musl" -O /usr/local/bin/websocat && \
+    chmod +x /usr/local/bin/websocat
+
+# Install Docker CLI + compose plugin (assumes host socket mounted at /var/run/docker.sock;
+# no daemon runs inside the container)
+RUN install -m 0755 -d /etc/apt/keyrings && \
+    curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc && \
+    chmod a+r /etc/apt/keyrings/docker.asc && \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/debian $(. /etc/os-release && echo $VERSION_CODENAME) stable" > /etc/apt/sources.list.d/docker.list && \
+    apt-get update && apt-get install -y --no-install-recommends docker-ce-cli docker-compose-plugin && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Ensure default node user has access to /usr/local/share
 RUN mkdir -p /usr/local/share/npm-global && \
@@ -73,8 +118,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
   sudo dpkg -i "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb" && \
   rm "git-delta_${GIT_DELTA_VERSION}_${ARCH}.deb"
 
-# Install Playwright system dependencies for Chromium (needs root for apt)
-RUN npx -y playwright-core install-deps chromium && \
+# Install Playwright system dependencies for Chromium, Firefox, and WebKit
+# (Phase 10 golden-path suite runs across the full browser matrix; needs root for apt)
+RUN npx -y playwright-core install-deps chromium firefox webkit && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install virtual display stack for in-container Electron dev preview
@@ -91,6 +137,9 @@ USER node
 # Install global packages
 ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
+
+# Install pnpm (Svelte frontend package manager)
+RUN npm install -g pnpm
 
 # Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh
@@ -119,10 +168,10 @@ RUN mkdir -p /home/node/.ssh && \
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH=$PATH:/home/node/.local/bin
 
-# Install Playwright MCP server and download Chromium for headless browsing
+# Install Playwright MCP server and download full browser matrix for Phase 10 E2E
 ENV PLAYWRIGHT_BROWSERS_PATH=/home/node/.cache/ms-playwright
 RUN npm install -g @playwright/mcp@latest && \
-    npx -y playwright-core install --no-shell chromium
+    npx -y playwright-core install --no-shell chromium firefox webkit
 
 # Configure Playwright defaults for Docker (headless, no sandbox, chromium-only)
 ENV PLAYWRIGHT_MCP_HEADLESS=true

@@ -1,9 +1,6 @@
 {
   "name": "claude-window",
   "private": true,
-  "workspaces": [
-    "window-manager"
-  ],
   "scripts": {
     "test": "vitest run"
   }
