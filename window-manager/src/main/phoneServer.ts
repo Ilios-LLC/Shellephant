@@ -30,8 +30,11 @@ function handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
     ws.close()
     return
   }
-  const onData = session.pty.onData(d => ws.send(d))
-  const onExit = session.pty.onExit(() => ws.close())
+  const onData = session.pty.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
+  const onExit = session.pty.onExit(({ exitCode }) => {
+    if (ws.readyState === WebSocket.OPEN) ws.send(`\r\n[process exited: ${exitCode}]\r\n`)
+    ws.close()
+  })
   ws.on('message', msg => session.pty.write(msg.toString()))
   ws.on('close', () => { onData.dispose(); onExit.dispose() })
 }
@@ -51,7 +54,11 @@ export async function startPhoneServer(port = DEFAULT_PORT): Promise<{ url: stri
   if (httpServer) return { url: serverUrl! }
   const ip = getTailscaleIp()
   if (!ip) throw new Error('Tailscale IP not found (expected 100.x.x.x)')
-  httpServer = http.createServer((req, res) => { void handleHttpRequest(req, res) })
+  httpServer = http.createServer((req, res) => {
+    handleHttpRequest(req, res).catch(() => {
+      if (!res.headersSent) { res.writeHead(500); res.end('Internal Server Error') }
+    })
+  })
   wss = new WebSocketServer({ server: httpServer })
   wss.on('connection', handleWsConnection)
   await new Promise<void>((resolve, reject) => {
@@ -67,6 +74,7 @@ export function stopPhoneServer(): void {
   wss?.clients.forEach(c => c.close())
   wss?.close()
   httpServer?.close()
+  // http.Server.close() is async; module state cleared immediately so toggle works
   httpServer = null
   wss = null
   serverUrl = null

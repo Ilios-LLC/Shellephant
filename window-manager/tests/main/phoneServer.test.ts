@@ -196,11 +196,11 @@ describe('WebSocket /ws/:containerId', () => {
   })
 
   it('closes WebSocket when PTY exits', async () => {
-    let exitCallback: (() => void) | null = null
+    let exitCallback: ((e: { exitCode: number; signal?: number }) => void) | null = null
     const mockDisposable = { dispose: vi.fn() }
     const mockPty = {
       onData: vi.fn(() => mockDisposable),
-      onExit: vi.fn((cb: () => void) => { exitCallback = cb; return mockDisposable }),
+      onExit: vi.fn((cb: (e: { exitCode: number; signal?: number }) => void) => { exitCallback = cb; return mockDisposable }),
       write: vi.fn()
     }
     mockGetSession.mockReturnValue({ pty: mockPty } as any)
@@ -208,7 +208,7 @@ describe('WebSocket /ws/:containerId', () => {
     const client = new WebSocket(`ws://localhost:${port}/ws/container-1`)
     await new Promise<void>(resolve => client.on('open', resolve))
     const closePromise = new Promise<void>(resolve => client.on('close', () => resolve()))
-    exitCallback!()
+    exitCallback!({ exitCode: 0 })
     await closePromise
   })
 
