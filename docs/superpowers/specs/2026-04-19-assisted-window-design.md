@@ -19,9 +19,9 @@ ALTER TABLE windows ADD COLUMN window_type TEXT NOT NULL DEFAULT 'manual';
 ```
 
 ### `settings` table
-Two new encrypted entries (same `safeStorage` pattern as `claude_token`):
-- `fireworks_api_key` — Fireworks AI API key, encrypted
-- `kimi_system_prompt` — global default Kimi system prompt, plain text
+One new encrypted entry and one plain text entry:
+- `fireworks_api_key` — encrypted via `safeStorage` (same pattern as `claude_token`)
+- `kimi_system_prompt` — plain text, stored as regular DB row (not encrypted)
 
 ### `projects` table
 ```sql
@@ -121,7 +121,7 @@ Worker executes:
 docker exec <containerId> node /usr/local/bin/cw-claude-sdk.js <session_id|new> "<message>"
 ```
 
-`cw-claude-sdk.js` is a small script baked into the container image that:
+`cw-claude-sdk.js` is a small script baked into the container image (requires a Dockerfile update to the `cc` image) that:
 - Uses `@anthropic-ai/claude-code` SDK
 - Streams output lines to stdout (worker forwards as `stream-chunk`)
 - Writes final session_id to stderr
