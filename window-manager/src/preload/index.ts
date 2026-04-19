@@ -52,6 +52,17 @@ contextBridge.exposeInMainWorld('api', {
   setClaudeToken: (token: string) => ipcRenderer.invoke('settings:set-claude-token', token),
   clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
 
+  // Fireworks API key
+  getFireworksKeyStatus: () => ipcRenderer.invoke('settings:get-fireworks-key-status'),
+  setFireworksKey: (key: string) => ipcRenderer.invoke('settings:set-fireworks-key', key),
+  clearFireworksKey: () => ipcRenderer.invoke('settings:clear-fireworks-key'),
+
+  // Kimi system prompt
+  getKimiSystemPrompt: () => ipcRenderer.invoke('settings:get-kimi-system-prompt'),
+  setKimiSystemPrompt: (prompt: string) => ipcRenderer.invoke('settings:set-kimi-system-prompt', prompt),
+  setProjectKimiSystemPrompt: (projectId: number, prompt: string | null) =>
+    ipcRenderer.invoke('project:set-kimi-system-prompt', projectId, prompt),
+
   // Terminal API
   openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType: string = 'terminal') =>
     ipcRenderer.invoke('terminal:open', containerId, cols, rows, displayName, sessionType),

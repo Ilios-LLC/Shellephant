@@ -183,3 +183,56 @@ describe('settingsService', () => {
     expect(getClaudeToken()).toBe('sk-ant-01234567')
   })
 })
+
+describe('Fireworks key', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+    vi.clearAllMocks()
+    mockIsAvailable.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('getFireworksKeyStatus returns not configured initially', async () => {
+    const { getFireworksKeyStatus } = await import('../../src/main/settingsService')
+    expect(getFireworksKeyStatus().configured).toBe(false)
+  })
+
+  it('setFireworksKey stores and status returns configured with hint', async () => {
+    const { setFireworksKey, getFireworksKeyStatus } = await import('../../src/main/settingsService')
+    setFireworksKey('fw-test-key-1234')
+    const status = getFireworksKeyStatus()
+    expect(status.configured).toBe(true)
+    expect(status.hint).toBe('1234')
+  })
+
+  it('clearFireworksKey removes key', async () => {
+    const { setFireworksKey, clearFireworksKey, getFireworksKeyStatus } = await import('../../src/main/settingsService')
+    setFireworksKey('fw-test-key-abcd')
+    clearFireworksKey()
+    expect(getFireworksKeyStatus().configured).toBe(false)
+  })
+})
+
+describe('Kimi system prompt', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('getKimiSystemPrompt returns null initially', async () => {
+    const { getKimiSystemPrompt } = await import('../../src/main/settingsService')
+    expect(getKimiSystemPrompt()).toBeNull()
+  })
+
+  it('setKimiSystemPrompt stores plain text', async () => {
+    const { setKimiSystemPrompt, getKimiSystemPrompt } = await import('../../src/main/settingsService')
+    setKimiSystemPrompt('You are a helpful assistant.')
+    expect(getKimiSystemPrompt()).toBe('You are a helpful assistant.')
+  })
+})

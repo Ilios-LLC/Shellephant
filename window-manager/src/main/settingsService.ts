@@ -5,6 +5,8 @@ import { applyGitIdentity } from './gitOps'
 
 const PAT_KEY = 'github_pat'
 const CLAUDE_KEY = 'claude_oauth_token'
+const FIREWORKS_KEY = 'fireworks_api_key'
+const KIMI_PROMPT_KEY = 'kimi_system_prompt'
 
 export interface TokenStatus {
   configured: boolean
@@ -100,4 +102,38 @@ export function setClaudeToken(token: string): void {
 
 export function clearClaudeToken(): void {
   deleteRow(CLAUDE_KEY)
+}
+
+function getPlainSetting(key: string): string | null {
+  const row = readRow(key)
+  if (!row) return null
+  return row.toString('utf8')
+}
+
+function setPlainSetting(key: string, value: string): void {
+  writeRow(key, Buffer.from(value, 'utf8'))
+}
+
+export function getFireworksKey(): string | null {
+  return getSecret(FIREWORKS_KEY)
+}
+
+export function getFireworksKeyStatus(): TokenStatus {
+  return statusFor(FIREWORKS_KEY)
+}
+
+export function setFireworksKey(key: string): void {
+  setSecret(FIREWORKS_KEY, key)
+}
+
+export function clearFireworksKey(): void {
+  deleteRow(FIREWORKS_KEY)
+}
+
+export function getKimiSystemPrompt(): string | null {
+  return getPlainSetting(KIMI_PROMPT_KEY)
+}
+
+export function setKimiSystemPrompt(prompt: string): void {
+  setPlainSetting(KIMI_PROMPT_KEY, prompt)
 }

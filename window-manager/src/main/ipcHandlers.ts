@@ -11,7 +11,12 @@ import {
   clearGitHubPat,
   getClaudeTokenStatus,
   setClaudeToken,
-  clearClaudeToken
+  clearClaudeToken,
+  getFireworksKeyStatus,
+  setFireworksKey,
+  clearFireworksKey,
+  getKimiSystemPrompt,
+  setKimiSystemPrompt
 } from './settingsService'
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
@@ -225,6 +230,24 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('settings:clear-claude-token', () => {
     clearClaudeToken()
     return getClaudeTokenStatus()
+  })
+  ipcMain.handle('settings:get-fireworks-key-status', () => getFireworksKeyStatus())
+  ipcMain.handle('settings:set-fireworks-key', (_, key: string) => {
+    setFireworksKey(key)
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:clear-fireworks-key', () => {
+    clearFireworksKey()
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:get-kimi-system-prompt', () => getKimiSystemPrompt())
+  ipcMain.handle('settings:set-kimi-system-prompt', (_, prompt: string) => {
+    setKimiSystemPrompt(prompt)
+  })
+  ipcMain.handle('project:set-kimi-system-prompt', (_, projectId: number, prompt: string | null) => {
+    getDb()
+      .prepare('UPDATE projects SET kimi_system_prompt = ? WHERE id = ?')
+      .run(prompt, projectId)
   })
 
   // Terminal handlers
