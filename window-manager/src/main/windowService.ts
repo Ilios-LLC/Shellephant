@@ -181,7 +181,8 @@ export async function createWindow(
   projectIds: number | number[],
   withDeps: boolean = false,
   branchOverrides: Record<number, string> = {},
-  onProgress: ProgressReporter = () => {}
+  onProgress: ProgressReporter = () => {},
+  networkName: string = ''
 ): Promise<WindowRecord> {
   const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
   if (ids.length === 0) throw new Error('At least one project required')
@@ -241,6 +242,9 @@ export async function createWindow(
 
     if (networkId) {
       await getDocker().getNetwork(networkId).connect({ Container: container.id })
+    } else if (networkName) {
+      await getDocker().getNetwork(networkName).connect({ Container: container.id })
+      networkId = networkName
     }
 
     const portsJson = await resolvePortsJson(container, projectPorts)
@@ -441,7 +445,9 @@ export async function deleteWindow(id: number): Promise<void> {
   if (row.network_id) {
     const net = getDocker().getNetwork(row.network_id)
     await net.disconnect({ Container: row.container_id, Force: true }).catch(() => {})
-    await net.remove().catch(() => {})
+    if (depContainers.length > 0) {
+      await net.remove().catch(() => {})
+    }
   }
 
   try {

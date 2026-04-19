@@ -158,6 +158,36 @@ describe('createWindow with deps', () => {
   })
 })
 
+describe('createWindow with external network', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+    __resetStatusMapForTests()
+  })
+  afterEach(() => closeDb())
+
+  it('connects main container to named network without creating one', async () => {
+    const pid = seedProject(getDb())
+    const mainCtr = makeContainer('main-ctr')
+    const net = makeNetwork('ext-net')
+    const docker = {
+      createContainer: vi.fn(async () => mainCtr),
+      pull: vi.fn(),
+      createNetwork: vi.fn(),
+      getNetwork: vi.fn(() => net)
+    }
+    vi.mocked(getDocker).mockReturnValue(docker as never)
+    vi.mocked(listDependencies).mockReturnValue([])
+
+    const win = await createWindow('win', pid, false, {}, () => {}, 'ext-net')
+
+    expect(docker.createNetwork).not.toHaveBeenCalled()
+    expect(docker.getNetwork).toHaveBeenCalledWith('ext-net')
+    expect(net.connect).toHaveBeenCalledWith(expect.objectContaining({ Container: 'main-ctr' }))
+    const row = getDb().prepare('SELECT network_id FROM windows WHERE id = ?').get(win.id) as { network_id: string }
+    expect(row.network_id).toBe('ext-net')
+  })
+})
+
 describe('deleteWindow with deps', () => {
   beforeEach(() => {
     initDb(':memory:')
@@ -193,6 +223,29 @@ describe('deleteWindow with deps', () => {
     expect(depCtr.remove).toHaveBeenCalled()
     expect(net.disconnect).toHaveBeenCalledWith({ Container: 'main-ctr', Force: true })
     expect(net.remove).toHaveBeenCalled()
+    expect(mainCtr.stop).toHaveBeenCalled()
+  })
+
+  it('disconnects from external network but does not remove it', async () => {
+    const pid = seedProject(getDb())
+    const db = getDb()
+    const winRow = db
+      .prepare("INSERT INTO windows (name, project_id, container_id, network_id) VALUES ('w', ?, 'main-ctr', 'ext-net')")
+      .run(pid)
+    const winId = winRow.lastInsertRowid as number
+
+    const mainCtr = { stop: vi.fn(async () => {}) }
+    const net = { remove: vi.fn(async () => {}), disconnect: vi.fn(async () => {}) }
+    vi.mocked(getDocker).mockReturnValue({
+      getContainer: vi.fn(() => mainCtr),
+      getNetwork: vi.fn(() => net)
+    } as never)
+    vi.mocked(listWindowDepContainers).mockReturnValue([])
+
+    await deleteWindow(winId)
+
+    expect(net.disconnect).toHaveBeenCalledWith({ Container: 'main-ctr', Force: true })
+    expect(net.remove).not.toHaveBeenCalled()
     expect(mainCtr.stop).toHaveBeenCalled()
   })
 })
