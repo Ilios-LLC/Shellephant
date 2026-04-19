@@ -81,6 +81,14 @@
     fastScrollModifier: 'shift' as const
   }
 
+  function attachClaudeScrollInterceptor(): void {
+    claudeTerminalEl.addEventListener('wheel', (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      claudeTerm?.scrollLines(e.deltaY > 0 ? 3 : -3)
+    }, { passive: false })
+  }
+
   function reinitClaudeTerminal(): void {
     claudeResizeObserver?.disconnect()
     claudeResizeObserver = undefined
@@ -90,6 +98,7 @@
     claudeTerm.loadAddon(claudeFitAddon)
     claudeTerm.loadAddon(new WebLinksAddon())
     claudeTerm.open(claudeTerminalEl)
+    attachClaudeScrollInterceptor()
     claudeFitAddon.fit()
     claudeTerm.focus()
     claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
@@ -208,6 +217,7 @@
     claudeTerm.loadAddon(claudeFitAddon)
     claudeTerm.loadAddon(new WebLinksAddon())
     claudeTerm.open(claudeTerminalEl)
+    attachClaudeScrollInterceptor()
     claudeFitAddon.fit()
     claudeTerm.reset()
     claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
