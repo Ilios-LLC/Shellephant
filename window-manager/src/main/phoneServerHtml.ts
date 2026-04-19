@@ -39,32 +39,38 @@ export function getPhoneServerHtml(): string {
     <div id="terminal-container"></div>
   </div>
   <script>
-    var term = null, fitAddon = null, ws = null;
+    var term = null, fitAddon = null, ws = null, resizeHandler = null;
 
     function escHtml(s) {
-      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
     }
 
     async function showList() {
+      if (resizeHandler) { window.removeEventListener('resize', resizeHandler); resizeHandler = null; }
       if (ws) { ws.close(); ws = null; }
       if (term) { term.dispose(); term = null; }
       document.getElementById('list-view').style.display = 'block';
       document.getElementById('terminal-view').classList.remove('active');
-      var res = await fetch('/api/windows');
-      var windows = await res.json();
-      var list = document.getElementById('window-list');
-      list.innerHTML = '';
-      if (windows.length === 0) {
-        list.innerHTML = '<p style="color:#888">No active windows.</p>';
+      try {
+        var res = await fetch('/api/windows');
+        var windows = await res.json();
+        var list = document.getElementById('window-list');
+        list.innerHTML = '';
+        if (windows.length === 0) {
+          list.innerHTML = '<p style="color:#888">No active windows.</p>';
+          return;
+        }
+        windows.forEach(function(w) {
+          var card = document.createElement('div');
+          card.className = 'window-card';
+          card.innerHTML = '<div class="window-name">' + escHtml(w.name) + '</div><div class="window-status">' + escHtml(w.status) + '</div>';
+          card.onclick = function() { openTerminal(w.container_id, w.name); };
+          list.appendChild(card);
+        });
+      } catch (e) {
+        document.getElementById('window-list').innerHTML = '<p style="color:#e55">Failed to load windows.</p>';
         return;
       }
-      windows.forEach(function(w) {
-        var card = document.createElement('div');
-        card.className = 'window-card';
-        card.innerHTML = '<div class="window-name">' + escHtml(w.name) + '</div><div class="window-status">' + escHtml(w.status) + '</div>';
-        card.onclick = function() { openTerminal(w.container_id, w.name); };
-        list.appendChild(card);
-      });
     }
 
     function openTerminal(containerId, name) {
@@ -84,7 +90,8 @@ export function getPhoneServerHtml(): string {
       };
       ws.onclose = function() { term.write('\\r\\n[disconnected]\\r\\n'); };
       term.onData(function(d) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(d); });
-      window.addEventListener('resize', function() { if (fitAddon) fitAddon.fit(); });
+      resizeHandler = function() { if (fitAddon) fitAddon.fit(); };
+      window.addEventListener('resize', resizeHandler);
     }
 
     showList();
