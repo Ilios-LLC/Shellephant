@@ -23,8 +23,13 @@ async function main() {
   let resultSessionId = null
 
   const options = {
-    dangerouslySkipPermissions: true,
+    permissionMode: 'bypassPermissions',
     includePartialMessages: true,
+    // Skip settings.json entirely so the tmux-CLI Stop hook (touch /tmp/claude-waiting)
+    // does not fire during SDK runs — avoids waitingPoller firing a "Claude is waiting"
+    // notification for internal Shellephant→Claude turns. The terminal panel still
+    // reads settings.json via the claude CLI, so tmux users keep their waiting alerts.
+    settingSources: [],
     ...(sessionId ? { resume: sessionId } : {})
   }
 

@@ -8,7 +8,8 @@ export default defineConfig({
       rollupOptions: {
         input: {
           index: resolve(__dirname, 'src/main/index.ts'),
-          assistedWindowWorker: resolve(__dirname, 'src/main/assistedWindowWorker.ts')
+          assistedWindowWorker: resolve(__dirname, 'src/main/assistedWindowWorker.ts'),
+          claudeDirectWorker: resolve(__dirname, 'src/main/claudeDirectWorker.ts')
         }
       }
     }

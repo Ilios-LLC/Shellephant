@@ -7,7 +7,7 @@ IMPORTANT: Never run the server with commands like `uv run`, `npm run dev`, `go 
 **CRITICAL**: Preserve existing naming conventions and file organization
 Follow project's established architecture and component patterns
 Use existing utility functions and avoid duplicating functionality
-You must NEVER attempt to edit /home/node/.claude/CLAUDE.md.
+You must NEVER attempt to edit /home/node/.claude/*. NEVER NEVER NEVER.
 
 Don't pause if a web request is rejected. Just keep going.
 

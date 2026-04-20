@@ -31,7 +31,7 @@ function loadHistory(windowId: number): ChatHistoryEntry[] {
   let pendingActions: string[] = []
 
   for (const row of rows) {
-    if (row.role === 'claude-action') {
+    if (row.role === 'claude-action' || row.role === 'claude-to-shellephant-action') {
       try {
         const meta = JSON.parse(row.metadata ?? '{}') as { summary?: string; actionType?: string }
         pendingActions.push(meta.summary ?? meta.actionType ?? 'action')
@@ -41,7 +41,7 @@ function loadHistory(windowId: number): ChatHistoryEntry[] {
       continue
     }
 
-    if (row.role === 'claude') {
+    if (row.role === 'claude' || row.role === 'claude-to-shellephant') {
       const prefix = pendingActions.length > 0
         ? `[Claude did: ${pendingActions.join(', ')}] Response: `
         : '[Claude]: '
@@ -67,7 +67,7 @@ export function loadLastSessionId(windowId: number): string | null {
   const rows = getDb()
     .prepare(`
       SELECT metadata FROM assisted_messages
-      WHERE window_id = ? AND role IN ('claude', 'tool_result') AND metadata IS NOT NULL
+      WHERE window_id = ? AND role IN ('claude', 'claude-to-shellephant', 'tool_result') AND metadata IS NOT NULL
       ORDER BY id DESC LIMIT 20
     `)
     .all(windowId) as { metadata: string | null }[]
@@ -121,17 +121,19 @@ export async function sendToWindow(
     worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
       if (msg.type === 'save-message') {
         saveMessage(windowId, msg.role as string, msg.content as string, msg.metadata as string | null)
-      } else if (msg.type === 'claude:event') {
+      } else if (msg.type === 'claude-to-shellephant:event') {
         const ev = msg.event as { kind: string; text?: string; name?: string; summary?: string; input?: unknown }
         if (ev.kind === 'text_delta') {
-          sendToRenderer('claude:delta', windowId, ev.text)
+          sendToRenderer('claude-to-shellephant:delta', windowId, ev.text)
         } else if (ev.kind === 'tool_use') {
           const detail = JSON.stringify(ev.input)
-          saveMessage(windowId, 'claude-action', '', JSON.stringify({ actionType: ev.name, summary: ev.summary, detail }))
-          sendToRenderer('claude:action', windowId, { actionType: ev.name, summary: ev.summary, detail })
+          saveMessage(windowId, 'claude-to-shellephant-action', '', JSON.stringify({ actionType: ev.name, summary: ev.summary, detail }))
+          sendToRenderer('claude-to-shellephant:action', windowId, { actionType: ev.name, summary: ev.summary, detail })
         }
-      } else if (msg.type === 'claude:turn-complete') {
-        sendToRenderer('claude:turn-complete', windowId)
+      } else if (msg.type === 'claude-to-shellephant:turn-complete') {
+        sendToRenderer('claude-to-shellephant:turn-complete', windowId)
+      } else if (msg.type === 'tool-call') {
+        sendToRenderer('shellephant:to-claude', windowId, msg.message)
       } else if (msg.type === 'kimi-delta') {
         sendToRenderer('assisted:kimi-delta', windowId, msg.delta)
       } else if (msg.type === 'turn-complete') {

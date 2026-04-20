@@ -27,11 +27,32 @@ vi.mock('../../src/main/db', () => ({
   })
 }))
 
+const { mockNotification, mockNotificationShow, mockIsUserWatching, mockGetFocusedWindow } = vi.hoisted(() => ({
+  mockNotification: vi.fn(),
+  mockNotificationShow: vi.fn(),
+  mockIsUserWatching: vi.fn().mockReturnValue(false),
+  mockGetFocusedWindow: vi.fn().mockReturnValue({ isDestroyed: () => false })
+}))
+
+vi.mock('electron', () => ({
+  BrowserWindow: { getFocusedWindow: () => mockGetFocusedWindow() },
+  Notification: vi.fn().mockImplementation(function (this: Record<string, unknown>, opts: unknown) {
+    mockNotification(opts)
+    this.show = mockNotificationShow
+  })
+}))
+
+vi.mock('../../src/main/focusState', () => ({
+  isUserWatching: (...args: unknown[]) => mockIsUserWatching(...args)
+}))
+
 import { sendToClaudeDirectly, cancelClaudeDirect, getDirectWorkerCount, __resetDirectWorkersForTests } from '../../src/main/claudeService'
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockDbAll.mockReturnValue([])
+  mockIsUserWatching.mockReturnValue(false)
+  mockGetFocusedWindow.mockReturnValue({ isDestroyed: () => false })
   __resetDirectWorkersForTests()
 })
 
@@ -83,6 +104,44 @@ describe('worker message routing', () => {
     const handler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
     handler({ type: 'save-message', role: 'claude', content: 'result', metadata: null })
     expect(mockDbRun).toHaveBeenCalledWith(12, 'claude', 'result', null)
+  })
+})
+
+describe('direct Claude notifications', () => {
+  it('fires Notification on turn-complete with assistantText when user not watching', async () => {
+    await sendToClaudeDirectly(30, 'c30', 'msg', vi.fn())
+    const handler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    handler({ type: 'turn-complete', windowId: 30, assistantText: 'Done — here are the results.' })
+    expect(mockNotification).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Claude responded',
+      body: 'Done — here are the results.'
+    }))
+    expect(mockNotificationShow).toHaveBeenCalled()
+  })
+
+  it('does not fire Notification when assistantText empty', async () => {
+    await sendToClaudeDirectly(31, 'c31', 'msg', vi.fn())
+    const handler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    handler({ type: 'turn-complete', windowId: 31, assistantText: '' })
+    expect(mockNotification).not.toHaveBeenCalled()
+  })
+
+  it('does not fire Notification when user is watching', async () => {
+    mockIsUserWatching.mockReturnValue(true)
+    await sendToClaudeDirectly(32, 'c32', 'msg', vi.fn())
+    const handler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    handler({ type: 'turn-complete', windowId: 32, assistantText: 'hi' })
+    expect(mockNotification).not.toHaveBeenCalled()
+  })
+
+  it('truncates long assistantText in body', async () => {
+    await sendToClaudeDirectly(33, 'c33', 'msg', vi.fn())
+    const handler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    const long = 'x'.repeat(500)
+    handler({ type: 'turn-complete', windowId: 33, assistantText: long })
+    const call = mockNotification.mock.calls[0]![0] as { body: string }
+    expect(call.body.length).toBeLessThanOrEqual(201)
+    expect(call.body.endsWith('…')).toBe(true)
   })
 })
 

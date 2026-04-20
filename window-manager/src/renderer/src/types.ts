@@ -77,7 +77,7 @@ export interface WindowProjectRecord {
 export interface AssistedMessage {
   id: number
   window_id: number
-  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user' | 'shellephant' | 'claude' | 'claude-action'
+  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user' | 'shellephant' | 'claude' | 'claude-action' | 'claude-to-shellephant' | 'claude-to-shellephant-action'
   content: string
   metadata: string | null
   created_at: string

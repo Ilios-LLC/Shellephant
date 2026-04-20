@@ -6,8 +6,10 @@ import type { TimelineEvent } from '../shared/timelineEvent'
 export async function runClaudeCode(
   containerId: string,
   sessionId: string | null,
-  message: string
+  message: string,
+  options: { eventType?: string } = {}
 ): Promise<{ output: string; events: TimelineEvent[]; newSessionId: string | null }> {
+  const eventType = options.eventType ?? 'claude:event'
   return new Promise((resolve, reject) => {
     const sidArg = sessionId ?? 'new'
     const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message])
@@ -24,7 +26,7 @@ export async function runClaudeCode(
       if (drained.sessionId) streamSessionId = drained.sessionId
       for (const event of drained.events) {
         eventsLog.push(event)
-        parentPort?.postMessage({ type: 'claude:event', event })
+        parentPort?.postMessage({ type: eventType, event })
       }
     }
 

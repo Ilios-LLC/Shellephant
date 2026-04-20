@@ -1,7 +1,9 @@
 import { Worker } from 'worker_threads'
 import path from 'path'
+import { BrowserWindow, Notification } from 'electron'
 import { getDb } from './db'
 import { loadLastSessionId } from './assistedWindowService'
+import { isUserWatching } from './focusState'
 
 const workers = new Map<number, Worker>()
 
@@ -48,6 +50,14 @@ export async function sendToClaudeDirectly(
         sendToRenderer('claude:turn-complete', windowId)
         if (msg.error) {
           sendToRenderer('claude:error', windowId, msg.error)
+        }
+        const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
+        if (assistantText) {
+          const focusedWin = BrowserWindow.getFocusedWindow()
+          if (!focusedWin || !isUserWatching(containerId, focusedWin)) {
+            const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
+            new Notification({ title: 'Claude responded', body }).show()
+          }
         }
         workers.delete(windowId)
       }

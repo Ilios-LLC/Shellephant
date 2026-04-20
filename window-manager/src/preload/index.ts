@@ -157,6 +157,9 @@ contextBridge.exposeInMainWorld('api', {
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) =>
     ipcRenderer.on('assisted:turn-complete', (_, windowId, stats, error) => callback(windowId, stats, error)),
   offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete'),
+  onShellephantToClaude: (callback: (windowId: number, message: string) => void) =>
+    ipcRenderer.on('shellephant:to-claude', (_, windowId, message) => callback(windowId, message)),
+  offShellephantToClaude: () => ipcRenderer.removeAllListeners('shellephant:to-claude'),
 
   // Direct Claude window
   claudeSend: (windowId: number, message: string) =>
@@ -170,5 +173,17 @@ contextBridge.exposeInMainWorld('api', {
   offClaudeAction: () => ipcRenderer.removeAllListeners('claude:action'),
   onClaudeTurnComplete: (callback: (windowId: number) => void) =>
     ipcRenderer.on('claude:turn-complete', (_, windowId) => callback(windowId)),
-  offClaudeTurnComplete: () => ipcRenderer.removeAllListeners('claude:turn-complete')
+  offClaudeTurnComplete: () => ipcRenderer.removeAllListeners('claude:turn-complete'),
+  onClaudeError: (callback: (windowId: number, error: string) => void) =>
+    ipcRenderer.on('claude:error', (_, windowId, error) => callback(windowId, error)),
+  offClaudeError: () => ipcRenderer.removeAllListeners('claude:error'),
+  onClaudeToShellephantDelta: (callback: (windowId: number, chunk: string) => void) =>
+    ipcRenderer.on('claude-to-shellephant:delta', (_, windowId, chunk) => callback(windowId, chunk)),
+  offClaudeToShellephantDelta: () => ipcRenderer.removeAllListeners('claude-to-shellephant:delta'),
+  onClaudeToShellephantAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) =>
+    ipcRenderer.on('claude-to-shellephant:action', (_, windowId, action) => callback(windowId, action)),
+  offClaudeToShellephantAction: () => ipcRenderer.removeAllListeners('claude-to-shellephant:action'),
+  onClaudeToShellephantTurnComplete: (callback: (windowId: number) => void) =>
+    ipcRenderer.on('claude-to-shellephant:turn-complete', (_, windowId) => callback(windowId)),
+  offClaudeToShellephantTurnComplete: () => ipcRenderer.removeAllListeners('claude-to-shellephant:turn-complete')
 })
