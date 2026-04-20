@@ -458,6 +458,14 @@ export function getWaitingInfoByContainerId(containerId: string): WaitingWindowI
   return { containerId, ...row }
 }
 
+export function getWindowTypeByContainerId(containerId: string): 'manual' | 'assisted' | null {
+  const row = getDb()
+    .prepare('SELECT window_type FROM windows WHERE container_id = ? AND deleted_at IS NULL LIMIT 1')
+    .get(containerId) as { window_type: string } | undefined
+  if (!row) return null
+  return row.window_type as 'manual' | 'assisted'
+}
+
 export async function deleteWindow(id: number): Promise<void> {
   const db = getDb()
   const row = db

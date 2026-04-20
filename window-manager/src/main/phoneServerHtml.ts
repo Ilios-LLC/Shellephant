@@ -16,6 +16,9 @@ export function getPhoneServerHtml(): string {
     .window-card { background: #2a2a2a; border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 0.6rem; cursor: pointer; border: 1px solid #333; }
     .window-name { font-size: 1rem; font-weight: 600; }
     .window-status { font-size: 0.8rem; color: #888; margin-top: 0.2rem; }
+    .window-type-badge { display: inline-block; font-size: 0.7rem; padding: 0.1rem 0.35rem; border-radius: 3px; margin-left: 0.4rem; vertical-align: middle; }
+    .window-type-badge.manual { background: #2d4a2d; color: #7ec87e; }
+    .window-type-badge.assisted { background: #2d3a4a; color: #7eaee8; }
     #terminal-view { display: none; flex-direction: column; height: 100dvh; }
     #terminal-view.active { display: flex; }
     #terminal-header { padding: 0.4rem 0.75rem; background: #2a2a2a; border-bottom: 1px solid #333; display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
@@ -63,7 +66,8 @@ export function getPhoneServerHtml(): string {
         windows.forEach(function(w) {
           var card = document.createElement('div');
           card.className = 'window-card';
-          card.innerHTML = '<div class="window-name">' + escHtml(w.name) + '</div><div class="window-status">' + escHtml(w.status) + '</div>';
+          var badge = w.window_type ? '<span class="window-type-badge ' + escHtml(w.window_type) + '">' + escHtml(w.window_type) + '</span>' : '';
+          card.innerHTML = '<div class="window-name">' + escHtml(w.name) + badge + '</div><div class="window-status">' + escHtml(w.status) + '</div>';
           card.onclick = function() { openTerminal(w.container_id, w.name); };
           list.appendChild(card);
         });
