@@ -167,12 +167,12 @@ Svelte 5 runes-mode component for listing, adding, and deleting project dependen
 - Tests live in `window-manager/tests/renderer/DependenciesSection.test.ts` (6 tests).
 
 ### window-manager/src/renderer/src/components/ProjectView.svelte
-Displays a single project's details and its windows list, with a Windows/Dependencies tab bar.
+Displays a single project's details and its windows list, with a Windows/Dependencies/Shellephant Prompt tab bar.
 - Props: `project: ProjectRecord`, `windows: WindowRecord[]`, `groups: ProjectGroupRecord[]`, `onWindowSelect`, `onRequestNewWindow`, `onProjectDeleted`, `onWindowDeleted`, `onProjectUpdated`
 - Group label + `<select id="project-group">` in `.project-actions` — lists all groups with "No group" default; onchange calls `window.api.updateProject(project.id, { groupId })` then `onProjectUpdated`.
 - Two-click delete pattern for both project and individual windows (arms on first click, auto-cancels after 3s timeout).
-- Tab bar (`.tab-row`) switches between `windows` and `deps` active tabs via `activeTab` state.
-- When `activeTab === 'deps'`, renders `<DependenciesSection projectId={project.id} />`.
+- Tab bar (`.tab-row`) switches between `windows`, `deps`, and `kimi` active tabs via `activeTab` state.
+- When `activeTab === 'deps'`, renders `<DependenciesSection projectId={project.id} />`. When `activeTab === 'kimi'`, renders the per-project Shellephant System Prompt editor (saves via `window.api.setProjectKimiSystemPrompt`).
 - Tests live in `window-manager/tests/renderer/ProjectView.test.ts` (19 tests).
 
 ### window-manager/src/renderer/src/lib/panelLayout.ts
@@ -233,9 +233,10 @@ Svelte 5 runes-mode chat UI for assisted windows. Hosts both Claude direct and S
 ### window-manager/src/renderer/src/components/SettingsView.svelte
 Svelte 5 runes-mode settings form for credentials.
 - Props: `patStatus`, `claudeStatus`, `fireworksStatus` (all `TokenStatus`), `requiredFor?: SettingsRequirement`, `onPatStatusChange`, `onClaudeStatusChange`, `onFireworksStatusChange`, `onCancel`.
-- Three sections: GitHub PAT, Claude Code OAuth Token, Fireworks API Key.
+- Three credential sections: GitHub PAT, Claude Code OAuth Token, Fireworks API Key.
 - Each section: status line (Configured with hint, or Not configured), password input, optional Clear button (only when configured), Save button (disabled until input non-empty).
 - Fireworks section input placeholder `fw-...`; help text "Required for Assisted windows. Get one at fireworks.ai."; calls `window.api.setFireworksKey` / `window.api.clearFireworksKey`.
+- Fourth section: "Shellephant System Prompt (global override)" label (`id="kimi-prompt"`); textarea for global system prompt override; saved via `window.api.setKimiSystemPrompt`.
 - Tests live in `window-manager/tests/renderer/SettingsView.test.ts` (14 tests).
 
 ### window-manager/src/renderer/src/components/MainPane.svelte
@@ -256,24 +257,23 @@ Svelte 5 runes-mode wizard for creating a new window, supporting single-project 
 - Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (18 tests).
 
 ### window-manager/src/main/assistedWindowService.ts
-Manages Worker thread lifecycle for assisted windows and wires IPC channels.
-- Exports: `sendToWindow`, `cancelWindow`, `resumeWindow`, `getWorkerCount`, `__resetWorkersForTests`.
+Manages Worker thread lifecycle for Shellephant (Kimi K2) assisted windows and wires IPC channels.
+- Exports: `sendToWindow`, `cancelWindow`, `getWorkerCount`, `__resetWorkersForTests`.
 - Module-level `workers: Map<number, Worker>` keyed by windowId.
-- `sendToWindow(windowId, containerId, message, projectId, sendToRenderer)` — resolves Fireworks key, loads history from `assisted_messages`, spawns a new Worker (or reuses existing) at `assistedWindowWorker.js`. Worker message handler: `save-message` → DB insert; `stream-chunk` / `kimi-delta` / `ping-user` / `turn-complete` → forward to renderer via `sendToRenderer`. On `turn-complete` or worker error/exit, removes from map. `ping-user` also fires `Notification` when user is not watching via `isUserWatching`.
+- `sendToWindow(windowId, containerId, message, projectId, sendToRenderer)` — resolves Fireworks key, loads history from `assisted_messages`, spawns a new Worker (or reuses existing) at `assistedWindowWorker.js`. Worker message handler: `save-message` → DB insert; `stream-chunk` / `kimi-delta` / `turn-complete` → forward to renderer via `sendToRenderer`. On `turn-complete` or worker error/exit, removes from map. `turn-complete` fires `Notification` ("Shellephant responded") when user is not watching via `isUserWatching`.
 - `cancelWindow(windowId)` — terminates worker and removes from map.
-- `resumeWindow(windowId, message)` — posts `{ type: 'resume', windowId, message }` to existing worker.
-- IPC handlers in `ipcHandlers.ts`: `assisted:send`, `assisted:cancel`, `assisted:resume`, `assisted:history`.
-- Preload channels: `assistedSend`, `assistedCancel`, `assistedResume`, `assistedHistory`, `on/offAssistedStreamChunk`, `on/offAssistedKimiDelta`, `on/offAssistedPingUser`, `on/offAssistedTurnComplete`.
+- IPC handlers in `ipcHandlers.ts`: `assisted:send`, `assisted:cancel`, `assisted:history`.
+- Preload channels: `assistedSend`, `assistedCancel`, `assistedHistory`, `on/offAssistedStreamChunk`, `on/offAssistedKimiDelta`, `on/offAssistedTurnComplete`.
 - Tests live in `window-manager/tests/main/assistedWindowService.test.ts` (6 tests). Uses `vi.hoisted()` + constructor function pattern for Worker mock.
 
 ### window-manager/src/main/assistedWindowWorker.ts
-Worker thread implementing the Kimi K2 orchestration loop for assisted windows.
-- Exports: `resolveSystemPrompt(projectPrompt, globalPrompt)`, `buildKimiTools()`, `parseDockerOutput(stdout, stderr)`.
+Worker thread implementing the Shellephant (Kimi K2) orchestration loop for assisted windows.
+- Exports: `resolveSystemPrompt(projectPrompt, globalPrompt)`, `buildShellephantTools()`, `parseDockerOutput(stdout, stderr)`.
 - `resolveSystemPrompt` — returns project prompt > global prompt > DEFAULT_SYSTEM_PROMPT (contains "autonomous coding assistant").
-- `buildKimiTools` — returns two `ChatCompletionTool` definitions: `run_claude_code` and `ping_user`.
+- `buildShellephantTools` — returns one `ChatCompletionTool` definition: `run_claude_code` (no `ping_user`).
 - `parseDockerOutput` — splits stdout lines (filter empty), extracts sessionId from stderr (null if empty).
 - Private `runClaudeCode(containerId, sessionId, message)` — spawns `docker exec` running `cw-claude-sdk.js`; streams chunks via `parentPort.postMessage({ type: 'stream-chunk' })`; resolves `{ output, newSessionId }`.
-- Private `kimiLoop(data)` — main orchestration: streams Kimi K2 via Fireworks AI (`baseURL: https://api.fireworks.ai/inference/v1`), handles `run_claude_code` and `ping_user` tool calls. Extracted helpers: `handlePingUser`, `handleRunClaudeCode`, `processStreamChunk` (all under 100 lines). Posts: `save-message`, `kimi-delta`, `ping-user`, `turn-complete` messages to parent.
+- Private `kimiLoop(data)` — main orchestration: streams Kimi K2 via Fireworks AI (`baseURL: https://api.fireworks.ai/inference/v1`), handles `run_claude_code` tool call. Extracted helpers: `handleRunClaudeCode`, `processStreamChunk` (all under 100 lines). Posts: `save-message`, `kimi-delta`, `turn-complete` messages to parent.
 - `parentPort.on('message')` — handles `{ type: 'send' }` to invoke `kimiLoop`; on error posts `turn-complete` with error field.
 - Uses `vi.hoisted()` pattern in tests for mock references (same as MonacoEditor pattern).
 - Tests live in `window-manager/tests/main/assistedWindowWorker.test.ts` (6 tests).
