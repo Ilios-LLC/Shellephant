@@ -195,12 +195,12 @@ Thin vertical drag handle (4px) between adjacent visible panels in TerminalHost.
 ### window-manager/src/renderer/src/components/WindowDetailPane.svelte
 Footer pane showing window info and panel toggle buttons. Svelte 5 runes mode.
 - Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`
-- Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`.
+- Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`. Claude button is filtered out for assisted windows (`win.window_type === 'assisted'`).
 - Phone button: `aria-pressed={phoneActive}`, `aria-label="Phone Access"`; toggles phone server via `window.api.startPhoneServer/stopPhoneServer`; shows URL button and error text alongside.
 - `panelVisible` derived object and `visibleCount` derived count computed from `$panelLayout.panels`.
 - Polls `window.api.getCurrentBranch` and `window.api.getGitStatus` on mount + every 5s.
 - Two-click delete pattern (arms 3s timeout, second click fires `onDelete`).
-- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (28 tests, includes 4 Phone server toggle tests).
+- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (29 tests, includes 4 Phone server toggle tests).
 
 ### window-manager/src/renderer/src/components/TerminalHost.svelte
 Top-level window component hosting claude/terminal/editor panels in a split-pane layout. Svelte 5 runes mode.
@@ -209,21 +209,50 @@ Top-level window component hosting claude/terminal/editor panels in a split-pane
 - Each panel div has `data-panel-id` attribute and percentage `width` style from store.
 - Drag-and-drop reorder: `draggable` span on panel header calls `reorderPanels(draggedId, targetId)`.
 - `ResizeHandle` between adjacent panels calls `resizePanels(leftId, delta)` on drag, `savePanelLayout()` on release.
-- Claude terminal opened eagerly in `onMount`; terminal session opened lazily in `$effect` when `terminal` panel becomes visible (guarded by `terminalOpened` flag).
+- Claude panel: for `window_type === 'assisted'`, renders `<AssistedPanel>` instead of xterm div. For manual windows, claude terminal opened eagerly in `onMount` (guarded by `win.window_type !== 'assisted'`).
+- Terminal session opened lazily in `$effect` when `terminal` panel becomes visible (guarded by `terminalOpened` flag).
 - `$effect` also re-attaches xterm instance if panel element is re-created by Svelte (checked via `hasChildNodes()`).
+- `onTerminalData` and `onTerminalSummary` listeners always registered (for both window types).
+- `onDestroy` only calls `closeTerminal(... 'claude')` for manual windows.
 - xterm options: `scrollback: 5000`, `scrollSensitivity: 3`, `fastScrollSensitivity: 10`, `fastScrollModifier: 'shift'`. `.terminal-inner` has no padding — padding on the xterm container causes FitAddon to miscalculate dimensions (measures padded clientHeight but xterm renders in content box), clipping rows.
 - Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
-- Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (23 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` via stub.
+- Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (24 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` and `AssistedPanel.svelte` via stubs.
+
+### window-manager/src/renderer/src/components/SettingsView.svelte
+Svelte 5 runes-mode settings form for credentials.
+- Props: `patStatus`, `claudeStatus`, `fireworksStatus` (all `TokenStatus`), `requiredFor?: SettingsRequirement`, `onPatStatusChange`, `onClaudeStatusChange`, `onFireworksStatusChange`, `onCancel`.
+- Three sections: GitHub PAT, Claude Code OAuth Token, Fireworks API Key.
+- Each section: status line (Configured with hint, or Not configured), password input, optional Clear button (only when configured), Save button (disabled until input non-empty).
+- Fireworks section input placeholder `fw-...`; help text "Required for Assisted windows. Get one at fireworks.ai."; calls `window.api.setFireworksKey` / `window.api.clearFireworksKey`.
+- Tests live in `window-manager/tests/renderer/SettingsView.test.ts` (14 tests).
+
+### window-manager/src/renderer/src/components/MainPane.svelte
+Routes view to the appropriate component. Passes `fireworksStatus` and `onFireworksStatusChange` through to `SettingsView`.
+
+### window-manager/src/renderer/src/App.svelte
+Root component. Fetches `getFireworksKeyStatus()` in `onMount` alongside PAT and Claude status. Holds `fireworksStatus` state and `handleFireworksStatusChange` handler.
 
 ### window-manager/src/renderer/src/components/NewWindowWizard.svelte
 Svelte 5 runes-mode wizard for creating a new window, supporting single-project and multi-project modes.
 - Props: `project?: ProjectRecord`, `projects?: ProjectRecord[]`, `onCreated: (win: WindowRecord) => void`, `onCancel: () => void`
-- Single-project mode (when `project` is provided): shows name input, branch select, and optional deps toggle.
+- Single-project mode (when `project` is provided): shows name input, type toggle, branch select, and optional deps toggle.
 - Multi-project mode (when `projects` array provided): shows checkboxes per project plus a branch select per project row; Create button disabled when no projects selected.
+- Type toggle: Manual/Assisted radio buttons shown in a `.type-toggle` div after the name field. Fetches `window.api.getFireworksKeyStatus()` in `onMount`; Assisted radio is disabled when `fireworksConfigured === false`. `windowType` state (`'manual' | 'assisted'`, default `'manual'`) is passed as 5th arg to `createWindow`.
 - Branch selects: fetched via `window.api.listRemoteBranches(gitUrl)` in `onMount` for all projects. While loading, renders a `<span>` (not a select) so `waitFor` for the combobox only resolves after load completes. On success: enabled select with options, default branch pre-selected. On failure (with `console.warn`): disabled select with "(default)".
 - `branchSelections`, `defaultBranches`, `branchOptions`, and `branchLoading` are all `$state`; updates use spread (`{ ...prev, [projectId]: value }`). No DOM refs used. `onchange` handlers call `handleBranchChange(id, e)` which spread-updates `branchSelections`.
-- `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
-- Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (15 tests).
+- `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides, windowType)`.
+- Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (18 tests).
+
+### window-manager/src/main/assistedWindowService.ts
+Manages Worker thread lifecycle for assisted windows and wires IPC channels.
+- Exports: `sendToWindow`, `cancelWindow`, `resumeWindow`, `getWorkerCount`, `__resetWorkersForTests`.
+- Module-level `workers: Map<number, Worker>` keyed by windowId.
+- `sendToWindow(windowId, containerId, message, projectId, sendToRenderer)` — resolves Fireworks key, loads history from `assisted_messages`, spawns a new Worker (or reuses existing) at `assistedWindowWorker.js`. Worker message handler: `save-message` → DB insert; `stream-chunk` / `kimi-delta` / `ping-user` / `turn-complete` → forward to renderer via `sendToRenderer`. On `turn-complete` or worker error/exit, removes from map. `ping-user` also fires `Notification` when user is not watching via `isUserWatching`.
+- `cancelWindow(windowId)` — terminates worker and removes from map.
+- `resumeWindow(windowId, message)` — posts `{ type: 'resume', windowId, message }` to existing worker.
+- IPC handlers in `ipcHandlers.ts`: `assisted:send`, `assisted:cancel`, `assisted:resume`, `assisted:history`.
+- Preload channels: `assistedSend`, `assistedCancel`, `assistedResume`, `assistedHistory`, `on/offAssistedStreamChunk`, `on/offAssistedKimiDelta`, `on/offAssistedPingUser`, `on/offAssistedTurnComplete`.
+- Tests live in `window-manager/tests/main/assistedWindowService.test.ts` (6 tests). Uses `vi.hoisted()` + constructor function pattern for Worker mock.
 
 ### window-manager/src/main/assistedWindowWorker.ts
 Worker thread implementing the Kimi K2 orchestration loop for assisted windows.
