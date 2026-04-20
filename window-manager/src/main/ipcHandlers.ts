@@ -35,6 +35,7 @@ import {
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
+import { sendToWindow, cancelWindow, resumeWindow } from './assistedWindowService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -321,4 +322,33 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('phone-server:start', () => startPhoneServer())
   ipcMain.handle('phone-server:stop', () => stopPhoneServer())
   ipcMain.handle('phone-server:status', () => getPhoneServerStatus())
+
+  // Assisted window handlers
+  ipcMain.handle('assisted:send', async (event, windowId: number, message: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const row = getDb()
+      .prepare('SELECT container_id, project_id FROM windows WHERE id = ?')
+      .get(windowId) as { container_id: string; project_id: number | null } | undefined
+    if (!row) throw new Error(`Window ${windowId} not found`)
+
+    const sendToRenderer = (channel: string, ...args: unknown[]) => {
+      win?.webContents.send(channel, ...args)
+    }
+
+    await sendToWindow(windowId, row.container_id, message, row.project_id, sendToRenderer)
+  })
+
+  ipcMain.handle('assisted:cancel', (_, windowId: number) => {
+    cancelWindow(windowId)
+  })
+
+  ipcMain.handle('assisted:resume', (_, windowId: number, message: string) => {
+    resumeWindow(windowId, message)
+  })
+
+  ipcMain.handle('assisted:history', (_, windowId: number) => {
+    return getDb()
+      .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
+      .all(windowId)
+  })
 }
