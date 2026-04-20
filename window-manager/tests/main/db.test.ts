@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { initDb, getDb, closeDb } from '../../src/main/db'
+import os from 'os'
+import path from 'path'
+import fs from 'fs'
 
 describe('db', () => {
   beforeEach(() => {
@@ -376,6 +379,50 @@ describe('db migrations', () => {
     closeDb()
     fs.rmSync(tmpPath, { force: true })
   })
+
+  it('preserves window_type through makeWindowProjectIdNullable migration', async () => {
+    const Database = (await import('better-sqlite3')).default
+    const path = await import('path')
+    const os = await import('os')
+    const fs = await import('fs')
+
+    const tmpPath = path.join(os.tmpdir(), `cw-db-wtype-migrate-${Date.now()}.sqlite`)
+    const pre = new Database(tmpPath)
+    pre.exec(`CREATE TABLE project_groups (id INTEGER PRIMARY KEY, name TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`)
+    pre.exec(`
+      CREATE TABLE projects (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        git_url TEXT NOT NULL UNIQUE,
+        ports TEXT DEFAULT NULL,
+        group_id INTEGER DEFAULT NULL,
+        env_vars TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.exec(`
+      CREATE TABLE windows (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        project_id INTEGER NOT NULL REFERENCES projects(id),
+        container_id TEXT NOT NULL,
+        ports TEXT DEFAULT NULL,
+        network_id TEXT DEFAULT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        deleted_at DATETIME DEFAULT NULL
+      )
+    `)
+    pre.close()
+
+    initDb(tmpPath)
+    const migrated = getDb()
+    const cols = migrated.prepare('PRAGMA table_info(windows)').all() as { name: string }[]
+    expect(cols.map((c) => c.name)).toContain('window_type')
+
+    closeDb()
+    fs.rmSync(tmpPath, { force: true })
+  })
 })
 
 describe('db migrations — docker dependencies', () => {
@@ -392,6 +439,98 @@ describe('db migrations — docker dependencies', () => {
     getDb().prepare("INSERT INTO project_dependencies (project_id, image) VALUES (1, 'postgres')").run()
     const row = getDb().prepare('SELECT tag FROM project_dependencies WHERE id = 1').get() as { tag: string }
     expect(row.tag).toBe('latest')
+  })
+})
+
+describe('windows table — window_type', () => {
+  let tmpPath: string
+
+  beforeEach(() => {
+    tmpPath = path.join(os.tmpdir(), `test-db-wtype-${Date.now()}.sqlite`)
+    initDb(tmpPath)
+  })
+
+  afterEach(() => {
+    closeDb()
+    fs.unlinkSync(tmpPath)
+  })
+
+  it('has window_type column defaulting to manual', () => {
+    const db = getDb()
+    db.exec("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:x/y.git')")
+    const projId = (db.prepare('SELECT id FROM projects').get() as { id: number }).id
+    db.exec(`INSERT INTO windows (name, project_id, container_id) VALUES ('w', ${projId}, 'c1')`)
+    const row = db.prepare('SELECT window_type FROM windows WHERE container_id = ?').get('c1') as { window_type: string }
+    expect(row.window_type).toBe('manual')
+  })
+
+  it('accepts assisted as window_type', () => {
+    const db = getDb()
+    db.exec("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:x/y.git')")
+    const projId = (db.prepare('SELECT id FROM projects').get() as { id: number }).id
+    db.exec(`INSERT INTO windows (name, project_id, container_id, window_type) VALUES ('w', ${projId}, 'c2', 'assisted')`)
+    const row = db.prepare('SELECT window_type FROM windows WHERE container_id = ?').get('c2') as { window_type: string }
+    expect(row.window_type).toBe('assisted')
+  })
+})
+
+describe('projects table — kimi_system_prompt', () => {
+  let tmpPath: string
+
+  beforeEach(() => {
+    tmpPath = path.join(os.tmpdir(), `test-db-kimi-${Date.now()}.sqlite`)
+    initDb(tmpPath)
+  })
+
+  afterEach(() => {
+    closeDb()
+    fs.unlinkSync(tmpPath)
+  })
+
+  it('has kimi_system_prompt column defaulting to null', () => {
+    const db = getDb()
+    db.exec("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:x/y.git')")
+    const row = db.prepare('SELECT kimi_system_prompt FROM projects WHERE name = ?').get('p') as { kimi_system_prompt: string | null }
+    expect(row.kimi_system_prompt).toBeNull()
+  })
+})
+
+describe('assisted_messages table', () => {
+  let tmpPath: string
+
+  beforeEach(() => {
+    tmpPath = path.join(os.tmpdir(), `test-db-am-${Date.now()}.sqlite`)
+    initDb(tmpPath)
+  })
+
+  afterEach(() => {
+    closeDb()
+    fs.unlinkSync(tmpPath)
+  })
+
+  it('stores messages with role and content', () => {
+    const db = getDb()
+    db.exec("INSERT INTO projects (name, git_url) VALUES ('p', 'git@github.com:x/y.git')")
+    const projId = (db.prepare('SELECT id FROM projects').get() as { id: number }).id
+    db.exec(`INSERT INTO windows (name, project_id, container_id) VALUES ('w', ${projId}, 'c3')`)
+    const winId = (db.prepare('SELECT id FROM windows WHERE container_id = ?').get('c3') as { id: number }).id
+    db.exec(`INSERT INTO assisted_messages (window_id, role, content) VALUES (${winId}, 'user', 'hello')`)
+    const row = db.prepare('SELECT role, content FROM assisted_messages WHERE window_id = ?').get(winId) as { role: string; content: string }
+    expect(row.role).toBe('user')
+    expect(row.content).toBe('hello')
+  })
+
+  it('stores metadata JSON', () => {
+    const db = getDb()
+    db.exec("INSERT INTO projects (name, git_url) VALUES ('p2', 'git@github.com:x/z.git')")
+    const projId = (db.prepare("SELECT id FROM projects WHERE name='p2'").get() as { id: number }).id
+    db.exec(`INSERT INTO windows (name, project_id, container_id) VALUES ('w2', ${projId}, 'c4')`)
+    const winId = (db.prepare('SELECT id FROM windows WHERE container_id = ?').get('c4') as { id: number }).id
+    const meta = JSON.stringify({ session_id: 'abc123', complete: true })
+    db.prepare('INSERT INTO assisted_messages (window_id, role, content, metadata) VALUES (?, ?, ?, ?)')
+      .run(winId, 'tool_result', 'output', meta)
+    const row = db.prepare('SELECT metadata FROM assisted_messages WHERE window_id = ?').get(winId) as { metadata: string }
+    expect(JSON.parse(row.metadata).session_id).toBe('abc123')
   })
 })
 

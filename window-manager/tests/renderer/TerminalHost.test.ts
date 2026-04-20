@@ -109,6 +109,10 @@ vi.mock('../../src/renderer/src/components/ResizeHandle.svelte', () => ({
   default: vi.fn(() => ({}))
 }))
 
+vi.mock('../../src/renderer/src/components/AssistedPanel.svelte', () => ({
+  default: vi.fn(() => ({}))
+}))
+
 import TerminalHost from '../../src/renderer/src/components/TerminalHost.svelte'
 
 const mockWindow: WindowRecord = {
@@ -118,6 +122,7 @@ const mockWindow: WindowRecord = {
   container_id: 'container123abc',
   created_at: '2026-01-01T00:00:00Z',
   status: 'running',
+  window_type: 'manual',
   projects: []
 }
 
@@ -207,23 +212,17 @@ describe('TerminalHost', () => {
     vi.clearAllMocks()
   })
 
-  it('opens claude session on mount (default view is claude)', async () => {
+  it('does NOT open claude terminal session on mount (AssistedPanel handles claude)', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => {
-      expect(mockApi.openTerminal).toHaveBeenCalledWith(
-        'container123abc',
-        expect.any(Number),
-        expect.any(Number),
-        'host-test',
-        'claude'
-      )
-    })
-    expect(mockApi.openTerminal).toHaveBeenCalledTimes(1)
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
+    const calls = mockApi.openTerminal.mock.calls as unknown[][]
+    const claudeCalls = calls.filter((c) => c[4] === 'claude')
+    expect(claudeCalls).toHaveLength(0)
   })
 
   it('does NOT open terminal session on mount', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     const calls = mockApi.openTerminal.mock.calls as unknown[][]
     const terminalCalls = calls.filter((c) => c[4] === 'terminal')
     expect(terminalCalls).toHaveLength(0)
@@ -231,7 +230,7 @@ describe('TerminalHost', () => {
 
   it('opens terminal session when terminal panel becomes visible in store', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     mockApi.openTerminal.mockClear()
 
     mockPanelLayoutStore.update(layout => ({
@@ -249,7 +248,7 @@ describe('TerminalHost', () => {
 
   it('does not re-open terminal session on second visibility change', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     mockPanelLayoutStore.update(layout => ({
       panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
@@ -290,7 +289,7 @@ describe('TerminalHost', () => {
 
   it('focuses terminal on reinit after panel re-show without reopening backend', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     mockPanelLayoutStore.update(layout => ({
       panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
@@ -314,34 +313,24 @@ describe('TerminalHost', () => {
     expect(mockFocus).toHaveBeenCalled()
   })
 
-  it('disposes and reinitializes claude xterm when panel is hidden then re-shown (no backend reopen)', async () => {
+  it('always renders AssistedPanel for the claude panel regardless of window_type', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
-    mockDispose.mockClear()
-    mockApi.openTerminal.mockClear()
-    mockFocus.mockClear()
-
-    mockPanelLayoutStore.update(layout => ({
-      panels: layout.panels.map(p => p.id === 'claude' ? { ...p, visible: false, width: 0 } : p)
-    }))
-    mockPanelLayoutStore.update(layout => ({
-      panels: layout.panels.map(p => p.id === 'claude' ? { ...p, visible: true, width: 50 } : p)
-    }))
-
-    await new Promise(r => setTimeout(r, 10))
-    expect(mockDispose).toHaveBeenCalled()
-    expect(mockApi.openTerminal).not.toHaveBeenCalled()
-    expect(mockFocus).toHaveBeenCalled()
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
+    // No claude xterm init — no openTerminal call for claude
+    const claudeCalls = (mockApi.openTerminal.mock.calls as unknown[][]).filter(c => c[4] === 'claude')
+    expect(claudeCalls).toHaveLength(0)
+    // Claude panel DOM element exists (AssistedPanel mock renders)
+    expect(document.querySelector('[data-panel-id="claude"]')).toBeTruthy()
   })
 
-  it('routes onTerminalData to claude session when sessionType is claude', async () => {
+  it('ignores onTerminalData for claude session type (AssistedPanel handles its own data)', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     const callback = mockApi.onTerminalData.mock.calls[0][0] as (c: string, st: string, d: string) => void
     callback('container123abc', 'claude', 'hello from claude')
 
-    expect(mockWrite).toHaveBeenCalledWith('hello from claude')
+    expect(mockWrite).not.toHaveBeenCalled()
   })
 
   it('routes onTerminalData to terminal session when sessionType is terminal', async () => {
@@ -358,6 +347,7 @@ describe('TerminalHost', () => {
     })
     mockWrite.mockClear()
 
+
     const callback = mockApi.onTerminalData.mock.calls[0][0] as (c: string, st: string, d: string) => void
     callback('container123abc', 'terminal', 'hello from terminal')
 
@@ -369,21 +359,24 @@ describe('TerminalHost', () => {
     await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     const callback = mockApi.onTerminalData.mock.calls[0][0] as (c: string, st: string, d: string) => void
-    callback('other-container', 'claude', 'ignored')
+    callback('other-container', 'terminal', 'ignored')
 
     expect(mockWrite).not.toHaveBeenCalled()
   })
 
-  it('closes claude session on unmount', async () => {
+  it('does not close claude terminal on unmount (no claude terminal exists)', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     unmount()
-    expect(mockApi.closeTerminal).toHaveBeenCalledWith('container123abc', 'claude')
+    const claudeCloseCalls = (mockApi.closeTerminal.mock.calls as unknown[][]).filter(
+      (c) => c[1] === 'claude'
+    )
+    expect(claudeCloseCalls).toHaveLength(0)
   })
 
   it('closes terminal session on unmount if it was opened', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     mockPanelLayoutStore.update(layout => ({
       panels: layout.panels.map(p => p.id === 'terminal' ? { ...p, visible: true, width: 33 } : p)
     }))
@@ -397,7 +390,7 @@ describe('TerminalHost', () => {
 
   it('does not close terminal session on unmount if it was never opened', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     unmount()
     const terminalCloseCalls = (mockApi.closeTerminal.mock.calls as unknown[][]).filter(
       (c) => c[1] === 'terminal'
@@ -405,27 +398,21 @@ describe('TerminalHost', () => {
     expect(terminalCloseCalls).toHaveLength(0)
   })
 
-  it('loads fit and web-links addons for claude terminal on mount', async () => {
+  it('does not load xterm addons on mount (terminal panel is lazy)', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => {
-      expect(mockLoadAddon).toHaveBeenCalledTimes(2)
-    })
-    const loaded = mockLoadAddon.mock.calls.map((call) => call[0])
-    const hasFit = loaded.some((a) => typeof (a as { fit?: unknown }).fit === 'function')
-    const hasWebLinks = loaded.some((a) => (a as { __kind?: string }).__kind === 'web-links')
-    expect(hasFit).toBe(true)
-    expect(hasWebLinks).toBe(true)
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
+    expect(mockLoadAddon).not.toHaveBeenCalled()
   })
 
   it('renders claude panel by default', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     expect(document.querySelector('[data-panel-id="claude"]')).toBeTruthy()
   })
 
   it('does not render terminal panel when hidden in store', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     expect(document.querySelector('[data-panel-id="terminal"]')).toBeNull()
   })
 
@@ -438,11 +425,18 @@ describe('TerminalHost', () => {
       ]
     })
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     expect(document.querySelector('[data-panel-id="terminal"]')).toBeTruthy()
   })
 
-  it('removes from waitingWindows when user types in claude terminal', async () => {
+  it('removes from waitingWindows when user types in terminal', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true, width: 50 },
+        { id: 'terminal', visible: true, width: 25 },
+        { id: 'editor',   visible: true, width: 25 }
+      ]
+    })
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockOnData).toHaveBeenCalled())
     const dataHandler = mockOnData.mock.calls[0][0] as (s: string) => void
@@ -452,7 +446,7 @@ describe('TerminalHost', () => {
 
   it('removes from waitingWindows on unmount', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     unmount()
     expect(mockWaitingRemove).toHaveBeenCalledWith('container123abc')
   })
@@ -464,7 +458,7 @@ describe('TerminalHost', () => {
 
   it('calls conversationSummary.set when terminal:summary fires for this container', async () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.onTerminalSummary).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     const cb = mockApi.onTerminalSummary.mock.calls[0][0] as (d: {
       containerId: string
       title: string
@@ -491,7 +485,7 @@ describe('TerminalHost', () => {
 
   it('calls offTerminalSummary and removes summary on unmount', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     unmount()
     expect(mockApi.offTerminalSummary).toHaveBeenCalled()
     expect(mockSummaryRemove).toHaveBeenCalledWith('container123abc')
@@ -499,25 +493,39 @@ describe('TerminalHost', () => {
 
   it('calls offTerminalData on unmount', async () => {
     const { unmount } = render(TerminalHost, { win: mockWindow, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
     unmount()
     expect(mockApi.offTerminalData).toHaveBeenCalled()
   })
 
-  it('forwards claude terminal onData to sendTerminalInput with claude sessionType', async () => {
+  it('forwards terminal onData to sendTerminalInput with terminal sessionType', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true, width: 50 },
+        { id: 'terminal', visible: true, width: 25 },
+        { id: 'editor',   visible: true, width: 25 }
+      ]
+    })
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockOnData).toHaveBeenCalled())
     const dataHandler = mockOnData.mock.calls[0][0] as (s: string) => void
     dataHandler('hello')
-    expect(mockApi.sendTerminalInput).toHaveBeenCalledWith('container123abc', 'hello', 'claude')
+    expect(mockApi.sendTerminalInput).toHaveBeenCalledWith('container123abc', 'hello', 'terminal')
   })
 
-  it('forwards claude terminal onResize to resizeTerminal with claude sessionType', async () => {
+  it('forwards terminal onResize to resizeTerminal with terminal sessionType', async () => {
+    mockPanelLayoutStore.set({
+      panels: [
+        { id: 'claude',   visible: true, width: 50 },
+        { id: 'terminal', visible: true, width: 25 },
+        { id: 'editor',   visible: true, width: 25 }
+      ]
+    })
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockOnResize).toHaveBeenCalled())
     const resizeHandler = mockOnResize.mock.calls[0][0] as (size: { cols: number; rows: number }) => void
     resizeHandler({ cols: 100, rows: 30 })
-    expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 100, 30, 'claude')
+    expect(mockApi.resizeTerminal).toHaveBeenCalledWith('container123abc', 100, 30, 'terminal')
   })
 
   it('enables commit button when getGitStatus returns isDirty: true', async () => {
@@ -533,7 +541,9 @@ describe('TerminalHost', () => {
     mockApi.getGitStatus.mockResolvedValue({ isDirty: false, added: 0, deleted: 0 })
     render(TerminalHost, { win: mockWindow, project: mockProject })
     await vi.waitFor(() => expect(mockApi.getGitStatus).toHaveBeenCalled())
-    expect(screen.getByRole('button', { name: /^commit$/i })).toBeDisabled()
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^commit$/i })).toBeDisabled()
+    })
   })
 
   it('keeps commit button enabled when getGitStatus has not resolved yet (unknown state)', async () => {
@@ -541,6 +551,13 @@ describe('TerminalHost', () => {
     mockApi.getGitStatus.mockReturnValue(new Promise(() => {})) // never resolves
     render(TerminalHost, { win: mockWindow, project: mockProject })
     expect(screen.getByRole('button', { name: /^commit$/i })).not.toBeDisabled()
+  })
+
+  it('renders AssistedPanel for claude panel (no .terminal-inner in claude panel)', async () => {
+    render(TerminalHost, { win: mockWindow, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
+    // AssistedPanel mock renders — no .terminal-inner in claude panel (terminal panel is hidden)
+    expect(document.querySelector('.terminal-inner')).toBeNull()
   })
 })
 
@@ -552,6 +569,7 @@ describe('multi-project TerminalHost', () => {
     container_id: 'container-multi',
     created_at: '2026-01-01T00:00:00Z',
     status: 'running',
+    window_type: 'manual',
     projects: [
       { id: 1, window_id: 2, project_id: 10, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
       { id: 2, window_id: 2, project_id: 11, clone_path: '/workspace/repo-b', project_name: 'Repo B' }
@@ -614,7 +632,7 @@ describe('multi-project TerminalHost', () => {
 
   it('runPushProject calls window.api.pushProject with correct args', async () => {
     render(TerminalHost, { win: multiWin, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     const pushBtns = screen.getAllByRole('button', { name: /^push$/i })
     // First per-project push button corresponds to project_id 10 (Repo A row)
@@ -628,7 +646,7 @@ describe('multi-project TerminalHost', () => {
 
   it('onCommitProject sets commitProjectId and shows commit modal', async () => {
     render(TerminalHost, { win: multiWin, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     const commitBtns = screen.getAllByRole('button', { name: /^commit$/i })
     // Last two are per-project rows; click the first per-project commit
@@ -641,7 +659,7 @@ describe('multi-project TerminalHost', () => {
 
   it('CommitModal uses commitProject API when commitProjectId is set', async () => {
     render(TerminalHost, { win: multiWin, project: mockProject })
-    await vi.waitFor(() => expect(mockApi.openTerminal).toHaveBeenCalled())
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
 
     const commitBtns = screen.getAllByRole('button', { name: /^commit$/i })
     await fireEvent.click(commitBtns[commitBtns.length - 2])

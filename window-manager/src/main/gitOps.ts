@@ -59,6 +59,57 @@ export async function readContainerFile(
   return result.stdout
 }
 
+function posixDirname(p: string): string {
+  const idx = p.lastIndexOf('/')
+  if (idx <= 0) return '/'
+  return p.substring(0, idx)
+}
+
+export async function createFileInContainer(
+  container: Container,
+  filePath: string
+): Promise<void> {
+  const dir = posixDirname(filePath)
+  const mkdirResult = await execInContainer(container, ['mkdir', '-p', dir])
+  if (!mkdirResult.ok) {
+    throw new Error(`createFileInContainer: mkdir failed (exit ${mkdirResult.code}): ${dir}`)
+  }
+  await writeFileInContainer(container, filePath, '')
+}
+
+export async function createDirInContainer(
+  container: Container,
+  dirPath: string
+): Promise<void> {
+  const result = await execInContainer(container, ['mkdir', '-p', dirPath])
+  if (!result.ok) {
+    throw new Error(`createDirInContainer failed (exit ${result.code}): ${dirPath}`)
+  }
+}
+
+export async function deleteInContainer(
+  container: Container,
+  itemPath: string
+): Promise<void> {
+  const result = await execInContainer(container, ['rm', '-rf', itemPath])
+  if (!result.ok) {
+    throw new Error(`deleteInContainer failed (exit ${result.code}): ${itemPath}`)
+  }
+}
+
+export async function renameInContainer(
+  container: Container,
+  oldPath: string,
+  newPath: string
+): Promise<void> {
+  const dir = posixDirname(newPath)
+  await execInContainer(container, ['mkdir', '-p', dir])
+  const result = await execInContainer(container, ['mv', oldPath, newPath])
+  if (!result.ok) {
+    throw new Error(`renameInContainer failed (exit ${result.code}): ${oldPath} → ${newPath}`)
+  }
+}
+
 export async function writeFileInContainer(
   container: Container,
   filePath: string,

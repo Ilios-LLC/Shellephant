@@ -1,4 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
+import type { TimelineEvent } from '../shared/timelineEvent'
 
 contextBridge.exposeInMainWorld('api', {
   // Project API
@@ -13,14 +14,17 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('project:update-env-vars', id, envVars),
   updateProjectPorts: (id: number, ports: { container: number; host?: number }[]) =>
     ipcRenderer.invoke('project:update-ports', id, ports),
+  updateProjectDefaultNetwork: (id: number, network: string | null) =>
+    ipcRenderer.invoke('project:update-default-network', id, network),
+  listDockerNetworks: () => ipcRenderer.invoke('docker:list-bridge-networks'),
 
   // Group API
   createGroup: (name: string) => ipcRenderer.invoke('group:create', name),
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}) =>
-    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, networkName: string = '') =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, networkName),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -51,6 +55,17 @@ contextBridge.exposeInMainWorld('api', {
   getClaudeTokenStatus: () => ipcRenderer.invoke('settings:get-claude-token-status'),
   setClaudeToken: (token: string) => ipcRenderer.invoke('settings:set-claude-token', token),
   clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
+
+  // Fireworks API key
+  getFireworksKeyStatus: () => ipcRenderer.invoke('settings:get-fireworks-key-status'),
+  setFireworksKey: (key: string) => ipcRenderer.invoke('settings:set-fireworks-key', key),
+  clearFireworksKey: () => ipcRenderer.invoke('settings:clear-fireworks-key'),
+
+  // Kimi system prompt
+  getKimiSystemPrompt: () => ipcRenderer.invoke('settings:get-kimi-system-prompt'),
+  setKimiSystemPrompt: (prompt: string) => ipcRenderer.invoke('settings:set-kimi-system-prompt', prompt),
+  setProjectKimiSystemPrompt: (projectId: number, prompt: string | null) =>
+    ipcRenderer.invoke('project:set-kimi-system-prompt', projectId, prompt),
 
   // Terminal API
   openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType: string = 'terminal') =>
@@ -91,6 +106,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:read-file', containerId, path),
   writeContainerFile: (containerId: string, path: string, content: string) =>
     ipcRenderer.invoke('fs:write-file', containerId, path, content),
+  createContainerFile: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:create-file', containerId, path),
+  createContainerDir: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:create-dir', containerId, path),
+  deleteContainerPath: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:delete', containerId, path),
+  renameContainerPath: (containerId: string, oldPath: string, newPath: string) =>
+    ipcRenderer.invoke('fs:rename', containerId, oldPath, newPath),
   execInContainer: (containerId: string, cmd: string[]) =>
     ipcRenderer.invoke('fs:exec', containerId, cmd),
 
@@ -129,5 +152,46 @@ contextBridge.exposeInMainWorld('api', {
   stopPhoneServer: (): Promise<void> =>
     ipcRenderer.invoke('phone-server:stop'),
   getPhoneServerStatus: (): Promise<{ active: boolean; url?: string }> =>
-    ipcRenderer.invoke('phone-server:status')
+    ipcRenderer.invoke('phone-server:status'),
+
+  // Assisted window
+  assistedSend: (windowId: number, message: string) =>
+    ipcRenderer.invoke('assisted:send', windowId, message),
+  assistedCancel: (windowId: number) => ipcRenderer.invoke('assisted:cancel', windowId),
+  assistedHistory: (windowId: number) => ipcRenderer.invoke('assisted:history', windowId),
+  onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) =>
+    ipcRenderer.on('assisted:kimi-delta', (_, windowId, delta) => callback(windowId, delta)),
+  offAssistedKimiDelta: () => ipcRenderer.removeAllListeners('assisted:kimi-delta'),
+  onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) =>
+    ipcRenderer.on('assisted:turn-complete', (_, windowId, stats, error) => callback(windowId, stats, error)),
+  offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete'),
+  onShellephantToClaude: (callback: (windowId: number, message: string) => void) =>
+    ipcRenderer.on('shellephant:to-claude', (_, windowId, message) => callback(windowId, message)),
+  offShellephantToClaude: () => ipcRenderer.removeAllListeners('shellephant:to-claude'),
+
+  // Direct Claude window
+  claudeSend: (windowId: number, message: string, permissionMode?: 'bypassPermissions' | 'plan') =>
+    ipcRenderer.invoke('claude:send', windowId, message, permissionMode),
+  claudeCancel: (windowId: number) => ipcRenderer.invoke('claude:cancel', windowId),
+  onClaudeDelta: (callback: (windowId: number, chunk: string) => void) =>
+    ipcRenderer.on('claude:delta', (_, windowId, chunk) => callback(windowId, chunk)),
+  offClaudeDelta: () => ipcRenderer.removeAllListeners('claude:delta'),
+  onClaudeAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) =>
+    ipcRenderer.on('claude:action', (_, windowId, action) => callback(windowId, action)),
+  offClaudeAction: () => ipcRenderer.removeAllListeners('claude:action'),
+  onClaudeTurnComplete: (callback: (windowId: number) => void) =>
+    ipcRenderer.on('claude:turn-complete', (_, windowId) => callback(windowId)),
+  offClaudeTurnComplete: () => ipcRenderer.removeAllListeners('claude:turn-complete'),
+  onClaudeError: (callback: (windowId: number, error: string) => void) =>
+    ipcRenderer.on('claude:error', (_, windowId, error) => callback(windowId, error)),
+  offClaudeError: () => ipcRenderer.removeAllListeners('claude:error'),
+  onClaudeToShellephantDelta: (callback: (windowId: number, chunk: string) => void) =>
+    ipcRenderer.on('claude-to-shellephant:delta', (_, windowId, chunk) => callback(windowId, chunk)),
+  offClaudeToShellephantDelta: () => ipcRenderer.removeAllListeners('claude-to-shellephant:delta'),
+  onClaudeToShellephantAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) =>
+    ipcRenderer.on('claude-to-shellephant:action', (_, windowId, action) => callback(windowId, action)),
+  offClaudeToShellephantAction: () => ipcRenderer.removeAllListeners('claude-to-shellephant:action'),
+  onClaudeToShellephantTurnComplete: (callback: (windowId: number) => void) =>
+    ipcRenderer.on('claude-to-shellephant:turn-complete', (_, windowId) => callback(windowId)),
+  offClaudeToShellephantTurnComplete: () => ipcRenderer.removeAllListeners('claude-to-shellephant:turn-complete')
 })

@@ -28,6 +28,7 @@ function baseProps(overrides = {}) {
     view: 'default' as const,
     patStatus: configured,
     claudeStatus: configured,
+    fireworksStatus: unconfigured,
     settingsRequiredFor: null,
     onWindowSelect: vi.fn(),
     onRequestNewProject: vi.fn(),
@@ -38,6 +39,7 @@ function baseProps(overrides = {}) {
     onWindowDeleted: vi.fn(),
     onPatStatusChange: vi.fn(),
     onClaudeStatusChange: vi.fn(),
+    onFireworksStatusChange: vi.fn(),
     onWizardCancel: vi.fn(),
     onNavigateToWindow: vi.fn(),
     ...overrides
@@ -70,7 +72,7 @@ describe('MainPane', () => {
   })
 
   it('renders NewWindowWizard when view=new-window and project present', () => {
-    vi.stubGlobal('api', { createWindow: vi.fn(), listDependencies: vi.fn().mockResolvedValue([]), onWindowCreateProgress: vi.fn(), offWindowCreateProgress: vi.fn() })
+    vi.stubGlobal('api', { createWindow: vi.fn(), listDependencies: vi.fn().mockResolvedValue([]), onWindowCreateProgress: vi.fn(), offWindowCreateProgress: vi.fn(), getFireworksKeyStatus: vi.fn().mockResolvedValue({ configured: false, hint: null }), listRemoteBranches: vi.fn().mockResolvedValue({ defaultBranch: 'main', branches: ['main'] }) })
     render(MainPane, baseProps({ project, view: 'new-window' }))
     expect(screen.getByRole('heading', { name: /new window/i })).toBeDefined()
     expect(screen.getByPlaceholderText(/dev-window/i)).toBeDefined()
@@ -81,7 +83,11 @@ describe('MainPane', () => {
       setGitHubPat: vi.fn(),
       clearGitHubPat: vi.fn(),
       setClaudeToken: vi.fn(),
-      clearClaudeToken: vi.fn()
+      clearClaudeToken: vi.fn(),
+      setFireworksKey: vi.fn(),
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,
@@ -97,7 +103,11 @@ describe('MainPane', () => {
       setGitHubPat: vi.fn(),
       clearGitHubPat: vi.fn(),
       setClaudeToken: vi.fn(),
-      clearClaudeToken: vi.fn()
+      clearClaudeToken: vi.fn(),
+      setFireworksKey: vi.fn(),
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,
@@ -116,7 +126,11 @@ describe('MainPane', () => {
       setGitHubPat: vi.fn(),
       clearGitHubPat: vi.fn(),
       setClaudeToken: vi.fn(),
-      clearClaudeToken: vi.fn()
+      clearClaudeToken: vi.fn(),
+      setFireworksKey: vi.fn(),
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,

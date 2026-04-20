@@ -28,6 +28,31 @@ export function getSession(containerId: string, sessionType: SessionType = 'term
   return sessions.get(sessionKey(containerId, sessionType))
 }
 
+export function spawnClaudePty(
+  containerId: string,
+  cols = 80,
+  rows = 24,
+  workDir?: string,
+  addDirs: string[] = []
+): IPty {
+  const args = ['exec', '-i', '-t', '-e', 'TERM=xterm-256color', '-e', 'LANG=C.UTF-8', '-e', 'LC_ALL=C.UTF-8']
+  const claudeToken = getClaudeToken()
+  if (claudeToken) args.push('-e', `CLAUDE_CODE_OAUTH_TOKEN=${claudeToken}`)
+  const addDirArgs = addDirs.map(d => `--add-dir ${d}`).join(' ')
+  const claudeCmd = `claude --dangerously-skip-permissions${addDirArgs ? ' ' + addDirArgs : ''}`
+  const tmuxCmd = workDir
+    ? `exec tmux -u new-session -A -s cw-claude -c '${workDir}' 'bash -c "${claudeCmd}; exec bash"'`
+    : `exec tmux -u new-session -A -s cw-claude 'bash -c "${claudeCmd}; exec bash"'`
+  args.push(containerId, 'sh', '-c', tmuxCmd)
+  return pty.spawn('docker', args, {
+    name: 'xterm-256color',
+    cols: Math.max(1, Math.floor(cols)),
+    rows: Math.max(1, Math.floor(rows)),
+    cwd: process.env.HOME,
+    env: process.env as { [key: string]: string }
+  })
+}
+
 export function openTerminal(
   containerId: string,
   win: BrowserWindow,

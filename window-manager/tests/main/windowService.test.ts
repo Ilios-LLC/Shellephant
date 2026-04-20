@@ -34,9 +34,10 @@ vi.mock('dockerode', () => ({
   })
 }))
 
-const mockExecFile = vi.fn((_cmd: string, _args: string[], _opts: object, cb: Function) =>
-  cb(null, '', '')
-)
+const mockExecFile = vi.fn((..._args: unknown[]) => {
+  const cb = _args.find((a) => typeof a === 'function') as Function | undefined
+  if (cb) cb(null, '', '')
+})
 vi.mock('child_process', () => ({
   execFile: (...args: any[]) => mockExecFile(...(args as [string, string[], object, Function]))
 }))
@@ -80,9 +81,10 @@ describe('windowService', () => {
     vi.clearAllMocks()
     mockGetGitHubPat.mockReturnValue('test-token')
     mockGetClaudeToken.mockReturnValue('claude-oauth-token')
-    mockExecFile.mockImplementation((_cmd: string, _args: string[], _opts: object, cb: Function) =>
-      cb(null, '', '')
-    )
+    mockExecFile.mockImplementation((..._args: unknown[]) => {
+      const cb = _args.find((a) => typeof a === 'function') as Function | undefined
+      if (cb) cb(null, '', '')
+    })
     mockStart.mockResolvedValue(undefined)
     mockStop.mockResolvedValue(undefined)
     mockRemove.mockResolvedValue(undefined)
@@ -508,6 +510,56 @@ describe('windowService', () => {
       const projectId = seedProject('git@github.com:org/my-project.git')
       const result = await createWindow('win', [projectId])
       expect(result.projects[0].clone_path).toBe('/workspace/my-project')
+    })
+
+    it('createWindow stores manual type by default', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      const win = await createWindow('type-default', projectId)
+      expect(win.window_type).toBe('manual')
+      const row = getDb()
+        .prepare('SELECT window_type FROM windows WHERE id = ?')
+        .get(win.id) as { window_type: string }
+      expect(row.window_type).toBe('manual')
+    })
+
+    it('createWindow stores assisted type when specified', async () => {
+      const projectId = seedProject('git@github.com:org/repo2.git')
+      const win = await createWindow('type-assisted', projectId, false, {}, () => {}, 'assisted')
+      expect(win.window_type).toBe('assisted')
+      const row = getDb()
+        .prepare('SELECT window_type FROM windows WHERE id = ?')
+        .get(win.id) as { window_type: string }
+      expect(row.window_type).toBe('assisted')
+    })
+
+    it('listWindows returns window_type field on each record', async () => {
+      const projectId = seedProject('git@github.com:org/repo3.git')
+      await createWindow('list-type-win', projectId)
+      const wins = listWindows()
+      expect(wins[0].window_type).toBe('manual')
+    })
+
+    it('docker cps cw-claude-sdk.js into the container for assisted windows', async () => {
+      const projectId = seedProject('git@github.com:org/repo-inject.git')
+      const win = await createWindow('inject-asst', projectId, false, {}, () => {}, 'assisted')
+      const cp = mockExecFile.mock.calls.find(
+        (c) =>
+          c[0] === 'docker' &&
+          Array.isArray(c[1]) &&
+          c[1][0] === 'cp' &&
+          c[1][2] === `${win.container_id}:/usr/local/bin/cw-claude-sdk.js`
+      )
+      expect(cp).toBeDefined()
+      expect(cp![1][1]).toMatch(/files\/cw-claude-sdk\.js$/)
+    })
+
+    it('does not inject the wrapper for manual windows', async () => {
+      const projectId = seedProject('git@github.com:org/repo-no-inject.git')
+      await createWindow('no-inject-manual', projectId)
+      const cp = mockExecFile.mock.calls.find(
+        (c) => c[0] === 'docker' && Array.isArray(c[1]) && c[1][0] === 'cp'
+      )
+      expect(cp).toBeUndefined()
     })
   })
 

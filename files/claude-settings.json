@@ -6,6 +6,10 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/node/statusline-command.sh"
+  },
   "enabledPlugins": {
     "caveman@caveman": true,
     "superpowers@superpowers-marketplace": true
@@ -30,7 +34,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "touch /tmp/claude-waiting 2>/dev/null; exit 0"
+            "command": "[ \"${CW_SDK_RUN:-0}\" = \"1\" ] && exit 0; touch /tmp/claude-waiting 2>/dev/null; exit 0"
           }
         ]
       },
@@ -38,7 +42,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /usr/local/bin/claude-summarize.sh",
+            "command": "[ \"${CW_SDK_RUN:-0}\" = \"1\" ] && exit 0; bash /usr/local/bin/claude-summarize.sh",
             "async": true
           }
         ]

@@ -1,7 +1,8 @@
 <!-- src/renderer/src/components/ProjectView.svelte -->
 <script lang="ts">
-  import { onDestroy } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
   import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
+  import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../types'
   import DependenciesSection from './DependenciesSection.svelte'
 
   interface Props {
@@ -92,7 +93,61 @@
     if (winDeleteTimeout) clearTimeout(winDeleteTimeout)
   })
 
-  let activeTab = $state<'windows' | 'deps'>('windows')
+  let activeTab = $state<'windows' | 'deps' | 'kimi'>('windows')
+
+  let kimiPromptInput = $state('')
+  let kimiBusy = $state(false)
+  let kimiError = $state('')
+  let kimiSaved = $state(false)
+  let inheritedPrompt = $state(DEFAULT_KIMI_SYSTEM_PROMPT)
+  let inheritedSource = $state<'global' | 'default'>('default')
+
+  // Initialize from the incoming project and re-sync when the parent hands us
+  // a refreshed record (e.g. after a group change or another save elsewhere).
+  $effect(() => {
+    kimiPromptInput = project.kimi_system_prompt ?? ''
+    kimiSaved = false
+  })
+
+  // Resolve what "no project override" would fall back to, so the textarea
+  // placeholder shows the prompt the assistant would actually use.
+  onMount(async () => {
+    try {
+      const globalOverride = await window.api.getKimiSystemPrompt()
+      if (globalOverride && globalOverride.trim()) {
+        inheritedPrompt = globalOverride
+        inheritedSource = 'global'
+      } else {
+        inheritedPrompt = DEFAULT_KIMI_SYSTEM_PROMPT
+        inheritedSource = 'default'
+      }
+    } catch {
+      // Leave the default in place if the fetch fails.
+    }
+  })
+
+  async function saveProjectKimiPrompt(): Promise<void> {
+    if (kimiBusy) return
+    kimiBusy = true
+    kimiError = ''
+    kimiSaved = false
+    try {
+      const value = kimiPromptInput.trim() ? kimiPromptInput : null
+      await window.api.setProjectKimiSystemPrompt(project.id, value)
+      const refreshed = await window.api.getProject(project.id)
+      if (refreshed) onProjectUpdated(refreshed)
+      kimiSaved = true
+    } catch (err) {
+      kimiError = err instanceof Error ? err.message : String(err)
+    } finally {
+      kimiBusy = false
+    }
+  }
+
+  async function clearProjectKimiPrompt(): Promise<void> {
+    kimiPromptInput = ''
+    await saveProjectKimiPrompt()
+  }
 </script>
 
 <div class="project-view">
@@ -137,6 +192,12 @@
       class:active={activeTab === 'deps'}
       onclick={() => { activeTab = 'deps' }}
     >Dependencies</button>
+    <button
+      type="button"
+      class="tab-btn"
+      class:active={activeTab === 'kimi'}
+      onclick={() => { activeTab = 'kimi' }}
+    >Shellephant Prompt</button>
   </div>
 
   {#if activeTab === 'windows'}
@@ -194,8 +255,48 @@
       </div>
     {/if}
   </section>
-  {:else}
+  {:else if activeTab === 'deps'}
   <DependenciesSection projectId={project.id} />
+  {:else}
+  <section class="kimi-section">
+    <div class="section-header">
+      <h3 class="section-title">Shellephant System Prompt (per-project)</h3>
+    </div>
+    <p class="kimi-help">
+      Overrides the global Shellephant system prompt for windows attached to this project.
+      Leave blank to fall back to the global override (Settings) or the built-in default.
+    </p>
+    <div class="kimi-status">
+      {#if kimiPromptInput.trim()}
+        <span class="status configured">Custom project prompt active</span>
+      {:else if inheritedSource === 'global'}
+        <span class="status unconfigured">No project override — inheriting global override (shown below)</span>
+      {:else}
+        <span class="status unconfigured">No project override — inheriting built-in default (shown below)</span>
+      {/if}
+    </div>
+    <textarea
+      class="kimi-textarea"
+      rows="12"
+      placeholder={inheritedPrompt}
+      bind:value={kimiPromptInput}
+      disabled={kimiBusy}
+      oninput={() => { kimiSaved = false }}
+    ></textarea>
+    <div class="kimi-actions">
+      {#if project.kimi_system_prompt}
+        <button type="button" class="kimi-clear" onclick={clearProjectKimiPrompt} disabled={kimiBusy}>
+          {kimiBusy ? '…' : 'Clear'}
+        </button>
+      {/if}
+      <button type="button" class="kimi-submit" onclick={saveProjectKimiPrompt} disabled={kimiBusy}>
+        {kimiBusy ? 'Saving…' : kimiSaved ? 'Saved ✓' : 'Save Prompt'}
+      </button>
+    </div>
+    {#if kimiError}
+      <p class="kimi-error">{kimiError}</p>
+    {/if}
+  </section>
   {/if}
 </div>
 
@@ -288,8 +389,94 @@
     color: white;
   }
 
-  .windows-section {
+  .windows-section,
+  .kimi-section {
     padding: 1rem 1.25rem;
+  }
+
+  .kimi-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+  }
+
+  .kimi-help {
+    font-size: 0.78rem;
+    color: var(--fg-2);
+    margin: 0;
+    line-height: 1.5;
+  }
+
+  .kimi-status .status.configured { color: var(--ok); font-size: 0.78rem; }
+  .kimi-status .status.unconfigured { color: var(--fg-2); font-size: 0.78rem; }
+
+  .kimi-textarea {
+    width: 100%;
+    min-height: 10em;
+    padding: 0.6rem 0.75rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-0);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    resize: vertical;
+    outline: none;
+  }
+
+  .kimi-textarea:focus {
+    border-color: var(--accent);
+  }
+
+  .kimi-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.4rem;
+  }
+
+  .kimi-submit,
+  .kimi-clear {
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    padding: 0.4rem 0.85rem;
+    border-radius: 4px;
+    border: 1px solid;
+    cursor: pointer;
+  }
+
+  .kimi-submit {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+
+  .kimi-submit:hover:not(:disabled) {
+    background: var(--accent-hi);
+    border-color: var(--accent-hi);
+  }
+
+  .kimi-clear {
+    background: transparent;
+    border-color: var(--danger);
+    color: var(--danger);
+  }
+
+  .kimi-clear:hover:not(:disabled) {
+    background: var(--danger);
+    color: white;
+  }
+
+  .kimi-submit:disabled,
+  .kimi-clear:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .kimi-error {
+    font-size: 0.78rem;
+    color: var(--danger);
+    margin: 0;
   }
 
   .section-header {

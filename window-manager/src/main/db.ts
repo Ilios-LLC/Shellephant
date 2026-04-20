@@ -28,8 +28,14 @@ function runColumnMigrations(db: Database.Database): void {
   if (!col(db, 'windows').includes('network_id')) {
     db.exec('ALTER TABLE windows ADD COLUMN network_id TEXT DEFAULT NULL')
   }
+  if (!col(db, 'projects').includes('default_network')) {
+    db.exec('ALTER TABLE projects ADD COLUMN default_network TEXT DEFAULT NULL')
+  }
   if (!col(db, 'windows').includes('window_type')) {
     db.exec("ALTER TABLE windows ADD COLUMN window_type TEXT NOT NULL DEFAULT 'manual'")
+  }
+  if (!col(db, 'projects').includes('kimi_system_prompt')) {
+    db.exec('ALTER TABLE projects ADD COLUMN kimi_system_prompt TEXT DEFAULT NULL')
   }
 }
 
@@ -50,11 +56,14 @@ function makeWindowProjectIdNullable(db: Database.Database): void {
         container_id TEXT NOT NULL,
         ports        TEXT DEFAULT NULL,
         network_id   TEXT DEFAULT NULL,
+        window_type  TEXT NOT NULL DEFAULT 'manual',
         created_at   DATETIME DEFAULT CURRENT_TIMESTAMP,
         deleted_at   DATETIME DEFAULT NULL
       );
       INSERT INTO windows_new
-        SELECT id, name, project_id, container_id, ports, network_id, created_at, deleted_at
+        SELECT id, name, project_id, container_id, ports, network_id,
+               COALESCE(window_type, 'manual'),
+               created_at, deleted_at
         FROM windows;
       DROP TABLE windows;
       ALTER TABLE windows_new RENAME TO windows;
@@ -158,6 +167,16 @@ export function initDb(dbPath: string): void {
       project_id INTEGER NOT NULL REFERENCES projects(id),
       clone_path TEXT NOT NULL,
       UNIQUE(window_id, project_id)
+    )
+  `)
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS assisted_messages (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      window_id  INTEGER NOT NULL REFERENCES windows(id),
+      role       TEXT NOT NULL,
+      content    TEXT NOT NULL,
+      metadata   TEXT DEFAULT NULL,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
   runColumnMigrations(_db)

@@ -1,23 +1,29 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { TokenStatus } from '../types'
+  import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../types'
 
   export type SettingsRequirement = null | 'project' | 'window' | 'multi-window'
 
   interface Props {
     patStatus: TokenStatus
     claudeStatus: TokenStatus
+    fireworksStatus: TokenStatus
     requiredFor?: SettingsRequirement
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
+    onFireworksStatusChange: (status: TokenStatus) => void
     onCancel: () => void
   }
 
   let {
     patStatus,
     claudeStatus,
+    fireworksStatus,
     requiredFor = null,
     onPatStatusChange,
     onClaudeStatusChange,
+    onFireworksStatusChange,
     onCancel
   }: Props = $props()
 
@@ -28,6 +34,52 @@
   let claudeInput = $state('')
   let claudeBusy = $state(false)
   let claudeError = $state('')
+
+  let fireworksInput = $state('')
+  let fireworksBusy = $state(false)
+  let fireworksError = $state('')
+
+  let phoneActive = $state(false)
+  let phoneUrl = $state<string | null>(null)
+  let phoneError = $state<string | null>(null)
+
+  let kimiPromptInput = $state('')
+  let kimiPromptLoaded = $state(false)
+  let kimiBusy = $state(false)
+  let kimiError = $state('')
+  let kimiSaved = $state(false)
+
+  onMount(async () => {
+    const [stored, phoneStatus] = await Promise.all([
+      window.api.getKimiSystemPrompt().catch(() => null),
+      window.api.getPhoneServerStatus().catch(() => ({ active: false, url: undefined }))
+    ])
+    kimiPromptInput = stored ?? ''
+    kimiPromptLoaded = true
+    phoneActive = phoneStatus.active
+    phoneUrl = phoneStatus.url ?? null
+  })
+
+  async function togglePhone(): Promise<void> {
+    phoneError = null
+    if (phoneActive) {
+      try {
+        await window.api.stopPhoneServer()
+      } catch {
+        // ignore stop errors
+      }
+      phoneActive = false
+      phoneUrl = null
+    } else {
+      try {
+        const result = await window.api.startPhoneServer()
+        phoneActive = true
+        phoneUrl = result.url
+      } catch (e) {
+        phoneError = e instanceof Error ? e.message : 'Failed to start'
+      }
+    }
+  }
 
   let bannerText = $derived.by(() => {
     if (requiredFor === 'project') {
@@ -99,6 +151,36 @@
     }
   }
 
+  async function saveFireworks(): Promise<void> {
+    const trimmed = fireworksInput.trim()
+    if (!trimmed || fireworksBusy) return
+    fireworksBusy = true
+    fireworksError = ''
+    try {
+      const next = await window.api.setFireworksKey(trimmed)
+      fireworksInput = ''
+      onFireworksStatusChange(next)
+    } catch (err) {
+      fireworksError = err instanceof Error ? err.message : String(err)
+    } finally {
+      fireworksBusy = false
+    }
+  }
+
+  async function clearFireworks(): Promise<void> {
+    if (fireworksBusy) return
+    fireworksBusy = true
+    fireworksError = ''
+    try {
+      const next = await window.api.clearFireworksKey()
+      onFireworksStatusChange(next)
+    } catch (err) {
+      fireworksError = err instanceof Error ? err.message : String(err)
+    } finally {
+      fireworksBusy = false
+    }
+  }
+
   function onPatKey(e: KeyboardEvent): void {
     if (e.key === 'Enter') savePat()
     else if (e.key === 'Escape') onCancel()
@@ -107,6 +189,41 @@
   function onClaudeKey(e: KeyboardEvent): void {
     if (e.key === 'Enter') saveClaude()
     else if (e.key === 'Escape') onCancel()
+  }
+
+  function onFireworksKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') saveFireworks()
+    else if (e.key === 'Escape') onCancel()
+  }
+
+  async function saveKimiPrompt(): Promise<void> {
+    if (kimiBusy) return
+    kimiBusy = true
+    kimiError = ''
+    kimiSaved = false
+    try {
+      await window.api.setKimiSystemPrompt(kimiPromptInput)
+      kimiSaved = true
+    } catch (err) {
+      kimiError = err instanceof Error ? err.message : String(err)
+    } finally {
+      kimiBusy = false
+    }
+  }
+
+  async function clearKimiPrompt(): Promise<void> {
+    if (kimiBusy) return
+    kimiBusy = true
+    kimiError = ''
+    kimiSaved = false
+    try {
+      await window.api.setKimiSystemPrompt('')
+      kimiPromptInput = ''
+    } catch (err) {
+      kimiError = err instanceof Error ? err.message : String(err)
+    } finally {
+      kimiBusy = false
+    }
   }
 </script>
 
@@ -204,8 +321,119 @@
       {/if}
     </section>
 
+    <section class="field">
+      <label for="fireworks-key">Fireworks API Key</label>
+      <div class="status-line">
+        {#if fireworksStatus.configured}
+          <span class="status configured">
+            Configured{fireworksStatus.hint ? ` • ends in ${fireworksStatus.hint}` : ''}
+          </span>
+        {:else}
+          <span class="status unconfigured">Not configured</span>
+        {/if}
+      </div>
+      <input
+        id="fireworks-key"
+        type="password"
+        autocomplete="off"
+        placeholder={fireworksStatus.configured ? 'Enter a new key to replace' : 'fw-...'}
+        bind:value={fireworksInput}
+        disabled={fireworksBusy}
+        onkeydown={onFireworksKey}
+      />
+      <p class="help">Required for Assisted windows. Get one at fireworks.ai.</p>
+      <div class="row-actions">
+        {#if fireworksStatus.configured}
+          <button type="button" class="clear" onclick={clearFireworks} disabled={fireworksBusy}>
+            {fireworksBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="submit"
+          onclick={saveFireworks}
+          disabled={!fireworksInput.trim() || fireworksBusy}
+        >
+          {fireworksBusy ? 'Saving…' : 'Save Fireworks Key'}
+        </button>
+      </div>
+      {#if fireworksError}
+        <p class="error">{fireworksError}</p>
+      {/if}
+    </section>
+
+    <section class="field">
+      <label for="kimi-prompt">Shellephant System Prompt (global override)</label>
+      <p class="field-heading">Phone Access</p>
+      <div class="status-line">
+        {#if phoneActive && phoneUrl}
+          <span class="status configured">Active</span>
+        {:else}
+          <span class="status unconfigured">Inactive</span>
+        {/if}
+      </div>
+      <p class="help">Starts a local web server accessible via Tailscale for terminal access from mobile.</p>
+      <div class="row-actions phone-row">
+        <button
+          type="button"
+          class={phoneActive ? 'clear' : 'submit'}
+          aria-pressed={phoneActive}
+          aria-label="Phone Access"
+          onclick={togglePhone}
+        >{phoneActive ? 'Stop' : 'Start'}</button>
+        {#if phoneActive && phoneUrl}
+          <button
+            type="button"
+            class="phone-url-btn"
+            title={phoneUrl}
+            onclick={() => window.api.openExternal(phoneUrl!)}
+          >{phoneUrl}</button>
+        {/if}
+      </div>
+      {#if phoneError}
+        <p class="error">{phoneError}</p>
+      {/if}
+    </section>
+
+    <section class="field">
+      <label for="kimi-prompt">Kimi System Prompt (global override)</label>
+      <div class="status-line">
+        {#if !kimiPromptLoaded}
+          <span class="status unconfigured">Loading…</span>
+        {:else if kimiPromptInput.trim()}
+          <span class="status configured">Custom override active</span>
+        {:else}
+          <span class="status unconfigured">Using built-in default</span>
+        {/if}
+      </div>
+      <textarea
+        id="kimi-prompt"
+        rows="8"
+        placeholder={DEFAULT_KIMI_SYSTEM_PROMPT}
+        bind:value={kimiPromptInput}
+        disabled={kimiBusy || !kimiPromptLoaded}
+        oninput={() => { kimiSaved = false }}
+      ></textarea>
+      <p class="help">
+        Precedence: per-project prompt → this global override → built-in default (shown as placeholder above).
+      </p>
+      <div class="row-actions">
+        {#if kimiPromptInput}
+          <button type="button" class="clear" onclick={clearKimiPrompt} disabled={kimiBusy}>
+            {kimiBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button type="button" class="submit" onclick={saveKimiPrompt} disabled={kimiBusy || !kimiPromptLoaded}>
+          {kimiBusy ? 'Saving…' : kimiSaved ? 'Saved ✓' : 'Save Prompt'}
+        </button>
+      </div>
+      {#if kimiError}
+        <p class="error">{kimiError}</p>
+      {/if}
+    </section>
+
     <p class="help">
-      Stored locally, encrypted via your OS keychain. The Claude token is passed to each window as
+      Credentials are stored locally, encrypted via your OS keychain. The Claude token is passed to each window as
       <code>CLAUDE_CODE_OAUTH_TOKEN</code>. The PAT never enters a container.
     </p>
 
@@ -298,7 +526,8 @@
     color: var(--fg-2);
   }
 
-  input {
+  input,
+  textarea {
     width: 100%;
     padding: 0.5rem 0.65rem;
     background: var(--bg-2);
@@ -310,7 +539,14 @@
     outline: none;
   }
 
-  input:focus {
+  textarea {
+    resize: vertical;
+    min-height: 6em;
+    line-height: 1.5;
+  }
+
+  input:focus,
+  textarea:focus {
     border-color: var(--accent);
   }
 
@@ -396,5 +632,35 @@
     font-size: 0.78rem;
     color: var(--danger);
     margin: 0;
+  }
+
+  .field-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    margin: 0;
+  }
+
+  .phone-row {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .phone-url-btn {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--accent);
+    border-radius: 4px;
+    cursor: pointer;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>

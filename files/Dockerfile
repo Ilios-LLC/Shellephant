@@ -1,3 +1,5 @@
+FROM smallstep/step-cli:0.28.2 AS step-cli
+
 FROM node:24
 
 ARG TZ
@@ -58,11 +60,7 @@ RUN GOBIN=/usr/local/bin go install github.com/go-task/task/v3/cmd/task@latest &
     GOBIN=/usr/local/bin go install github.com/bufbuild/buf/cmd/buf@latest
 
 # Install step CLI (step-ca cert inspection for mTLS dev stack)
-ARG STEP_VERSION=0.28.2
-RUN ARCH=$(dpkg --print-architecture) && \
-    wget -q "https://github.com/smallstep/cli/releases/download/v${STEP_VERSION}/step-cli_${STEP_VERSION}_${ARCH}.deb" && \
-    dpkg -i "step-cli_${STEP_VERSION}_${ARCH}.deb" && \
-    rm "step-cli_${STEP_VERSION}_${ARCH}.deb"
+COPY --from=step-cli /usr/local/bin/step /usr/local/bin/step
 
 # Install OpenBao CLI (transit engine for envelope encryption — replaces AWS KMS)
 ARG OPENBAO_VERSION=2.1.1
@@ -124,11 +122,14 @@ RUN npx -y playwright-core install-deps chromium firefox webkit && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install virtual display stack for in-container Electron dev preview
+# dbus + dbus-x11 provide the session bus Electron requires (dbus-launch)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   xvfb \
   x11vnc \
   novnc \
   websockify \
+  dbus \
+  dbus-x11 \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up non-root user
@@ -140,6 +141,10 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
 # Install pnpm (Svelte frontend package manager)
 RUN npm install -g pnpm
+
+# Install Claude Agent SDK for programmatic access by assisted windows
+RUN npm install -g @anthropic-ai/claude-agent-sdk
+ENV NODE_PATH=/usr/local/share/npm-global/lib/node_modules
 
 # Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh
@@ -192,6 +197,7 @@ COPY --chown=node:node tmux.conf /home/node/.tmux.conf
 # Pre-seed Claude Code config so first run skips onboarding and has plugins pre-enabled.
 COPY --chown=node:node claude-settings.json /home/node/.claude/settings.json
 COPY --chown=node:node claude-dot-json.json /home/node/.claude.json
+COPY --chown=node:node statusline-command.sh /home/node/statusline-command.sh
 
 # Install plugins at build time so first run is instant. These commands are file-system-only
 # (git clone marketplace + copy plugin files); no API key auth required.
@@ -204,7 +210,8 @@ USER root
 COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY dev-preview.sh /usr/local/bin/dev-preview.sh
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh && \
+COPY cw-claude-sdk.js /usr/local/bin/cw-claude-sdk.js
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh /usr/local/bin/cw-claude-sdk.js /home/node/statusline-command.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node

@@ -9,6 +9,7 @@
   import EditorPane from './EditorPane.svelte'
   import ResizeHandle from './ResizeHandle.svelte'
   import CommitModal from './CommitModal.svelte'
+  import AssistedPanel from './AssistedPanel.svelte'
   import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
   import { conversationSummary } from '../lib/conversationSummary'
@@ -31,26 +32,12 @@
         : []
   )
 
-  const panelVisible = $derived({
-    claude:   $panelLayout.panels.find(p => p.id === 'claude')?.visible   ?? false,
-    terminal: $panelLayout.panels.find(p => p.id === 'terminal')?.visible ?? false,
-    editor:   $panelLayout.panels.find(p => p.id === 'editor')?.visible   ?? false
-  })
-
-  // Claude terminal
-  let claudeTerminalEl: HTMLDivElement
-  let claudeTerm: XTerm | undefined
-  let claudeFitAddon: FitAddon | undefined
-  let claudeResizeObserver: ResizeObserver | undefined
-
   // Terminal session (lazy)
   let terminalEl: HTMLDivElement
   let term: XTerm | undefined
   let fitAddon: FitAddon | undefined
   let resizeObserver: ResizeObserver | undefined
   let terminalOpened = false
-  // Set in onMount so the first $effect run (which happens after onMount) skips reinit.
-  let postMountClaudeEffectPending = false
 
   let commitOpen = $state(false)
   let commitBusy = $state(false)
@@ -75,29 +62,10 @@
       cursor: '#8b5cf6',
       selectionBackground: '#3f3f46'
     },
-    scrollback: 1000
-  }
-
-  function reinitClaudeTerminal(): void {
-    claudeResizeObserver?.disconnect()
-    claudeResizeObserver = undefined
-    claudeTerm?.dispose()
-    claudeTerm = new XTerm(xtermOptions)
-    claudeFitAddon = new FitAddon()
-    claudeTerm.loadAddon(claudeFitAddon)
-    claudeTerm.loadAddon(new WebLinksAddon())
-    claudeTerm.open(claudeTerminalEl)
-    claudeFitAddon.fit()
-    claudeTerm.focus()
-    claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
-    claudeResizeObserver.observe(claudeTerminalEl)
-    claudeTerm.onData((data: string) => {
-      window.api.sendTerminalInput(win.container_id, data, 'claude')
-      waitingWindows.remove(win.container_id)
-    })
-    claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
-    })
+    scrollback: 5000,
+    scrollSensitivity: 3,
+    fastScrollSensitivity: 10,
+    fastScrollModifier: 'shift' as const
   }
 
   function initTerminalSession(launchBackend = true): void {
@@ -196,33 +164,9 @@
   }
 
   onMount(() => {
-    if (!claudeTerminalEl) {
-      console.warn('[TerminalHost] claudeTerminalEl not bound on mount; claude panel may be hidden')
-      return
-    }
-    claudeTerm = new XTerm(xtermOptions)
-    claudeFitAddon = new FitAddon()
-    claudeTerm.loadAddon(claudeFitAddon)
-    claudeTerm.loadAddon(new WebLinksAddon())
-    claudeTerm.open(claudeTerminalEl)
-    claudeFitAddon.fit()
-    claudeTerm.reset()
-    claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
-    claudeResizeObserver.observe(claudeTerminalEl)
-    postMountClaudeEffectPending = true
-    window.api.openTerminal(win.container_id, claudeTerm.cols, claudeTerm.rows, win.name, 'claude')
-    claudeTerm.onData((data: string) => {
-      window.api.sendTerminalInput(win.container_id, data, 'claude')
-      waitingWindows.remove(win.container_id)
-    })
-    claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
-    })
-
     window.api.onTerminalData((containerId: string, sessionType: string, data: string) => {
       if (containerId !== win.container_id) return
-      if (sessionType === 'claude') claudeTerm?.write(data)
-      else term?.write(data)
+      if (sessionType === 'terminal') term?.write(data)
     })
 
     window.api.onTerminalSummary(({ containerId, title, bullets }: { containerId: string; title: string; bullets: string[] }) => {
@@ -233,35 +177,18 @@
   })
 
   onDestroy(() => {
-    claudeResizeObserver?.disconnect()
     resizeObserver?.disconnect()
     window.api.offTerminalData()
-    window.api.closeTerminal(win.container_id, 'claude')
     if (terminalOpened) window.api.closeTerminal(win.container_id, 'terminal')
     waitingWindows.remove(win.container_id)
     window.api.offTerminalSummary()
     conversationSummary.remove(win.container_id)
-    claudeTerm?.dispose()
     term?.dispose()
   })
 
   $effect(() => {
     const panels = $panelLayout.panels
     const termPanel = panels.find(p => p.id === 'terminal')
-    const claudePanel = panels.find(p => p.id === 'claude')
-
-    // Re-attach when the DOM element was replaced by Svelte (panel hidden then re-shown creates a new node).
-    // postMountClaudeEffectPending skips the first $effect run (which fires after onMount) to avoid
-    // spurious reinit — in tests xterm mock never adds children so hasChildNodes() is always false.
-    if (claudePanel?.visible && claudeTerminalEl && claudeTerm && !claudeTerminalEl.hasChildNodes()) {
-      if (postMountClaudeEffectPending) {
-        postMountClaudeEffectPending = false
-      } else {
-        reinitClaudeTerminal()
-      }
-    } else if (claudePanel?.visible) {
-      claudeFitAddon?.fit()
-    }
 
     if (termPanel?.visible) {
       if (!terminalOpened) {
@@ -314,7 +241,7 @@
         </div>
         <div class="panel-body">
           {#if panel.id === 'claude'}
-            <div class="terminal-inner" bind:this={claudeTerminalEl}></div>
+            <AssistedPanel windowId={win.id} containerId={win.container_id} />
           {:else if panel.id === 'terminal'}
             <div class="terminal-inner" bind:this={terminalEl}></div>
           {:else if panel.id === 'editor'}
@@ -410,6 +337,5 @@
   .terminal-inner {
     flex: 1;
     overflow: hidden;
-    padding: 0.5rem;
   }
 </style>

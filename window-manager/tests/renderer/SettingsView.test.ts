@@ -11,9 +11,11 @@ function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     patStatus: unconfigured,
     claudeStatus: unconfigured,
+    fireworksStatus: unconfigured,
     requiredFor: null,
     onPatStatusChange: vi.fn(),
     onClaudeStatusChange: vi.fn(),
+    onFireworksStatusChange: vi.fn(),
     onCancel: vi.fn(),
     ...overrides
   }
@@ -24,17 +26,29 @@ describe('SettingsView', () => {
   let mockClearPat: ReturnType<typeof vi.fn>
   let mockSetClaude: ReturnType<typeof vi.fn>
   let mockClearClaude: ReturnType<typeof vi.fn>
+  let mockSetFireworks: ReturnType<typeof vi.fn>
+  let mockClearFireworks: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     mockSetPat = vi.fn().mockResolvedValue(patConfigured)
     mockClearPat = vi.fn().mockResolvedValue(unconfigured)
     mockSetClaude = vi.fn().mockResolvedValue(claudeConfigured)
     mockClearClaude = vi.fn().mockResolvedValue(unconfigured)
+    mockSetFireworks = vi.fn().mockResolvedValue({ configured: true, hint: '5678' })
+    mockClearFireworks = vi.fn().mockResolvedValue(unconfigured)
     vi.stubGlobal('api', {
       setGitHubPat: mockSetPat,
       clearGitHubPat: mockClearPat,
       setClaudeToken: mockSetClaude,
-      clearClaudeToken: mockClearClaude
+      clearClaudeToken: mockClearClaude,
+      setFireworksKey: mockSetFireworks,
+      clearFireworksKey: mockClearFireworks,
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined),
+      getPhoneServerStatus: vi.fn().mockResolvedValue({ active: false, url: undefined }),
+      startPhoneServer: vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' }),
+      stopPhoneServer: vi.fn().mockResolvedValue(undefined),
+      openExternal: vi.fn()
     })
   })
 
@@ -55,7 +69,8 @@ describe('SettingsView', () => {
       baseProps({ patStatus: patConfigured, claudeStatus: unconfigured })
     )
     expect(screen.getByText(/ends in efgh/i)).toBeDefined()
-    expect(screen.getByText(/not configured/i)).toBeDefined()
+    // claude and fireworks are both unconfigured, so multiple "Not configured" spans exist
+    expect(screen.getAllByText(/not configured/i).length).toBeGreaterThanOrEqual(1)
   })
 
   it('banner shows project-required when requiredFor=project', () => {
@@ -156,6 +171,96 @@ describe('SettingsView', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/secure storage unavailable/i)).toBeDefined()
+    })
+  })
+
+  describe('Phone Access section', () => {
+    let mockGetPhoneServerStatus: ReturnType<typeof vi.fn>
+    let mockStartPhoneServer: ReturnType<typeof vi.fn>
+    let mockStopPhoneServer: ReturnType<typeof vi.fn>
+    let mockOpenExternal: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      mockGetPhoneServerStatus = vi.fn().mockResolvedValue({ active: false, url: undefined })
+      mockStartPhoneServer = vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' })
+      mockStopPhoneServer = vi.fn().mockResolvedValue(undefined)
+      mockOpenExternal = vi.fn()
+      vi.stubGlobal('api', {
+        setGitHubPat: mockSetPat,
+        clearGitHubPat: mockClearPat,
+        setClaudeToken: mockSetClaude,
+        clearClaudeToken: mockClearClaude,
+        setFireworksKey: mockSetFireworks,
+        clearFireworksKey: mockClearFireworks,
+        getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+        setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined),
+        getPhoneServerStatus: mockGetPhoneServerStatus,
+        startPhoneServer: mockStartPhoneServer,
+        stopPhoneServer: mockStopPhoneServer,
+        openExternal: mockOpenExternal
+      })
+    })
+
+    it('shows Phone Access button', async () => {
+      render(SettingsView, baseProps())
+      await screen.findByRole('button', { name: 'Phone Access' })
+    })
+
+    it('starts server and shows URL on click', async () => {
+      render(SettingsView, baseProps())
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByTitle('http://100.1.2.3:8765')
+    })
+
+    it('stops server and hides URL on second click', async () => {
+      mockGetPhoneServerStatus.mockResolvedValue({ active: true, url: 'http://100.1.2.3:8765' })
+      render(SettingsView, baseProps())
+      await screen.findByTitle('http://100.1.2.3:8765')
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.queryByTitle('http://100.1.2.3:8765')).toBeNull()
+      })
+    })
+
+    it('shows error when start fails', async () => {
+      mockStartPhoneServer.mockRejectedValue(new Error('Tailscale IP not found'))
+      render(SettingsView, baseProps())
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByText('Tailscale IP not found')
+    })
+  })
+
+  describe('Fireworks key section', () => {
+    it('renders Fireworks API Key label', () => {
+      render(SettingsView, baseProps())
+      expect(screen.getByLabelText(/fireworks api key/i)).toBeDefined()
+    })
+
+    it('shows Not configured status initially', () => {
+      render(SettingsView, baseProps())
+      // fireworksStatus is unconfigured, so there should be a "Not configured" text
+      // There may be multiple since PAT and Claude are also unconfigured
+      const notConfigured = screen.getAllByText(/not configured/i)
+      expect(notConfigured.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('saving fireworks key calls api.setFireworksKey and fires onFireworksStatusChange', async () => {
+      const fireworksConfigured: TokenStatus = { configured: true, hint: '5678' }
+      const onFireworksStatusChange = vi.fn()
+      render(SettingsView, baseProps({ onFireworksStatusChange }))
+
+      await fireEvent.input(screen.getByLabelText(/fireworks api key/i), {
+        target: { value: 'fw-my-key-5678' }
+      })
+      await fireEvent.click(screen.getByRole('button', { name: /save fireworks key/i }))
+
+      await waitFor(() => {
+        expect(mockSetFireworks).toHaveBeenCalledWith('fw-my-key-5678')
+        expect(onFireworksStatusChange).toHaveBeenCalledWith(fireworksConfigured)
+      })
     })
   })
 })

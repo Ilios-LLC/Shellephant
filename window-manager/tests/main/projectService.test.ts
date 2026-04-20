@@ -28,7 +28,8 @@ import {
   updateProject,
   getProject,
   updateProjectEnvVars,
-  updateProjectPorts
+  updateProjectPorts,
+  updateProjectDefaultNetwork
 } from '../../src/main/projectService'
 
 describe('projectService', () => {
@@ -329,6 +330,37 @@ describe('projectService', () => {
       expect(() => updateProjectPorts(99999, [{ container: 3000 }])).toThrow(
         'Project 99999 not found'
       )
+    })
+  })
+
+  describe('updateProjectDefaultNetwork', () => {
+    it('sets a network name on the project', async () => {
+      const proj = await createProject('net-test', 'git@github.com:org/net-test.git')
+      updateProjectDefaultNetwork(proj.id, 'my-network')
+      const updated = getProject(proj.id)!
+      expect(updated.default_network).toBe('my-network')
+    })
+
+    it('clears the network to null', async () => {
+      const proj = await createProject('net-test2', 'git@github.com:org/net-test2.git')
+      updateProjectDefaultNetwork(proj.id, 'my-network')
+      updateProjectDefaultNetwork(proj.id, null)
+      const updated = getProject(proj.id)!
+      expect(updated.default_network).toBeNull()
+    })
+
+    it('throws when project does not exist', () => {
+      expect(() => updateProjectDefaultNetwork(9999, 'net')).toThrow('Project 9999 not found')
+    })
+  })
+
+  describe('listProjects with default_network', () => {
+    it('returns default_network for each project', async () => {
+      const proj = await createProject('net-list', 'git@github.com:org/net-list.git')
+      updateProjectDefaultNetwork(proj.id, 'test-net')
+      const projects = listProjects()
+      const found = projects.find(p => p.id === proj.id)!
+      expect(found.default_network).toBe('test-net')
     })
   })
 })

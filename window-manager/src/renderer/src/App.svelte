@@ -16,15 +16,17 @@
   let view = $state<MainPaneView>('default')
   let patStatus = $state<TokenStatus>({ configured: false, hint: null })
   let claudeStatus = $state<TokenStatus>({ configured: false, hint: null })
+  let fireworksStatus = $state<TokenStatus>({ configured: false, hint: null })
   let settingsRequiredFor = $state<SettingsRequirement>(null)
   let groups = $state<ProjectGroupRecord[]>([])
   let activeGroupId = $state<number | 'ungrouped' | null>(null)
   let settingsProject = $state<ProjectRecord | null>(null)
 
   onMount(async () => {
-    ;[patStatus, claudeStatus] = await Promise.all([
+    ;[patStatus, claudeStatus, fireworksStatus] = await Promise.all([
       window.api.getGitHubPatStatus(),
-      window.api.getClaudeTokenStatus()
+      window.api.getClaudeTokenStatus(),
+      window.api.getFireworksKeyStatus()
     ])
     ;[projects, allWindows, groups] = await Promise.all([
       window.api.listProjects(),
@@ -126,6 +128,10 @@
   function handleClaudeStatusChange(next: TokenStatus): void {
     claudeStatus = next
     afterTokenChange()
+  }
+
+  function handleFireworksStatusChange(next: TokenStatus): void {
+    fireworksStatus = next
   }
 
   function handleProjectCreated(project: ProjectRecord): void {
@@ -245,6 +251,7 @@
     {view}
     {patStatus}
     {claudeStatus}
+    {fireworksStatus}
     {settingsRequiredFor}
     {groups}
     onWindowSelect={handleWindowSelect}
@@ -256,6 +263,7 @@
     onWindowDeleted={handleWindowDeleted}
     onPatStatusChange={handlePatStatusChange}
     onClaudeStatusChange={handleClaudeStatusChange}
+    onFireworksStatusChange={handleFireworksStatusChange}
     onWizardCancel={handleWizardCancel}
     onNavigateToWindow={handleNavigateToWindow}
     onProjectUpdated={handleProjectUpdated}

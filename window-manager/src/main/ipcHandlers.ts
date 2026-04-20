@@ -1,6 +1,7 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
+import type { PermissionMode } from '../shared/permissionMode'
 import { createWindow, listWindows, deleteWindow } from './windowService'
-import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, updateProjectPorts, type PortMapping } from './projectService'
+import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, updateProjectPorts, updateProjectDefaultNetwork, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal, type SessionType } from './terminalService'
 import { setActiveContainer } from './focusState'
@@ -11,12 +12,18 @@ import {
   clearGitHubPat,
   getClaudeTokenStatus,
   setClaudeToken,
-  clearClaudeToken
+  clearClaudeToken,
+  getFireworksKey,
+  getFireworksKeyStatus,
+  setFireworksKey,
+  clearFireworksKey,
+  getKimiSystemPrompt,
+  setKimiSystemPrompt
 } from './settingsService'
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
-import { getDocker } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
+import { getDocker, listBridgeNetworks } from './docker'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, createFileInContainer, createDirInContainer, deleteInContainer, renameInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 import {
@@ -29,6 +36,8 @@ import {
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
+import { sendToWindow, cancelWindow } from './assistedWindowService'
+import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -77,14 +86,21 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('project:update-ports', (_, id: number, ports: PortMapping[]) =>
     updateProjectPorts(id, ports)
   )
+  ipcMain.handle('project:update-default-network', (_, id: number, network: string | null) =>
+    updateProjectDefaultNetwork(id, network)
+  )
+  ipcMain.handle('docker:list-bridge-networks', () => listBridgeNetworks())
 
   // Group handlers
   ipcMain.handle('group:create', (_, name: string) => createGroup(name))
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}) =>
-    createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step))
+  ipcMain.handle(
+    'window:create',
+    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, networkName = '') => {
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), 'manual', networkName)
+    }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
@@ -226,6 +242,24 @@ export function registerIpcHandlers(): void {
     clearClaudeToken()
     return getClaudeTokenStatus()
   })
+  ipcMain.handle('settings:get-fireworks-key-status', () => getFireworksKeyStatus())
+  ipcMain.handle('settings:set-fireworks-key', (_, key: string) => {
+    setFireworksKey(key)
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:clear-fireworks-key', () => {
+    clearFireworksKey()
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:get-kimi-system-prompt', () => getKimiSystemPrompt())
+  ipcMain.handle('settings:set-kimi-system-prompt', (_, prompt: string) => {
+    setKimiSystemPrompt(prompt)
+  })
+  ipcMain.handle('project:set-kimi-system-prompt', (_, projectId: number, prompt: string | null) => {
+    getDb()
+      .prepare('UPDATE projects SET kimi_system_prompt = ? WHERE id = ?')
+      .run(prompt, projectId)
+  })
 
   // Terminal handlers
   ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string, sessionType: SessionType = 'terminal') => {
@@ -275,6 +309,26 @@ export function registerIpcHandlers(): void {
     return writeFileInContainer(container, path, content)
   })
 
+  ipcMain.handle('fs:create-file', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return createFileInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:create-dir', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return createDirInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:delete', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return deleteInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:rename', async (_, containerId: string, oldPath: string, newPath: string) => {
+    const container = getDocker().getContainer(containerId)
+    return renameInContainer(container, oldPath, newPath)
+  })
+
   ipcMain.handle('fs:exec', async (_, containerId: string, cmd: string[]) => {
     const ALLOWED_CMDS = new Set(['grep'])
     if (!cmd[0] || !ALLOWED_CMDS.has(cmd[0])) {
@@ -289,4 +343,47 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('phone-server:start', () => startPhoneServer())
   ipcMain.handle('phone-server:stop', () => stopPhoneServer())
   ipcMain.handle('phone-server:status', () => getPhoneServerStatus())
+
+  // Assisted window handlers
+  ipcMain.handle('assisted:send', async (event, windowId: number, message: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const row = getDb()
+      .prepare('SELECT container_id, project_id FROM windows WHERE id = ?')
+      .get(windowId) as { container_id: string; project_id: number | null } | undefined
+    if (!row) throw new Error(`Window ${windowId} not found`)
+
+    const sendToRenderer = (channel: string, ...args: unknown[]) => {
+      win?.webContents.send(channel, ...args)
+    }
+
+    await sendToWindow(windowId, row.container_id, message, row.project_id, sendToRenderer)
+  })
+
+  ipcMain.handle('assisted:cancel', (_, windowId: number) => {
+    cancelWindow(windowId)
+  })
+
+  ipcMain.handle('assisted:history', (_, windowId: number) => {
+    return getDb()
+      .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
+      .all(windowId)
+  })
+
+  ipcMain.handle('claude:send', async (event, windowId: number, message: string, permissionMode?: PermissionMode) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const row = getDb()
+      .prepare('SELECT container_id FROM windows WHERE id = ?')
+      .get(windowId) as { container_id: string } | undefined
+    if (!row) throw new Error(`Window ${windowId} not found`)
+
+    const sendToRenderer = (channel: string, ...args: unknown[]) => {
+      win?.webContents.send(channel, ...args)
+    }
+
+    await sendToClaudeDirectly(windowId, row.container_id, message, sendToRenderer, permissionMode)
+  })
+
+  ipcMain.handle('claude:cancel', (_, windowId: number) => {
+    cancelClaudeDirect(windowId)
+  })
 }

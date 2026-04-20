@@ -1,3 +1,8 @@
+import type { TimelineEvent } from '../../shared/timelineEvent'
+export type { TimelineEvent, TimelineMetadata } from '../../shared/timelineEvent'
+export { isTimelineMetadata } from '../../shared/timelineEvent'
+export { DEFAULT_KIMI_SYSTEM_PROMPT } from '../../shared/defaultKimiPrompt'
+
 export type ContainerStatus = 'running' | 'stopped' | 'unknown'
 export type WindowStatus = ContainerStatus
 
@@ -19,6 +24,8 @@ export interface ProjectRecord {
   ports?: string
   env_vars?: string | null
   group_id?: number | null
+  default_network?: string | null
+  kimi_system_prompt?: string | null
   created_at: string
 }
 
@@ -29,6 +36,7 @@ export interface WindowRecord {
   container_id: string
   ports?: string
   network_id?: string | null
+  window_type: 'manual' | 'assisted'
   created_at: string
   status: WindowStatus
   projects: WindowProjectRecord[]
@@ -66,6 +74,15 @@ export interface WindowProjectRecord {
   git_url?: string
 }
 
+export interface AssistedMessage {
+  id: number
+  window_id: number
+  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user' | 'shellephant' | 'claude' | 'claude-action' | 'claude-to-shellephant' | 'claude-to-shellephant-action'
+  content: string
+  metadata: string | null
+  created_at: string
+}
+
 export interface Api {
   // Projects
   createProject: (name: string, gitUrl: string, ports?: PortMapping[]) => Promise<ProjectRecord>
@@ -75,11 +92,13 @@ export interface Api {
   getProject: (id: number) => Promise<ProjectRecord | undefined>
   updateProjectEnvVars: (id: number, envVars: Record<string, string>) => Promise<void>
   updateProjectPorts: (id: number, ports: PortMapping[]) => Promise<void>
+  updateProjectDefaultNetwork: (id: number, network: string | null) => Promise<void>
+  listDockerNetworks: () => Promise<{ id: string; name: string }[]>
   createGroup: (name: string) => Promise<ProjectGroupRecord>
   listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
-  createWindow: (name: string, projectIds: number[], withDeps?: boolean) => Promise<WindowRecord>
+  createWindow: (name: string, projectIds: number[], withDeps?: boolean, branchOverrides?: Record<number, string>, windowType?: 'manual' | 'assisted', networkName?: string) => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
   onWindowCreateProgress: (callback: (step: string) => void) => void
@@ -120,6 +139,35 @@ export interface Api {
   setClaudeToken: (token: string) => Promise<TokenStatus>
   clearClaudeToken: () => Promise<TokenStatus>
 
+  // Assisted window API
+  assistedSend: (windowId: number, message: string) => Promise<void>
+  assistedCancel: (windowId: number) => Promise<void>
+  assistedHistory: (windowId: number) => Promise<AssistedMessage[]>
+  onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) => void
+  offAssistedKimiDelta: () => void
+  onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) => void
+  offAssistedTurnComplete: () => void
+
+  // Claude direct API
+  claudeSend: (windowId: number, message: string) => Promise<void>
+  claudeCancel: (windowId: number) => Promise<void>
+  onClaudeDelta: (callback: (windowId: number, chunk: string) => void) => void
+  offClaudeDelta: () => void
+  onClaudeAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) => void
+  offClaudeAction: () => void
+  onClaudeTurnComplete: (callback: (windowId: number) => void) => void
+  offClaudeTurnComplete: () => void
+
+  // Settings — Fireworks
+  getFireworksKeyStatus: () => Promise<TokenStatus>
+  setFireworksKey: (key: string) => Promise<TokenStatus>
+  clearFireworksKey: () => Promise<TokenStatus>
+
+  // Settings — Kimi system prompt
+  getKimiSystemPrompt: () => Promise<string | null>
+  setKimiSystemPrompt: (prompt: string) => Promise<void>
+  setProjectKimiSystemPrompt: (projectId: number, prompt: string | null) => Promise<void>
+
   // Terminal
   openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType?: string) => Promise<void>
   sendTerminalInput: (containerId: string, data: string, sessionType?: string) => void
@@ -149,6 +197,10 @@ export interface Api {
   listContainerDir: (containerId: string, path: string) => Promise<{ name: string; isDir: boolean }[]>
   readContainerFile: (containerId: string, path: string) => Promise<string>
   writeContainerFile: (containerId: string, path: string, content: string) => Promise<void>
+  createContainerFile: (containerId: string, path: string) => Promise<void>
+  createContainerDir: (containerId: string, path: string) => Promise<void>
+  deleteContainerPath: (containerId: string, path: string) => Promise<void>
+  renameContainerPath: (containerId: string, oldPath: string, newPath: string) => Promise<void>
 
   // Shell
   openExternal: (url: string) => Promise<void>

@@ -31,10 +31,6 @@ let mockStopDepLogs: ReturnType<typeof vi.fn>
 let mockOnDepLogsData: ReturnType<typeof vi.fn>
 let mockOffDepLogsData: ReturnType<typeof vi.fn>
 let mockGetDepContainersStatus: ReturnType<typeof vi.fn>
-let mockGetPhoneServerStatus: ReturnType<typeof vi.fn>
-let mockStartPhoneServer: ReturnType<typeof vi.fn>
-let mockStopPhoneServer: ReturnType<typeof vi.fn>
-let mockOpenExternal: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -56,10 +52,6 @@ beforeEach(() => {
   mockOnDepLogsData = vi.fn()
   mockOffDepLogsData = vi.fn()
   mockGetDepContainersStatus = vi.fn().mockResolvedValue({})
-  mockGetPhoneServerStatus = vi.fn().mockResolvedValue({ active: false, url: undefined })
-  mockStartPhoneServer = vi.fn().mockResolvedValue({ url: 'http://localhost:4000' })
-  mockStopPhoneServer = vi.fn().mockResolvedValue(undefined)
-  mockOpenExternal = vi.fn()
   // @ts-expect-error test bridge
   globalThis.window.api = {
     getCurrentBranch,
@@ -70,11 +62,7 @@ beforeEach(() => {
     stopDepLogs: mockStopDepLogs,
     onDepLogsData: mockOnDepLogsData,
     offDepLogsData: mockOffDepLogsData,
-    getDepContainersStatus: mockGetDepContainersStatus,
-    getPhoneServerStatus: mockGetPhoneServerStatus,
-    startPhoneServer: mockStartPhoneServer,
-    stopPhoneServer: mockStopPhoneServer,
-    openExternal: mockOpenExternal
+    getDepContainersStatus: mockGetDepContainersStatus
   }
 })
 afterEach(() => {
@@ -89,6 +77,7 @@ const win = {
   container_id: 'abc123def456',
   created_at: '2026-04-14T00:00:00Z',
   status: 'running' as const,
+  window_type: 'manual' as const,
   projects: [] as import('../../src/renderer/src/types').WindowProjectRecord[]
 }
 
@@ -432,43 +421,6 @@ describe('WindowDetailPane', () => {
     })
   })
 
-  const baseProps = { win, project }
-
-  describe('Phone server toggle', () => {
-    it('shows Phone button in toggle row', async () => {
-      render(WindowDetailPane, { props: baseProps })
-      await screen.findByRole('button', { name: 'Phone Access' })
-    })
-
-    it('starts server and shows URL on click', async () => {
-      mockStartPhoneServer.mockResolvedValue({ url: 'http://100.1.2.3:8765' })
-      render(WindowDetailPane, { props: baseProps })
-      const btn = await screen.findByRole('button', { name: 'Phone Access' })
-      await fireEvent.click(btn)
-      await screen.findByTitle('http://100.1.2.3:8765')
-    })
-
-    it('stops server and hides URL on second click', async () => {
-      mockGetPhoneServerStatus.mockResolvedValue({ active: true, url: 'http://100.1.2.3:8765' })
-      render(WindowDetailPane, { props: baseProps })
-      await screen.findByTitle('http://100.1.2.3:8765')
-      mockStopPhoneServer.mockResolvedValue(undefined)
-      const btn = await screen.findByRole('button', { name: 'Phone Access' })
-      await fireEvent.click(btn)
-      await waitFor(() => {
-        expect(screen.queryByTitle('http://100.1.2.3:8765')).toBeNull()
-      })
-    })
-
-    it('shows error message when start fails', async () => {
-      mockStartPhoneServer.mockRejectedValue(new Error('Tailscale IP not found'))
-      render(WindowDetailPane, { props: baseProps })
-      const btn = await screen.findByRole('button', { name: 'Phone Access' })
-      await fireEvent.click(btn)
-      await screen.findByText('Tailscale IP not found')
-    })
-  })
-
   describe('multi-project window', () => {
     const multiWin = {
       id: 2,
@@ -527,5 +479,12 @@ describe('WindowDetailPane', () => {
       await tick()
       expect(document.querySelector('.project-row')).toBeNull()
     })
+  })
+
+  it('always shows Claude toggle button regardless of window_type', () => {
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^claude$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^editor$/i })).toBeDefined()
   })
 })

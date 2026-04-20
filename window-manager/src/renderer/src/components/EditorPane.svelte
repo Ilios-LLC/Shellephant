@@ -60,6 +60,38 @@
     status = s
   }
 
+  function handleFileCreated(path: string): void {
+    openTab(path)
+  }
+
+  function handlePathDeleted(path: string): void {
+    // Close any open tabs that are exactly this path or nested inside it (if dir)
+    const tabsToClose = openTabs.filter((t) => t === path || t.startsWith(path + '/'))
+    for (const tab of tabsToClose) {
+      closeTab(tab)
+    }
+  }
+
+  function handlePathRenamed(oldPath: string, newPath: string): void {
+    // Remap open tabs
+    openTabs = openTabs.map((t) => {
+      if (t === oldPath) return newPath
+      if (t.startsWith(oldPath + '/')) return newPath + t.slice(oldPath.length)
+      return t
+    })
+    if (activeTab === oldPath) activeTab = newPath
+    else if (activeTab?.startsWith(oldPath + '/'))
+      activeTab = newPath + activeTab.slice(oldPath.length)
+    // Remap dirty tabs
+    const next = new Set<string>()
+    for (const t of dirtyTabs) {
+      if (t === oldPath) next.add(newPath)
+      else if (t.startsWith(oldPath + '/')) next.add(newPath + t.slice(oldPath.length))
+      else next.add(t)
+    }
+    dirtyTabs = next
+  }
+
   function handleOpenFile(path: string, line: number): void {
     openTab(path)
     setTimeout(() => editorRef?.gotoLine(line), 100)
@@ -87,13 +119,33 @@
     {:else}
       <div class="panel-header">
         <span>Files</span>
-        <button
-          class="header-btn"
-          aria-label="toggle find in files"
-          onclick={() => (showFindInFiles = true)}
-        >⌕</button>
+        <div class="header-actions">
+          <button
+            class="header-btn"
+            title="New File"
+            onclick={() => fileTreeRef?.startNewFileAt()}
+          >+</button>
+          <button
+            class="header-btn"
+            title="New Folder"
+            onclick={() => fileTreeRef?.startNewDirAt()}
+          >⊕</button>
+          <button
+            class="header-btn"
+            aria-label="toggle find in files"
+            onclick={() => (showFindInFiles = true)}
+          >⌕</button>
+        </div>
       </div>
-      <FileTree bind:this={fileTreeRef} {containerId} {roots} onFileSelect={openTab} />
+      <FileTree
+        bind:this={fileTreeRef}
+        {containerId}
+        {roots}
+        onFileSelect={openTab}
+        onFileCreated={handleFileCreated}
+        onPathDeleted={handlePathDeleted}
+        onPathRenamed={handlePathRenamed}
+      />
     {/if}
   </div>
 
@@ -184,13 +236,26 @@
     flex-shrink: 0;
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+  }
+
   .header-btn {
     background: none;
     border: none;
     color: var(--fg-2);
     cursor: pointer;
-    padding: 2px 4px;
+    padding: 2px 5px;
     font-size: 0.8rem;
+    border-radius: 3px;
+    line-height: 1;
+  }
+
+  .header-btn:hover {
+    color: var(--fg-0);
+    background: var(--bg-2);
   }
 
   .editor-panel {
