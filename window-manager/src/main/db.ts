@@ -192,6 +192,10 @@ export function initDb(dbPath: string): void {
       log_file    TEXT
     )
   `)
+  _db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_turns_window_started ON turns(window_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_turns_started ON turns(started_at DESC);
+  `)
   runColumnMigrations(_db)
   makeWindowProjectIdNullable(_db)
   backfillWindowProjects(_db)
