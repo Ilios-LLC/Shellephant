@@ -64,10 +64,6 @@
     onDelete?.()
   }
 
-  onDestroy(() => {
-    if (armTimer) clearTimeout(armTimer)
-  })
-
   let branch = $state('…')
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let timer: ReturnType<typeof setInterval> | undefined
@@ -117,14 +113,14 @@
   let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
 
   async function loadTurns(): Promise<void> {
-    turns = await window.api.listTurns({ windowId: win.id, limit: 20 }) as TurnRecord[]
+    turns = await window.api.listTurns({ windowId: win.id, limit: 20 })
   }
 
   async function expandTurn(turnId: string): Promise<void> {
     if (expandedTurnId === turnId) { expandedTurnId = null; return }
     expandedTurnId = turnId
     if (!turnEvents.has(turnId)) {
-      const events = await window.api.getTurnEvents(turnId) as LogEvent[]
+      const events = await window.api.getTurnEvents(turnId)
       turnEvents = new Map(turnEvents).set(turnId, events)
     }
   }
@@ -192,6 +188,7 @@
         if (depLogEl) depLogEl.scrollTop = depLogEl.scrollHeight
       }
     })
+    if (!alive) return
     const offStarted = window.api.onTurnStarted((t: unknown) => {
       const turn = t as TurnRecord
       if (turn.window_id === win.id) turns = [turn, ...turns]
@@ -214,6 +211,7 @@
     }
   })
   onDestroy(() => {
+    if (armTimer) clearTimeout(armTimer)
     alive = false
     if (timer) clearInterval(timer)
     if (statusTimer) clearInterval(statusTimer)
