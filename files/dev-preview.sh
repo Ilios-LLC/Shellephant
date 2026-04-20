@@ -2,6 +2,10 @@
 set -euo pipefail
 trap 'kill $(jobs -p) 2>/dev/null' EXIT
 
+# Start a session D-Bus so Electron can connect to the bus
+eval "$(dbus-launch --sh-syntax)"
+export DBUS_SESSION_BUS_ADDRESS
+
 # Start virtual framebuffer display
 export DISPLAY=:99
 Xvfb :99 -screen 0 1920x1080x24 -ac &

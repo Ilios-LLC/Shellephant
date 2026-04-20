@@ -122,11 +122,14 @@ RUN npx -y playwright-core install-deps chromium firefox webkit && \
   apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install virtual display stack for in-container Electron dev preview
+# dbus + dbus-x11 provide the session bus Electron requires (dbus-launch)
 RUN apt-get update && apt-get install -y --no-install-recommends \
   xvfb \
   x11vnc \
   novnc \
   websockify \
+  dbus \
+  dbus-x11 \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Set up non-root user
