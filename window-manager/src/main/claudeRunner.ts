@@ -8,7 +8,7 @@ export async function runClaudeCode(
   sessionId: string | null,
   message: string,
   options: { eventType?: string } = {}
-): Promise<{ output: string; events: TimelineEvent[]; newSessionId: string | null }> {
+): Promise<{ output: string; assistantText: string; events: TimelineEvent[]; newSessionId: string | null }> {
   const eventType = options.eventType ?? 'claude:event'
   return new Promise((resolve, reject) => {
     const sidArg = sessionId ?? 'new'
@@ -16,6 +16,7 @@ export async function runClaudeCode(
 
     const filter = new StreamFilterBuffer()
     const contextParts: string[] = []
+    const assistantTextParts: string[] = []
     const eventsLog: TimelineEvent[] = []
     let stderr = ''
     let hadAnyOutput = false
@@ -26,6 +27,7 @@ export async function runClaudeCode(
       if (drained.sessionId) streamSessionId = drained.sessionId
       for (const event of drained.events) {
         eventsLog.push(event)
+        if (event.kind === 'assistant_text' && event.text) assistantTextParts.push(event.text)
         parentPort?.postMessage({ type: eventType, event })
       }
     }
@@ -46,7 +48,12 @@ export async function runClaudeCode(
         reject(new Error(`docker exec failed (exit ${code}): ${stderr}`))
         return
       }
-      resolve({ output: contextParts.join('\n'), events: eventsLog, newSessionId: streamSessionId })
+      resolve({
+        output: contextParts.join('\n'),
+        assistantText: assistantTextParts.join('\n\n'),
+        events: eventsLog,
+        newSessionId: streamSessionId
+      })
     })
 
     child.on('error', reject)

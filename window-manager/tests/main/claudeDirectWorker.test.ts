@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const { mockParentPort, mockRunClaudeCode } = vi.hoisted(() => ({
   mockParentPort: { postMessage: vi.fn(), on: vi.fn() },
-  mockRunClaudeCode: vi.fn().mockResolvedValue({ output: 'done', events: [], newSessionId: 'sess-1' })
+  mockRunClaudeCode: vi.fn().mockResolvedValue({ output: 'done', assistantText: 'done', events: [], newSessionId: 'sess-1' })
 }))
 
 vi.mock('worker_threads', () => ({ parentPort: mockParentPort }))
@@ -17,7 +17,7 @@ messageHandler = entry?.[1] as ((msg: unknown) => Promise<void>) | undefined
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockRunClaudeCode.mockResolvedValue({ output: 'done', events: [], newSessionId: 'sess-1' })
+  mockRunClaudeCode.mockResolvedValue({ output: 'done', assistantText: 'done', events: [], newSessionId: 'sess-1' })
 })
 
 describe('claudeDirectWorker', () => {
@@ -31,6 +31,25 @@ describe('claudeDirectWorker', () => {
     expect(mockParentPort.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'save-message', role: 'claude', content: 'done' })
     )
+  })
+
+  it('persists assistantText (not raw output with tool_use/tool_result) as the claude row', async () => {
+    mockRunClaudeCode.mockResolvedValueOnce({
+      output: 'hello\ntool_use: Read(file)\ntool_result: file contents\nmore text',
+      assistantText: 'hello\n\nmore text',
+      events: [],
+      newSessionId: 'sess-2'
+    })
+    await messageHandler?.({ type: 'send', windowId: 5, containerId: 'c5', message: 'hi', initialSessionId: null })
+    const saveCall = mockParentPort.postMessage.mock.calls.find(([m]) => (m as { type: string }).type === 'save-message')
+    expect(saveCall?.[0]).toMatchObject({ role: 'claude', content: 'hello\n\nmore text' })
+  })
+
+  it('skips save-message when assistantText is empty', async () => {
+    mockRunClaudeCode.mockResolvedValueOnce({ output: 'ignored', assistantText: '', events: [], newSessionId: 'sess-3' })
+    await messageHandler?.({ type: 'send', windowId: 6, containerId: 'c6', message: 'hi', initialSessionId: null })
+    const saveCalls = mockParentPort.postMessage.mock.calls.filter(([m]) => (m as { type: string }).type === 'save-message')
+    expect(saveCalls).toHaveLength(0)
   })
 
   it('emits turn-complete with assistantText on completion', async () => {
