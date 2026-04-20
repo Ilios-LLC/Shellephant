@@ -217,7 +217,7 @@
 
 <footer class="detail-pane">
   <div class="toggle-row">
-    {#each (['claude', 'terminal', 'editor'] as const).filter(id => id !== 'claude' || win.window_type !== 'assisted') as id}
+    {#each (['claude', 'terminal', 'editor'] as const) as id}
       <button
         type="button"
         class="toggle-btn"

@@ -530,10 +530,9 @@ describe('WindowDetailPane', () => {
     })
   })
 
-  it('hides Claude toggle button for assisted windows', () => {
-    const assistedWin = { ...win, window_type: 'assisted' as const }
-    render(WindowDetailPane, { props: { win: assistedWin, project } })
-    expect(screen.queryByRole('button', { name: /^claude$/i })).toBeNull()
+  it('always shows Claude toggle button regardless of window_type', () => {
+    render(WindowDetailPane, { props: { win, project } })
+    expect(screen.getByRole('button', { name: /^claude$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^terminal$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^editor$/i })).toBeDefined()
   })
