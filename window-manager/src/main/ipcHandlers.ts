@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
+import type { PermissionMode } from '../shared/permissionMode'
 import { createWindow, listWindows, deleteWindow } from './windowService'
 import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, updateProjectPorts, updateProjectDefaultNetwork, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
@@ -368,7 +369,7 @@ export function registerIpcHandlers(): void {
       .all(windowId)
   })
 
-  ipcMain.handle('claude:send', async (event, windowId: number, message: string) => {
+  ipcMain.handle('claude:send', async (event, windowId: number, message: string, permissionMode?: PermissionMode) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const row = getDb()
       .prepare('SELECT container_id FROM windows WHERE id = ?')
@@ -379,7 +380,7 @@ export function registerIpcHandlers(): void {
       win?.webContents.send(channel, ...args)
     }
 
-    await sendToClaudeDirectly(windowId, row.container_id, message, sendToRenderer)
+    await sendToClaudeDirectly(windowId, row.container_id, message, sendToRenderer, permissionMode)
   })
 
   ipcMain.handle('claude:cancel', (_, windowId: number) => {
