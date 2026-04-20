@@ -116,7 +116,7 @@ function handleTurnComplete(msg: Record<string, unknown>, ctx: SendCtx): void {
   const status = (msg.error ? 'error' : 'success') as 'error' | 'success'
   const patch: Partial<TurnRecord> = {
     status, ended_at: endedAt, duration_ms: endedAt - startedAt,
-    ...(msg.error ? { error: msg.error as string } : {})
+    ...(msg.error ? { error: typeof msg.error === 'string' ? msg.error : String(msg.error) } : {})
   }
   updateTurn(turnId, patch)
   sendToRenderer('logs:turn-updated', { id: turnId, ...patch })
