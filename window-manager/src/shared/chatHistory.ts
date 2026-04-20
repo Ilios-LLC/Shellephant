@@ -1,12 +1,6 @@
-// Maps persisted `assisted_messages` rows to entries the Kimi loop can safely
-// replay as OpenAI chat messages.
-//
-// DB roles include `tool_call`, `tool_result`, and `ping_user` — none of which
-// are valid OpenAI chat roles. Replaying them raw corrupts the context on
-// turn 2+. We collapse everything to `user` / `assistant` plain-text messages,
-// accepting a lossy round-trip in exchange for a schema that stays valid.
-// The `tool_call_id` linkage is intentionally dropped because we don't
-// persist it; without it, a real `tool` role message would fail validation.
+// Maps persisted `assisted_messages` rows to entries Shellephant can replay.
+// New roles: shellephant, claude, claude-action.
+// Legacy roles (assistant, tool_call, tool_result, ping_user) kept for backward compat.
 
 export type ChatHistoryEntry = {
   role: 'user' | 'assistant'
@@ -17,14 +11,15 @@ export function mapDbRowToHistoryEntry(role: string, content: string): ChatHisto
   switch (role) {
     case 'user':
       return { role: 'user', content }
-    case 'assistant':
+    case 'shellephant':
+    case 'assistant': // legacy
       return { role: 'assistant', content }
-    case 'tool_call':
-      return { role: 'assistant', content: `(called run_claude_code: ${content})` }
-    case 'tool_result':
+    case 'tool_result': // legacy — treat as claude response
       return { role: 'user', content: `CC output: ${content}` }
-    case 'ping_user':
-      return { role: 'assistant', content: `(asked user: ${content})` }
+    case 'claude':
+    case 'claude-action':
+    case 'tool_call': // legacy
+    case 'ping_user': // legacy/removed
     default:
       return null
   }

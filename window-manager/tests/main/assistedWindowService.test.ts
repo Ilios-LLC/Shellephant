@@ -159,19 +159,48 @@ describe('sendToWindow — session continuity', () => {
 
   it('maps DB roles into OpenAI-valid history roles', async () => {
     mockDbAll.mockReturnValueOnce([
-      { role: 'user', content: 'hi' },
-      { role: 'assistant', content: 'hello' },
-      { role: 'tool_call', content: 'do thing' },
-      { role: 'tool_result', content: 'done' },
-      { role: 'ping_user', content: 'pick one?' }
+      { role: 'user', content: 'hi', metadata: null },
+      { role: 'shellephant', content: 'hello', metadata: null },
+      { role: 'claude-action', content: '', metadata: JSON.stringify({ summary: 'src/foo.ts', actionType: 'Write' }) },
+      { role: 'claude', content: 'done', metadata: null },
     ])
     await sendToWindow(52, 'c52', 'next', null, vi.fn())
     const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
     const history = (sendCall![0] as { conversationHistory: { role: string; content: string }[] }).conversationHistory
-    expect(history.map(h => h.role)).toEqual(['user', 'assistant', 'assistant', 'user', 'assistant'])
-    expect(history[2].content).toContain('run_claude_code')
-    expect(history[3].content).toContain('CC output:')
-    expect(history[4].content).toContain('asked user:')
+    expect(history.map(h => h.role)).toEqual(['user', 'assistant', 'user'])
+    expect(history[2].content).toContain('src/foo.ts')
+    expect(history[2].content).toContain('done')
+  })
+
+  it('maps shellephant role to assistant in history', async () => {
+    mockDbAll.mockReturnValueOnce([
+      { role: 'shellephant', content: 'I will help', metadata: null }
+    ])
+    await sendToWindow(60, 'c60', 'next', null, vi.fn())
+    const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
+    const history = (sendCall![0] as { conversationHistory: { role: string }[] }).conversationHistory
+    expect(history[0].role).toBe('assistant')
+  })
+
+  it('collapses claude-action + claude rows into a single user history entry', async () => {
+    mockDbAll.mockReturnValueOnce([
+      { role: 'claude-action', content: '', metadata: JSON.stringify({ actionType: 'Write', summary: 'src/foo.ts' }) },
+      { role: 'claude', content: 'Done writing the file.', metadata: null }
+    ])
+    await sendToWindow(61, 'c61', 'next', null, vi.fn())
+    const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
+    const history = (sendCall![0] as { conversationHistory: { role: string; content: string }[] }).conversationHistory
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe('user')
+    expect(history[0].content).toContain('src/foo.ts')
+    expect(history[0].content).toContain('Done writing the file.')
+  })
+
+  it('loads session_id from claude role rows', () => {
+    mockDbAll.mockReturnValueOnce([
+      { metadata: JSON.stringify({ session_id: 'sess-new', complete: true }) }
+    ])
+    expect(loadLastSessionId(99)).toBe('sess-new')
   })
 })
 

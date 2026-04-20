@@ -24,17 +24,42 @@ function getWorkerPath(): string {
 
 function loadHistory(windowId: number): ChatHistoryEntry[] {
   const rows = getDb()
-    .prepare('SELECT role, content FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
-    .all(windowId) as { role: string; content: string }[]
+    .prepare('SELECT role, content, metadata FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
+    .all(windowId) as { role: string; content: string; metadata: string | null }[]
+
   const entries: ChatHistoryEntry[] = []
+  let pendingActions: string[] = []
+
   for (const row of rows) {
+    if (row.role === 'claude-action') {
+      try {
+        const meta = JSON.parse(row.metadata ?? '{}') as { summary?: string; actionType?: string }
+        pendingActions.push(meta.summary ?? meta.actionType ?? 'action')
+      } catch {
+        pendingActions.push('action')
+      }
+      continue
+    }
+
+    if (row.role === 'claude') {
+      const prefix = pendingActions.length > 0
+        ? `[Claude did: ${pendingActions.join(', ')}] Response: `
+        : '[Claude]: '
+      entries.push({ role: 'user', content: prefix + row.content })
+      pendingActions = []
+      continue
+    }
+
+    // Orphaned actions before a non-claude role: discard
+    pendingActions = []
     const mapped = mapDbRowToHistoryEntry(row.role, row.content)
     if (mapped) entries.push(mapped)
   }
+
   return entries
 }
 
-// Returns the session_id from the newest run_claude_code tool_result that has
+// Returns the session_id from the newest claude or tool_result row that carries
 // a non-null session_id. Ordered by id (DESC) — created_at only has second
 // resolution and can tie across rapid-fire tool calls. The loop scans the last
 // 20 rows so a null-metadata row doesn't mask the real last session.
@@ -42,7 +67,7 @@ export function loadLastSessionId(windowId: number): string | null {
   const rows = getDb()
     .prepare(`
       SELECT metadata FROM assisted_messages
-      WHERE window_id = ? AND role = 'tool_result' AND metadata IS NOT NULL
+      WHERE window_id = ? AND role IN ('claude', 'tool_result') AND metadata IS NOT NULL
       ORDER BY id DESC LIMIT 20
     `)
     .all(windowId) as { metadata: string | null }[]
@@ -50,6 +75,7 @@ export function loadLastSessionId(windowId: number): string | null {
     if (!row.metadata) continue
     try {
       const parsed = JSON.parse(row.metadata) as { session_id?: string | null; tool_name?: string }
+      // Legacy tool_result rows require tool_name check; new claude rows don't have tool_name
       if (parsed.tool_name && parsed.tool_name !== 'run_claude_code') continue
       if (parsed.session_id) return parsed.session_id
     } catch {
