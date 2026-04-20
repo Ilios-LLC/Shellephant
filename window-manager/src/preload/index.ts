@@ -106,6 +106,14 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('fs:read-file', containerId, path),
   writeContainerFile: (containerId: string, path: string, content: string) =>
     ipcRenderer.invoke('fs:write-file', containerId, path, content),
+  createContainerFile: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:create-file', containerId, path),
+  createContainerDir: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:create-dir', containerId, path),
+  deleteContainerPath: (containerId: string, path: string) =>
+    ipcRenderer.invoke('fs:delete', containerId, path),
+  renameContainerPath: (containerId: string, oldPath: string, newPath: string) =>
+    ipcRenderer.invoke('fs:rename', containerId, oldPath, newPath),
   execInContainer: (containerId: string, cmd: string[]) =>
     ipcRenderer.invoke('fs:exec', containerId, cmd),
 
