@@ -146,6 +146,11 @@
     if (e.key === 'Enter') saveClaude()
     else if (e.key === 'Escape') onCancel()
   }
+
+  function onFireworksKey(e: KeyboardEvent): void {
+    if (e.key === 'Enter') saveFireworks()
+    else if (e.key === 'Escape') onCancel()
+  }
 </script>
 
 <div class="wizard">
@@ -260,7 +265,7 @@
         placeholder={fireworksStatus.configured ? 'Enter a new key to replace' : 'fw-...'}
         bind:value={fireworksInput}
         disabled={fireworksBusy}
-        onkeydown={(e) => { if (e.key === 'Enter') saveFireworks(); else if (e.key === 'Escape') onCancel() }}
+        onkeydown={onFireworksKey}
       />
       <p class="help">Required for Assisted windows. Get one at fireworks.ai.</p>
       <div class="row-actions">
