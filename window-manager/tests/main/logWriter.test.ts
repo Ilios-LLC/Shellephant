@@ -17,6 +17,7 @@ import {
   updateTurn,
   readEventsForTurn,
   rotateLogs,
+  __resetForTests,
   type LogEvent,
   type TurnRecord
 } from '../../src/main/logWriter'
@@ -30,6 +31,12 @@ beforeEach(() => {
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true })
   vi.clearAllMocks()
+  __resetForTests()
+})
+
+it('getLogFilePath throws if called before init', () => {
+  __resetForTests()
+  expect(() => getLogFilePath()).toThrow('logWriter not initialized')
 })
 
 describe('initLogWriter / getLogFilePath', () => {
@@ -40,8 +47,7 @@ describe('initLogWriter / getLogFilePath', () => {
     expect(p).toContain(tmpDir)
   })
 
-  it('getLogFilePath throws before init', () => {
-    // Reset module state by re-importing is complex; just test init clears it
+  it('getLogFilePath does not throw after init', () => {
     initLogWriter(tmpDir)
     expect(() => getLogFilePath()).not.toThrow()
   })

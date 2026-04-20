@@ -36,7 +36,11 @@ export type TurnRecord = {
 }
 
 export function writeEvent(logPath: string, event: LogEvent): void {
-  appendFileSync(logPath, JSON.stringify(event) + '\n')
+  try {
+    appendFileSync(logPath, JSON.stringify(event) + '\n')
+  } catch (err) {
+    console.error('[logWriter] writeEvent failed:', err)
+  }
 }
 
 export function insertTurn(turn: TurnRecord): void {
@@ -50,7 +54,7 @@ export function insertTurn(turn: TurnRecord): void {
 
 export function updateTurn(id: string, patch: Partial<TurnRecord>): void {
   const setClauses: string[] = []
-  const params: (string | number | null)[] = []
+  const params: unknown[] = []
 
   if (patch.status !== undefined) { setClauses.push('status = ?'); params.push(patch.status) }
   if (patch.ended_at !== undefined) { setClauses.push('ended_at = ?'); params.push(patch.ended_at) }
@@ -62,7 +66,7 @@ export function updateTurn(id: string, patch: Partial<TurnRecord>): void {
 
   getDb()
     .prepare(`UPDATE turns SET ${setClauses.join(', ')} WHERE id = ?`)
-    .run(...(params as []))
+    .run(...params)
 }
 
 export function readEventsForTurn(logPath: string, turnId: string): LogEvent[] {
@@ -72,12 +76,19 @@ export function readEventsForTurn(logPath: string, turnId: string): LogEvent[] {
       .split('\n')
       .filter(line => line.trim())
       .map(line => {
-        try { return JSON.parse(line) as LogEvent } catch { return null }
+        try { return JSON.parse(line) as LogEvent } catch (e) {
+          console.warn('[logWriter] skipped malformed log line:', e)
+          return null
+        }
       })
       .filter((e): e is LogEvent => e !== null && e.turnId === turnId)
   } catch {
     return []
   }
+}
+
+export function __resetForTests(): void {
+  _logDir = null
 }
 
 export function rotateLogs(logDir: string): void {
