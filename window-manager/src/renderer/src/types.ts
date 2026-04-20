@@ -1,3 +1,8 @@
+import type { TimelineEvent } from '../../shared/timelineEvent'
+export type { TimelineEvent, TimelineMetadata } from '../../shared/timelineEvent'
+export { isTimelineMetadata } from '../../shared/timelineEvent'
+export { DEFAULT_KIMI_SYSTEM_PROMPT } from '../../shared/defaultKimiPrompt'
+
 export type ContainerStatus = 'running' | 'stopped' | 'unknown'
 export type WindowStatus = ContainerStatus
 
@@ -20,6 +25,7 @@ export interface ProjectRecord {
   env_vars?: string | null
   group_id?: number | null
   default_network?: string | null
+  kimi_system_prompt?: string | null
   created_at: string
 }
 
@@ -30,6 +36,7 @@ export interface WindowRecord {
   container_id: string
   ports?: string
   network_id?: string | null
+  window_type: 'manual' | 'assisted'
   created_at: string
   status: WindowStatus
   projects: WindowProjectRecord[]
@@ -67,6 +74,15 @@ export interface WindowProjectRecord {
   git_url?: string
 }
 
+export interface AssistedMessage {
+  id: number
+  window_id: number
+  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user'
+  content: string
+  metadata: string | null
+  created_at: string
+}
+
 export interface Api {
   // Projects
   createProject: (name: string, gitUrl: string, ports?: PortMapping[]) => Promise<ProjectRecord>
@@ -82,7 +98,7 @@ export interface Api {
   listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
-  createWindow: (name: string, projectIds: number[], withDeps?: boolean, branchOverrides?: Record<number, string>, networkName?: string) => Promise<WindowRecord>
+  createWindow: (name: string, projectIds: number[], withDeps?: boolean, branchOverrides?: Record<number, string>, windowType?: 'manual' | 'assisted', networkName?: string) => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
   onWindowCreateProgress: (callback: (step: string) => void) => void
@@ -122,6 +138,32 @@ export interface Api {
   getClaudeTokenStatus: () => Promise<TokenStatus>
   setClaudeToken: (token: string) => Promise<TokenStatus>
   clearClaudeToken: () => Promise<TokenStatus>
+
+  // Assisted window API
+  assistedSend: (windowId: number, message: string) => Promise<void>
+  assistedCancel: (windowId: number) => Promise<void>
+  assistedResume: (windowId: number, message: string) => Promise<void>
+  assistedHistory: (windowId: number) => Promise<AssistedMessage[]>
+  onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) => void
+  offAssistedStreamEvent: () => void
+  onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) => void
+  offAssistedKimiDelta: () => void
+  onAssistedPingUser: (callback: (windowId: number, message: string) => void) => void
+  offAssistedPingUser: () => void
+  onAssistedToolCall: (callback: (windowId: number, toolName: string, message: string) => void) => void
+  offAssistedToolCall: () => void
+  onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) => void
+  offAssistedTurnComplete: () => void
+
+  // Settings — Fireworks
+  getFireworksKeyStatus: () => Promise<TokenStatus>
+  setFireworksKey: (key: string) => Promise<TokenStatus>
+  clearFireworksKey: () => Promise<TokenStatus>
+
+  // Settings — Kimi system prompt
+  getKimiSystemPrompt: () => Promise<string | null>
+  setKimiSystemPrompt: (prompt: string) => Promise<void>
+  setProjectKimiSystemPrompt: (projectId: number, prompt: string | null) => Promise<void>
 
   // Terminal
   openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType?: string) => Promise<void>

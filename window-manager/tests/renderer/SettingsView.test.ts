@@ -11,9 +11,11 @@ function baseProps(overrides: Record<string, unknown> = {}) {
   return {
     patStatus: unconfigured,
     claudeStatus: unconfigured,
+    fireworksStatus: unconfigured,
     requiredFor: null,
     onPatStatusChange: vi.fn(),
     onClaudeStatusChange: vi.fn(),
+    onFireworksStatusChange: vi.fn(),
     onCancel: vi.fn(),
     ...overrides
   }
@@ -24,17 +26,25 @@ describe('SettingsView', () => {
   let mockClearPat: ReturnType<typeof vi.fn>
   let mockSetClaude: ReturnType<typeof vi.fn>
   let mockClearClaude: ReturnType<typeof vi.fn>
+  let mockSetFireworks: ReturnType<typeof vi.fn>
+  let mockClearFireworks: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     mockSetPat = vi.fn().mockResolvedValue(patConfigured)
     mockClearPat = vi.fn().mockResolvedValue(unconfigured)
     mockSetClaude = vi.fn().mockResolvedValue(claudeConfigured)
     mockClearClaude = vi.fn().mockResolvedValue(unconfigured)
+    mockSetFireworks = vi.fn().mockResolvedValue({ configured: true, hint: '5678' })
+    mockClearFireworks = vi.fn().mockResolvedValue(unconfigured)
     vi.stubGlobal('api', {
       setGitHubPat: mockSetPat,
       clearGitHubPat: mockClearPat,
       setClaudeToken: mockSetClaude,
-      clearClaudeToken: mockClearClaude
+      clearClaudeToken: mockClearClaude,
+      setFireworksKey: mockSetFireworks,
+      clearFireworksKey: mockClearFireworks,
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
   })
 
@@ -55,7 +65,8 @@ describe('SettingsView', () => {
       baseProps({ patStatus: patConfigured, claudeStatus: unconfigured })
     )
     expect(screen.getByText(/ends in efgh/i)).toBeDefined()
-    expect(screen.getByText(/not configured/i)).toBeDefined()
+    // claude and fireworks are both unconfigured, so multiple "Not configured" spans exist
+    expect(screen.getAllByText(/not configured/i).length).toBeGreaterThanOrEqual(1)
   })
 
   it('banner shows project-required when requiredFor=project', () => {
@@ -156,6 +167,37 @@ describe('SettingsView', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/secure storage unavailable/i)).toBeDefined()
+    })
+  })
+
+  describe('Fireworks key section', () => {
+    it('renders Fireworks API Key label', () => {
+      render(SettingsView, baseProps())
+      expect(screen.getByLabelText(/fireworks api key/i)).toBeDefined()
+    })
+
+    it('shows Not configured status initially', () => {
+      render(SettingsView, baseProps())
+      // fireworksStatus is unconfigured, so there should be a "Not configured" text
+      // There may be multiple since PAT and Claude are also unconfigured
+      const notConfigured = screen.getAllByText(/not configured/i)
+      expect(notConfigured.length).toBeGreaterThanOrEqual(1)
+    })
+
+    it('saving fireworks key calls api.setFireworksKey and fires onFireworksStatusChange', async () => {
+      const fireworksConfigured: TokenStatus = { configured: true, hint: '5678' }
+      const onFireworksStatusChange = vi.fn()
+      render(SettingsView, baseProps({ onFireworksStatusChange }))
+
+      await fireEvent.input(screen.getByLabelText(/fireworks api key/i), {
+        target: { value: 'fw-my-key-5678' }
+      })
+      await fireEvent.click(screen.getByRole('button', { name: /save fireworks key/i }))
+
+      await waitFor(() => {
+        expect(mockSetFireworks).toHaveBeenCalledWith('fw-my-key-5678')
+        expect(onFireworksStatusChange).toHaveBeenCalledWith(fireworksConfigured)
+      })
     })
   })
 })

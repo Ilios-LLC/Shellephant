@@ -26,8 +26,11 @@ export async function pollOnce(
 
 function getMonitoredContainerIds(): string[] {
   try {
+    // Only manual windows should trigger the "Claude is waiting" notification.
+    // Assisted windows surface user alerts exclusively through the assistant's
+    // ping_user tool (see assistedWindowService); their CC turns must stay silent.
     const rows = getDb()
-      .prepare('SELECT container_id FROM windows WHERE deleted_at IS NULL')
+      .prepare("SELECT container_id FROM windows WHERE deleted_at IS NULL AND window_type = 'manual'")
       .all() as { container_id: string }[]
     return rows.map((r) => r.container_id)
   } catch {

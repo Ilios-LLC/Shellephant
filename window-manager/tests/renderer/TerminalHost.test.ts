@@ -109,6 +109,10 @@ vi.mock('../../src/renderer/src/components/ResizeHandle.svelte', () => ({
   default: vi.fn(() => ({}))
 }))
 
+vi.mock('../../src/renderer/src/components/AssistedPanel.svelte', () => ({
+  default: vi.fn(() => ({}))
+}))
+
 import TerminalHost from '../../src/renderer/src/components/TerminalHost.svelte'
 
 const mockWindow: WindowRecord = {
@@ -118,6 +122,7 @@ const mockWindow: WindowRecord = {
   container_id: 'container123abc',
   created_at: '2026-01-01T00:00:00Z',
   status: 'running',
+  window_type: 'manual',
   projects: []
 }
 
@@ -542,6 +547,16 @@ describe('TerminalHost', () => {
     render(TerminalHost, { win: mockWindow, project: mockProject })
     expect(screen.getByRole('button', { name: /^commit$/i })).not.toBeDisabled()
   })
+
+  it('renders AssistedPanel instead of Claude xterm for assisted windows', async () => {
+    const assistedWin = { ...mockWindow, window_type: 'assisted' as const }
+    render(TerminalHost, { win: assistedWin, project: mockProject })
+    await vi.waitFor(() => expect(mockApi.onTerminalData).toHaveBeenCalled())
+    // AssistedPanel mock renders — no claude openTerminal call
+    const claudeCalls = (mockApi.openTerminal.mock.calls as unknown[][]).filter(c => c[4] === 'claude')
+    expect(claudeCalls).toHaveLength(0)
+    expect(document.querySelector('.terminal-inner')).toBeNull()
+  })
 })
 
 describe('multi-project TerminalHost', () => {
@@ -552,6 +567,7 @@ describe('multi-project TerminalHost', () => {
     container_id: 'container-multi',
     created_at: '2026-01-01T00:00:00Z',
     status: 'running',
+    window_type: 'manual',
     projects: [
       { id: 1, window_id: 2, project_id: 10, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
       { id: 2, window_id: 2, project_id: 11, clone_path: '/workspace/repo-b', project_name: 'Repo B' }

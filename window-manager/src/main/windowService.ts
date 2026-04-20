@@ -1,4 +1,8 @@
 import Dockerode from 'dockerode'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { existsSync } from 'fs'
+import path from 'path'
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getGitHubPat, getClaudeToken } from './settingsService'
@@ -9,6 +13,8 @@ import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug, ap
 import { getDocker } from './docker'
 import { listDependencies, listWindowDepContainers } from './dependencyService'
 import type { PortMapping } from './projectService'
+
+const execFileAsync = promisify(execFile)
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -28,6 +34,7 @@ export interface WindowRecord {
   container_id: string
   ports?: string
   network_id?: string
+  window_type: 'manual' | 'assisted'
   created_at: string
   status: WindowStatus
   projects: WindowProjectRecord[]
@@ -46,6 +53,26 @@ interface DepContainerRecord {
   depId: number
   containerId: string
   container: Dockerode.Container
+}
+
+// The wrapper script is baked into the `cc` image at build time
+// (files/Dockerfile), but image rebuilds lag behind edits to files/cw-claude-sdk.js —
+// running containers end up with a stale wrapper that breaks CC session
+// persistence (session_id stops flowing through the stdout `session_final`
+// event). Inject the current host copy after `container.start()` so every
+// assisted window gets the wrapper that matches the checked-in worker.
+function resolveClaudeSdkWrapperPath(): string {
+  if (process.resourcesPath) {
+    const packaged = path.join(process.resourcesPath, 'cw-claude-sdk.js')
+    if (existsSync(packaged)) return packaged
+  }
+  return path.join(__dirname, '../../../files/cw-claude-sdk.js')
+}
+
+async function injectClaudeSdkWrapper(containerId: string): Promise<void> {
+  const src = resolveClaudeSdkWrapperPath()
+  if (!existsSync(src)) throw new Error(`cw-claude-sdk.js not found at ${src}`)
+  await execFileAsync('docker', ['cp', src, `${containerId}:/usr/local/bin/cw-claude-sdk.js`])
 }
 
 async function pullImage(imageRef: string): Promise<void> {
@@ -182,6 +209,7 @@ export async function createWindow(
   withDeps: boolean = false,
   branchOverrides: Record<number, string> = {},
   onProgress: ProgressReporter = () => {},
+  windowType: 'manual' | 'assisted' = 'manual',
   networkName: string = ''
 ): Promise<WindowRecord> {
   const ids = Array.isArray(projectIds) ? projectIds : [projectIds]
@@ -240,6 +268,10 @@ export async function createWindow(
     })
     await container.start()
 
+    if (windowType === 'assisted') {
+      await injectClaudeSdkWrapper(container.id)
+    }
+
     if (networkId) {
       await getDocker().getNetwork(networkId).connect({ Container: container.id })
     } else if (networkName) {
@@ -263,7 +295,7 @@ export async function createWindow(
     }
 
     onProgress('Finalizing…')
-    return persistWindow(name, ids, projectConfigs.map(c => c.clonePath), container, portsJson, networkId, depContainerRecords)
+    return persistWindow(name, ids, projectConfigs.map(c => c.clonePath), container, portsJson, networkId, depContainerRecords, windowType)
   } catch (err) {
     await cleanupDepContainers(depContainerRecords, networkId)
     if (container) {
@@ -281,15 +313,16 @@ function persistWindow(
   container: Dockerode.Container,
   portsJson: string | null,
   networkId: string | null,
-  depContainerRecords: DepContainerRecord[]
+  depContainerRecords: DepContainerRecord[],
+  windowType: 'manual' | 'assisted' = 'manual'
 ): WindowRecord {
   const db = getDb()
   const isMulti = projectIds.length > 1
   const projectId = isMulti ? null : projectIds[0]
 
   const result = db
-    .prepare('INSERT INTO windows (name, project_id, container_id, ports, network_id) VALUES (?, ?, ?, ?, ?)')
-    .run(name, projectId, container.id, portsJson, networkId)
+    .prepare('INSERT INTO windows (name, project_id, container_id, ports, network_id, window_type) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(name, projectId, container.id, portsJson, networkId, windowType)
   const id = result.lastInsertRowid as number
   statusMap.set(id, 'running')
 
@@ -314,6 +347,7 @@ function persistWindow(
     project_id: projectId,
     container_id: container.id,
     ports: portsJson ?? undefined,
+    window_type: windowType,
     created_at: new Date().toISOString(),
     status: 'running' as WindowStatus,
     projects: wpRows
@@ -374,7 +408,7 @@ export async function reconcileWindows(): Promise<void> {
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
   let windowQuery =
-    'SELECT id, name, project_id, container_id, ports, network_id, created_at FROM windows WHERE deleted_at IS NULL'
+    'SELECT id, name, project_id, container_id, ports, network_id, window_type, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {
