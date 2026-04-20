@@ -108,10 +108,18 @@ async function handlePingUser(
   parentPort?.postMessage({ type: 'ping-user', windowId, message: args.message })
   parentPort?.postMessage({ type: 'save-message', windowId, role: 'ping_user', content: args.message, metadata: null })
 
+  // Use filtered on-listener to prevent race condition when multiple windows are running.
+  // The parent must send `{ type: 'resume', windowId, message }` in the resume message.
+  // Note: when assistedWindowService.ts wires up IPC, worker.postMessage({ type: 'resume', message })
+  // must become worker.postMessage({ type: 'resume', windowId, message }) to include the window ID.
   const userReply = await new Promise<string>((resolve) => {
-    parentPort?.once('message', (msg: { type: string; message: string }) => {
-      if (msg.type === 'resume') resolve(msg.message)
-    })
+    const handler = (msg: { type: string; windowId: number; message: string }) => {
+      if (msg.type === 'resume' && msg.windowId === windowId) {
+        parentPort?.removeListener('message', handler)
+        resolve(msg.message)
+      }
+    }
+    parentPort?.on('message', handler)
   })
 
   messages.push({ role: 'user', content: userReply })
