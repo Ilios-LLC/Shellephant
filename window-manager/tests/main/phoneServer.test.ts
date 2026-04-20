@@ -18,6 +18,19 @@ describe('getPhoneServerHtml', () => {
   it('returns HTML containing /api/windows fetch', () => {
     expect(getPhoneServerHtml()).toContain('/api/windows')
   })
+
+  it('returns HTML with Claude and Terminal tab buttons', () => {
+    const html = getPhoneServerHtml()
+    expect(html).toContain('data-tab="claude"')
+    expect(html).toContain('data-tab="terminal"')
+  })
+
+  it('returns HTML using explicit /ws/:id/:sessionType routes', () => {
+    const html = getPhoneServerHtml()
+    expect(html).toContain('/ws/')
+    expect(html).toContain('/claude')
+    expect(html).toContain('/terminal')
+  })
 })
 
 import * as os from 'os'
