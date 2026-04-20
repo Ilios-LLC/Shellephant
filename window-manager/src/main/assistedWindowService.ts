@@ -4,6 +4,7 @@ import { BrowserWindow, Notification } from 'electron'
 import { getFireworksKey, getKimiSystemPrompt } from './settingsService'
 import { getDb } from './db'
 import { isUserWatching } from './focusState'
+import { getWaitingInfoByContainerId } from './windowService'
 import { resolveKimiSystemPrompt } from '../shared/defaultKimiPrompt'
 import type { ChatHistoryEntry } from '../shared/chatHistory'
 import { mapDbRowToHistoryEntry } from '../shared/chatHistory'
@@ -142,10 +143,14 @@ export async function sendToWindow(
         // No text → tool-only turn → no alert. Silent when user is watching.
         const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
         if (assistantText) {
-          const focusedWin = BrowserWindow.getFocusedWindow()
-          if (!focusedWin || !isUserWatching(containerId, focusedWin)) {
+          const win = BrowserWindow.getAllWindows()[0]
+          if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
             const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
             new Notification({ title: 'Shellephant responded', body }).show()
+            if (win && !win.isDestroyed()) {
+              const info = getWaitingInfoByContainerId(containerId)
+              if (info) win.webContents.send('terminal:waiting', info)
+            }
           }
         }
         workers.delete(windowId)
