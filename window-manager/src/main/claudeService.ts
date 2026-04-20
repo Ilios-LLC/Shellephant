@@ -1,6 +1,7 @@
 import { Worker } from 'worker_threads'
 import path from 'path'
 import { getDb } from './db'
+import { loadLastSessionId } from './assistedWindowService'
 
 const workers = new Map<number, Worker>()
 
@@ -17,26 +18,6 @@ function saveMessage(windowId: number, role: string, content: string, metadata: 
     .run(windowId, role, content, metadata)
 }
 
-function loadLastSessionId(windowId: number): string | null {
-  const rows = getDb()
-    .prepare(
-      `SELECT metadata FROM assisted_messages
-       WHERE window_id = ? AND role IN ('claude', 'tool_result') AND metadata IS NOT NULL
-       ORDER BY id DESC LIMIT 20`
-    )
-    .all(windowId) as { metadata: string | null }[]
-  for (const row of rows) {
-    if (!row.metadata) continue
-    try {
-      const parsed = JSON.parse(row.metadata) as { session_id?: string | null; tool_name?: string }
-      if (parsed.tool_name && parsed.tool_name !== 'run_claude_code') continue
-      if (parsed.session_id) return parsed.session_id
-    } catch {
-      continue
-    }
-  }
-  return null
-}
 
 export async function sendToClaudeDirectly(
   windowId: number,
