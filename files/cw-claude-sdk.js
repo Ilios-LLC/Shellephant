@@ -22,14 +22,17 @@ async function main() {
   let initSessionId = null
   let resultSessionId = null
 
+  // Mark this process as an SDK run so Stop hooks in settings.json can bail out
+  // early without touching /tmp/claude-waiting or running summarization.  This
+  // lets settings.json load normally (plugins/skills still inject) while keeping
+  // the tmux-CLI waiting-alert and summarize hooks suppressed for internal
+  // Shellephant→Claude turns.  CLI sessions never set this var, so their hooks
+  // fire as usual.
+  process.env.CW_SDK_RUN = '1'
+
   const options = {
     permissionMode: 'bypassPermissions',
     includePartialMessages: true,
-    // Skip settings.json entirely so the tmux-CLI Stop hook (touch /tmp/claude-waiting)
-    // does not fire during SDK runs — avoids waitingPoller firing a "Claude is waiting"
-    // notification for internal Shellephant→Claude turns. The terminal panel still
-    // reads settings.json via the claude CLI, so tmux users keep their waiting alerts.
-    settingSources: [],
     ...(sessionId ? { resume: sessionId } : {})
   }
 
