@@ -37,6 +37,18 @@ export function parseDockerOutput(stdout: string, stderr: string): { outputLines
   return { outputLines, sessionId }
 }
 
+function makeEmitter(
+  turnId: string,
+  logPath: string,
+  windowId: number
+): (eventType: string, payload?: Record<string, unknown>) => void {
+  return function emitEvent(eventType: string, payload?: Record<string, unknown>): void {
+    const event: LogEvent = { turnId, windowId, eventType, ts: Date.now(), payload }
+    writeEvent(logPath, event)
+    parentPort?.postMessage({ type: 'log-event', event })
+  }
+}
+
 type KimiLoopData = {
   windowId: number
   containerId: string
@@ -45,8 +57,8 @@ type KimiLoopData = {
   initialSessionId?: string | null
   systemPrompt: string
   fireworksKey: string
-  turnId: string
-  logPath: string
+  turnId?: string
+  logPath?: string
 }
 
 type ToolCallAccum = { id: string; name: string; arguments: string }
@@ -72,11 +84,7 @@ async function handleRunClaudeCode(
   let events: TimelineEvent[] = []
   let newActiveSessionId = activeSessionId
 
-  function emitEvent(eventType: string, payload?: Record<string, unknown>): void {
-    const event: LogEvent = { turnId, windowId, eventType, ts: Date.now(), payload }
-    writeEvent(logPath, event)
-    parentPort?.postMessage({ type: 'log-event', event })
-  }
+  const emitEvent = makeEmitter(turnId, logPath, windowId)
 
   try {
     const result = await runClaudeCode(containerId, activeSessionId, args.message, {
@@ -146,13 +154,9 @@ async function processStreamChunk(
 }
 
 async function kimiLoop(data: KimiLoopData): Promise<void> {
-  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey, turnId, logPath } = data
+  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey, turnId = '', logPath = '' } = data
 
-  function emitEvent(eventType: string, payload?: Record<string, unknown>): void {
-    const event: LogEvent = { turnId, windowId, eventType, ts: Date.now(), payload }
-    writeEvent(logPath, event)
-    parentPort?.postMessage({ type: 'log-event', event })
-  }
+  const emitEvent = makeEmitter(turnId, logPath, windowId)
 
   emitEvent('turn_start')
 
