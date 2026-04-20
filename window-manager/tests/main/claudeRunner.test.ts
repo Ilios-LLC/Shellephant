@@ -88,4 +88,27 @@ describe('runClaudeCode', () => {
       expect.objectContaining({ type: 'claude:event', event: fakeEvent })
     )
   })
+
+  it('uses custom eventType when provided', async () => {
+    const { StreamFilterBuffer } = await import('../../src/main/assistedStreamFilter')
+    const fakeEvent = { kind: 'text_delta', text: 'x', ts: 1, blockKey: 'k' }
+    const mockBuffer = {
+      push: vi.fn().mockReturnValue({ displayChunks: [], contextChunks: [], events: [fakeEvent], sessionId: null }),
+      flush: vi.fn().mockReturnValue({ displayChunks: [], contextChunks: [], events: [], sessionId: null })
+    };
+    (StreamFilterBuffer as ReturnType<typeof vi.fn>).mockImplementationOnce(function (this: typeof mockBuffer) {
+      this.push = mockBuffer.push
+      this.flush = mockBuffer.flush
+    })
+
+    const { child, emitStdout, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg', { eventType: 'claude-to-shellephant:event' })
+    emitStdout('{"type":"assistant"}\n')
+    close(0)
+    await promise
+    expect(mockParentPort.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'claude-to-shellephant:event', event: fakeEvent })
+    )
+  })
 })

@@ -17,7 +17,9 @@ export function mapDbRowToHistoryEntry(role: string, content: string): ChatHisto
     case 'tool_result': // legacy — treat as claude response
       return { role: 'user', content: `CC output: ${content}` }
     case 'claude':
+    case 'claude-to-shellephant':
     case 'claude-action':
+    case 'claude-to-shellephant-action':
     case 'tool_call': // legacy
     case 'ping_user': // legacy/removed
     default:

@@ -33,10 +33,10 @@ describe('claudeDirectWorker', () => {
     )
   })
 
-  it('emits turn-complete on completion', async () => {
+  it('emits turn-complete with assistantText on completion', async () => {
     await messageHandler?.({ type: 'send', windowId: 3, containerId: 'c3', message: 'hi', initialSessionId: null })
     expect(mockParentPort.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'turn-complete', windowId: 3 })
+      expect.objectContaining({ type: 'turn-complete', windowId: 3, assistantText: 'done' })
     )
   })
 

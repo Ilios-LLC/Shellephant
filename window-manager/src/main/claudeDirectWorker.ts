@@ -21,7 +21,7 @@ parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>
       content: output,
       metadata: JSON.stringify({ session_id: newSessionId, complete: true })
     })
-    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId })
+    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId, assistantText: output })
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     parentPort?.postMessage({

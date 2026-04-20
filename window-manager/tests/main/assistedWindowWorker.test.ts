@@ -265,9 +265,14 @@ describe('kimiLoop — single run_claude_code per turn', () => {
 
     const claudeResultSaves = mockParentPort.postMessage.mock.calls
       .map(c => c[0] as { type: string; role?: string; content?: string })
-      .filter(m => m.type === 'save-message' && m.role === 'claude')
-    // One real claude-role save from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
+      .filter(m => m.type === 'save-message' && m.role === 'claude-to-shellephant')
+    // One real claude-to-shellephant-role save from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
     expect(claudeResultSaves).toHaveLength(1)
+
+    const claudeToShellephantEvents = mockParentPort.postMessage.mock.calls
+      .map(c => c[0] as { type: string })
+      .filter(m => m.type === 'claude-to-shellephant:event')
+    expect(claudeToShellephantEvents.length).toBeGreaterThan(0)
   })
 
   it('seeds activeSessionId from initialSessionId so the first CC call resumes', async () => {

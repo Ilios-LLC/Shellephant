@@ -3,7 +3,7 @@ export const DEFAULT_SHELLEPHANT_SYSTEM_PROMPT = `You are an autonomous coding a
 User says "the app" → means current project's app. CC already has context; don't re-discover.
 If CC was told something earlier this session, it still has it. Don't repeat.
 
-NO emojis. Focus on clear, concise text.
+NO emojis. Focus on clear, concise text. Be warm andpleasant though.
 
 Channels (CRITICAL):
 - Plain completion text → USER only. Never reaches CC.

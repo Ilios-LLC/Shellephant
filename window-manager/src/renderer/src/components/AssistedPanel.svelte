@@ -12,7 +12,7 @@
 
   interface DisplayMessage {
     id: number
-    role: 'user' | 'shellephant' | 'claude' | 'claude-action'
+    role: 'user' | 'shellephant' | 'claude' | 'claude-action' | 'shellephant-to-claude' | 'claude-to-shellephant' | 'claude-to-shellephant-action'
     content: string
     metadata: string | null
     streaming?: boolean
@@ -40,7 +40,10 @@
       case 'assistant': return 'shellephant'
       case 'claude': return 'claude'
       case 'claude-action': return 'claude-action'
+      case 'claude-to-shellephant': return 'claude-to-shellephant'
+      case 'claude-to-shellephant-action': return 'claude-to-shellephant-action'
       case 'tool_result': return 'claude'
+      case 'tool_call': return 'shellephant-to-claude'
       default: return null
     }
   }
@@ -56,6 +59,48 @@
     window.api.offClaudeDelta?.()
     window.api.offClaudeAction?.()
     window.api.offClaudeTurnComplete?.()
+    window.api.offClaudeError?.()
+    window.api.offClaudeToShellephantDelta?.()
+    window.api.offClaudeToShellephantAction?.()
+    window.api.offClaudeToShellephantTurnComplete?.()
+    window.api.offShellephantToClaude?.()
+
+    window.api.onClaudeToShellephantDelta?.((wid: number, chunk: string) => {
+      if (!mountActive || wid !== windowId) return
+      const last = messages[messages.length - 1]
+      if (last?.role === 'claude-to-shellephant' && last.streaming) {
+        messages[messages.length - 1] = { ...last, content: last.content + chunk }
+      } else {
+        messages = [...messages, { id: nextId(), role: 'claude-to-shellephant', content: chunk, metadata: null, streaming: true }]
+      }
+    })
+
+    window.api.onClaudeToShellephantAction?.((wid: number, action: { actionType: string; summary: string; detail: string }) => {
+      if (!mountActive || wid !== windowId) return
+      messages = [...messages, {
+        id: nextId(),
+        role: 'claude-to-shellephant-action',
+        content: '',
+        metadata: JSON.stringify(action),
+        expanded: false
+      }]
+    })
+
+    window.api.onClaudeToShellephantTurnComplete?.((wid: number) => {
+      if (!mountActive || wid !== windowId) return
+      messages = messages.map(m => m.role === 'claude-to-shellephant' ? { ...m, streaming: false } : m)
+    })
+
+    window.api.onClaudeError?.((wid: number, error: string) => {
+      if (!mountActive || wid !== windowId) return
+      messages = [...messages, { id: nextId(), role: 'claude', content: `Error: ${error}`, metadata: null }]
+      if (currentRecipient === 'claude') running = false
+    })
+
+    window.api.onShellephantToClaude((wid: number, message: string) => {
+      if (!mountActive || wid !== windowId) return
+      messages = [...messages, { id: nextId(), role: 'shellephant-to-claude', content: message, metadata: null }]
+    })
 
     window.api.onAssistedKimiDelta((wid: number, delta: string) => {
       if (!mountActive || wid !== windowId) return
@@ -129,6 +174,11 @@
     window.api.offClaudeDelta?.()
     window.api.offClaudeAction?.()
     window.api.offClaudeTurnComplete?.()
+    window.api.offClaudeError?.()
+    window.api.offClaudeToShellephantDelta?.()
+    window.api.offClaudeToShellephantAction?.()
+    window.api.offClaudeToShellephantTurnComplete?.()
+    window.api.offShellephantToClaude?.()
   })
 
   async function send(): Promise<void> {
@@ -218,12 +268,22 @@
           <div class="sender-tag">Shellephant</div>
           <div class="bubble-content">{msg.content}</div>
         </div>
+      {:else if msg.role === 'shellephant-to-claude'}
+        <div class="msg sender-bubble shellephant-to-claude">
+          <div class="sender-tag">Shellephant → Claude</div>
+          <div class="bubble-content">{msg.content}</div>
+        </div>
       {:else if msg.role === 'claude'}
         <div class="msg sender-bubble claude">
           <div class="sender-tag">Claude</div>
           <div class="bubble-content">{msg.content}</div>
         </div>
-      {:else if msg.role === 'claude-action'}
+      {:else if msg.role === 'claude-to-shellephant'}
+        <div class="msg sender-bubble claude-to-shellephant">
+          <div class="sender-tag">Claude → Shellephant</div>
+          <div class="bubble-content">{msg.content}</div>
+        </div>
+      {:else if msg.role === 'claude-action' || msg.role === 'claude-to-shellephant-action'}
         <div class="msg claude-action">
           <button class="action-toggle" onclick={() => toggleExpand(msg.id)} type="button">
             {msg.expanded ? '▾' : '▸'} {getActionLabel(msg.metadata)}
@@ -347,6 +407,20 @@
 
   .shellephant .sender-tag { color: rgb(96, 165, 250); }
   .claude .sender-tag { color: rgb(52, 211, 153); }
+  .shellephant-to-claude .sender-tag { color: rgb(167, 139, 250); }
+  .claude-to-shellephant .sender-tag { color: rgb(45, 212, 191); }
+
+  .sender-bubble.shellephant-to-claude {
+    background: rgba(167, 139, 250, 0.08);
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    color: var(--fg-0);
+  }
+
+  .sender-bubble.claude-to-shellephant {
+    background: rgba(45, 212, 191, 0.06);
+    border: 1px dashed rgba(45, 212, 191, 0.35);
+    color: var(--fg-0);
+  }
 
   .bubble-content { white-space: pre-wrap; }
 

@@ -67,7 +67,7 @@ async function handleRunClaudeCode(
   let newActiveSessionId = activeSessionId
 
   try {
-    const result = await runClaudeCode(containerId, activeSessionId, args.message)
+    const result = await runClaudeCode(containerId, activeSessionId, args.message, { eventType: 'claude-to-shellephant:event' })
     output = result.output
     events = result.events
     newActiveSessionId = result.newSessionId ?? activeSessionId
@@ -78,11 +78,11 @@ async function handleRunClaudeCode(
     // docker exec fails — otherwise the tool_call bubble sits next to nothing.
     const errorEvent: TimelineEvent = { kind: 'result', text: output, isError: true, ts: Date.now() }
     events = [errorEvent]
-    parentPort?.postMessage({ type: 'claude:event', event: errorEvent })
+    parentPort?.postMessage({ type: 'claude-to-shellephant:event', event: errorEvent })
   }
 
   parentPort?.postMessage({
-    type: 'save-message', windowId, role: 'claude', content: output,
+    type: 'save-message', windowId, role: 'claude-to-shellephant', content: output,
     metadata: JSON.stringify({
       schemaVersion: 1,
       session_id: newActiveSessionId,
@@ -91,7 +91,7 @@ async function handleRunClaudeCode(
       events
     })
   })
-  parentPort?.postMessage({ type: 'claude:turn-complete', windowId })
+  parentPort?.postMessage({ type: 'claude-to-shellephant:turn-complete', windowId })
   return { toolResult: output, newActiveSessionId }
 }
 
