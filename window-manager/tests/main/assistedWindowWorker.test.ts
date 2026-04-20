@@ -24,6 +24,15 @@ vi.mock('openai', () => ({
   })
 }))
 
+// Mock claudeRunner so kimiLoop tests can override runClaudeCode per-test
+vi.mock('../../src/main/claudeRunner', async (importActual) => {
+  const actual = await importActual<typeof import('../../src/main/claudeRunner')>()
+  return { ...actual, runClaudeCode: vi.fn(actual.runClaudeCode) }
+})
+
+// Mock logWriter to prevent real file I/O during tests
+vi.mock('../../src/main/logWriter', () => ({ writeEvent: vi.fn() }))
+
 import { resolveSystemPrompt, buildShellephantTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
 import { runClaudeCode } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
@@ -352,5 +361,50 @@ describe('kimiLoop — single run_claude_code per turn', () => {
     // The docker exec args must include the prior session id (3rd positional arg after `exec <container> node <script>`).
     const spawnArgs = mockSpawn.mock.calls[0][1] as string[]
     expect(spawnArgs).toContain('sess-prior')
+  })
+})
+
+describe('turn observability', () => {
+  const obsHandlerRef: { current: ((msg: Record<string, unknown>) => Promise<void>) | null } = { current: null }
+  const firstOnCallObs = mockParentPort.on.mock.calls.find(c => c[0] === 'message')
+  if (firstOnCallObs) obsHandlerRef.current = firstOnCallObs[1] as (msg: Record<string, unknown>) => Promise<void>
+
+  beforeEach(() => {
+    mockParentPort.postMessage.mockClear()
+    mockCreate.mockReset()
+  })
+
+  it('posts log-event with exec_start when runClaudeCode fires onExecEvent', async () => {
+    // Use an empty stream so kimiLoop exits after the tool call
+    mockCreate.mockResolvedValueOnce(makeToolCallStream([
+      { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ message: 'do the thing' }) }
+    ])).mockResolvedValueOnce(makeEmptyStream())
+
+    vi.mocked(runClaudeCode).mockImplementationOnce(async (_cid, _sid, _msg, opts) => {
+      opts?.onExecEvent?.('exec_start', { containerId: 'c1', command: 'docker exec', ts: 1000 })
+      return { output: 'done', assistantText: '', events: [], newSessionId: null }
+    })
+
+    const handler = obsHandlerRef.current
+    expect(handler).toBeDefined()
+
+    await handler!({
+      type: 'send',
+      windowId: 1,
+      containerId: 'c1',
+      message: 'do the thing',
+      conversationHistory: [],
+      initialSessionId: null,
+      systemPrompt: 'you are helpful',
+      fireworksKey: 'fw-test',
+      turnId: 'turn-test',
+      logPath: '/tmp/test.jsonl'
+    })
+
+    const logEvents = mockParentPort.postMessage.mock.calls.filter((c: [{ type: string }]) => c[0]?.type === 'log-event')
+    expect(logEvents.length).toBeGreaterThan(0)
+    const execStartEvent = logEvents.find((c: [{ event: { eventType: string } }]) => c[0].event.eventType === 'exec_start')
+    expect(execStartEvent).toBeDefined()
+    expect(execStartEvent![0].event.turnId).toBe('turn-test')
   })
 })
