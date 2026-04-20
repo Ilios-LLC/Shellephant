@@ -89,6 +89,7 @@ const win = {
   container_id: 'abc123def456',
   created_at: '2026-04-14T00:00:00Z',
   status: 'running' as const,
+  window_type: 'manual' as const,
   projects: [] as import('../../src/renderer/src/types').WindowProjectRecord[]
 }
 
@@ -527,5 +528,13 @@ describe('WindowDetailPane', () => {
       await tick()
       expect(document.querySelector('.project-row')).toBeNull()
     })
+  })
+
+  it('hides Claude toggle button for assisted windows', () => {
+    const assistedWin = { ...win, window_type: 'assisted' as const }
+    render(WindowDetailPane, { props: { win: assistedWin, project } })
+    expect(screen.queryByRole('button', { name: /^claude$/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /^terminal$/i })).toBeDefined()
+    expect(screen.getByRole('button', { name: /^editor$/i })).toBeDefined()
   })
 })

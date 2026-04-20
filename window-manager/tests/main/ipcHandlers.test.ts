@@ -157,8 +157,8 @@ describe('registerIpcHandlers', () => {
     }
     vi.mocked(createWindow).mockResolvedValue(record)
     const fakeSender = { send: vi.fn() }
-    const result = await getHandler('window:create')({ sender: fakeSender }, 'test', [1], false, {}, '')
-    expect(createWindow).toHaveBeenCalledWith('test', [1], false, {}, expect.any(Function), '')
+    const result = await getHandler('window:create')({ sender: fakeSender }, 'test', [1], false, {})
+    expect(createWindow).toHaveBeenCalledWith('test', [1], false, {}, expect.any(Function), 'manual', '')
     expect(result).toEqual(record)
 
     // The progress callback should route to the event's sender.

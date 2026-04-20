@@ -9,6 +9,7 @@
   import EditorPane from './EditorPane.svelte'
   import ResizeHandle from './ResizeHandle.svelte'
   import CommitModal from './CommitModal.svelte'
+  import AssistedPanel from './AssistedPanel.svelte'
   import { pushToast, pushSuccessModal } from '../lib/toasts'
   import { waitingWindows } from '../lib/waitingWindows'
   import { conversationSummary } from '../lib/conversationSummary'
@@ -208,29 +209,31 @@
   }
 
   onMount(() => {
-    if (!claudeTerminalEl) {
-      console.warn('[TerminalHost] claudeTerminalEl not bound on mount; claude panel may be hidden')
-      return
+    if (win.window_type !== 'assisted') {
+      if (!claudeTerminalEl) {
+        console.warn('[TerminalHost] claudeTerminalEl not bound on mount; claude panel may be hidden')
+      } else {
+        claudeTerm = new XTerm(xtermOptions)
+        claudeFitAddon = new FitAddon()
+        claudeTerm.loadAddon(claudeFitAddon)
+        claudeTerm.loadAddon(new WebLinksAddon())
+        claudeTerm.open(claudeTerminalEl)
+        attachClaudeScrollInterceptor()
+        claudeFitAddon.fit()
+        claudeTerm.reset()
+        claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
+        claudeResizeObserver.observe(claudeTerminalEl)
+        postMountClaudeEffectPending = true
+        window.api.openTerminal(win.container_id, claudeTerm.cols, claudeTerm.rows, win.name, 'claude')
+        claudeTerm.onData((data: string) => {
+          window.api.sendTerminalInput(win.container_id, data, 'claude')
+          waitingWindows.remove(win.container_id)
+        })
+        claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
+          window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
+        })
+      }
     }
-    claudeTerm = new XTerm(xtermOptions)
-    claudeFitAddon = new FitAddon()
-    claudeTerm.loadAddon(claudeFitAddon)
-    claudeTerm.loadAddon(new WebLinksAddon())
-    claudeTerm.open(claudeTerminalEl)
-    attachClaudeScrollInterceptor()
-    claudeFitAddon.fit()
-    claudeTerm.reset()
-    claudeResizeObserver = new ResizeObserver(() => claudeFitAddon?.fit())
-    claudeResizeObserver.observe(claudeTerminalEl)
-    postMountClaudeEffectPending = true
-    window.api.openTerminal(win.container_id, claudeTerm.cols, claudeTerm.rows, win.name, 'claude')
-    claudeTerm.onData((data: string) => {
-      window.api.sendTerminalInput(win.container_id, data, 'claude')
-      waitingWindows.remove(win.container_id)
-    })
-    claudeTerm.onResize(({ cols, rows }: { cols: number; rows: number }) => {
-      window.api.resizeTerminal(win.container_id, cols, rows, 'claude')
-    })
 
     window.api.onTerminalData((containerId: string, sessionType: string, data: string) => {
       if (containerId !== win.container_id) return
@@ -249,7 +252,9 @@
     claudeResizeObserver?.disconnect()
     resizeObserver?.disconnect()
     window.api.offTerminalData()
-    window.api.closeTerminal(win.container_id, 'claude')
+    if (win.window_type !== 'assisted') {
+      window.api.closeTerminal(win.container_id, 'claude')
+    }
     if (terminalOpened) window.api.closeTerminal(win.container_id, 'terminal')
     waitingWindows.remove(win.container_id)
     window.api.offTerminalSummary()
@@ -327,7 +332,11 @@
         </div>
         <div class="panel-body">
           {#if panel.id === 'claude'}
-            <div class="terminal-inner" bind:this={claudeTerminalEl}></div>
+            {#if win.window_type === 'assisted'}
+              <AssistedPanel windowId={win.id} containerId={win.container_id} />
+            {:else}
+              <div class="terminal-inner" bind:this={claudeTerminalEl}></div>
+            {/if}
           {:else if panel.id === 'terminal'}
             <div class="terminal-inner" bind:this={terminalEl}></div>
           {:else if panel.id === 'editor'}

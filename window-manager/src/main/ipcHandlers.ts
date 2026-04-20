@@ -11,7 +11,13 @@ import {
   clearGitHubPat,
   getClaudeTokenStatus,
   setClaudeToken,
-  clearClaudeToken
+  clearClaudeToken,
+  getFireworksKey,
+  getFireworksKeyStatus,
+  setFireworksKey,
+  clearFireworksKey,
+  getKimiSystemPrompt,
+  setKimiSystemPrompt
 } from './settingsService'
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
@@ -29,6 +35,7 @@ import {
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
+import { sendToWindow, cancelWindow, resumeWindow } from './assistedWindowService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -83,8 +90,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('group:list', () => listGroups())
 
   // Window handlers
-  ipcMain.handle('window:create', (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, networkName = '') =>
-    createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), networkName)
+  ipcMain.handle(
+    'window:create',
+    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual', networkName = '') => {
+      if (windowType === 'assisted') {
+        if (!getFireworksKey()) {
+          throw new Error('Fireworks API key not configured. Set it in Settings.')
+        }
+      }
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), windowType, networkName)
+    }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
   ipcMain.handle('window:delete', (_, id: number) => deleteWindow(id))
@@ -226,6 +241,24 @@ export function registerIpcHandlers(): void {
     clearClaudeToken()
     return getClaudeTokenStatus()
   })
+  ipcMain.handle('settings:get-fireworks-key-status', () => getFireworksKeyStatus())
+  ipcMain.handle('settings:set-fireworks-key', (_, key: string) => {
+    setFireworksKey(key)
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:clear-fireworks-key', () => {
+    clearFireworksKey()
+    return getFireworksKeyStatus()
+  })
+  ipcMain.handle('settings:get-kimi-system-prompt', () => getKimiSystemPrompt())
+  ipcMain.handle('settings:set-kimi-system-prompt', (_, prompt: string) => {
+    setKimiSystemPrompt(prompt)
+  })
+  ipcMain.handle('project:set-kimi-system-prompt', (_, projectId: number, prompt: string | null) => {
+    getDb()
+      .prepare('UPDATE projects SET kimi_system_prompt = ? WHERE id = ?')
+      .run(prompt, projectId)
+  })
 
   // Terminal handlers
   ipcMain.handle('terminal:open', (event, containerId: string, cols: number, rows: number, displayName: string, sessionType: SessionType = 'terminal') => {
@@ -289,4 +322,33 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('phone-server:start', () => startPhoneServer())
   ipcMain.handle('phone-server:stop', () => stopPhoneServer())
   ipcMain.handle('phone-server:status', () => getPhoneServerStatus())
+
+  // Assisted window handlers
+  ipcMain.handle('assisted:send', async (event, windowId: number, message: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const row = getDb()
+      .prepare('SELECT container_id, project_id FROM windows WHERE id = ?')
+      .get(windowId) as { container_id: string; project_id: number | null } | undefined
+    if (!row) throw new Error(`Window ${windowId} not found`)
+
+    const sendToRenderer = (channel: string, ...args: unknown[]) => {
+      win?.webContents.send(channel, ...args)
+    }
+
+    await sendToWindow(windowId, row.container_id, message, row.project_id, sendToRenderer)
+  })
+
+  ipcMain.handle('assisted:cancel', (_, windowId: number) => {
+    cancelWindow(windowId)
+  })
+
+  ipcMain.handle('assisted:resume', (_, windowId: number, message: string) => {
+    resumeWindow(windowId, message)
+  })
+
+  ipcMain.handle('assisted:history', (_, windowId: number) => {
+    return getDb()
+      .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
+      .all(windowId)
+  })
 }

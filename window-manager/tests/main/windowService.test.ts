@@ -509,6 +509,33 @@ describe('windowService', () => {
       const result = await createWindow('win', [projectId])
       expect(result.projects[0].clone_path).toBe('/workspace/my-project')
     })
+
+    it('createWindow stores manual type by default', async () => {
+      const projectId = seedProject('git@github.com:org/repo.git')
+      const win = await createWindow('type-default', projectId)
+      expect(win.window_type).toBe('manual')
+      const row = getDb()
+        .prepare('SELECT window_type FROM windows WHERE id = ?')
+        .get(win.id) as { window_type: string }
+      expect(row.window_type).toBe('manual')
+    })
+
+    it('createWindow stores assisted type when specified', async () => {
+      const projectId = seedProject('git@github.com:org/repo2.git')
+      const win = await createWindow('type-assisted', projectId, false, {}, () => {}, 'assisted')
+      expect(win.window_type).toBe('assisted')
+      const row = getDb()
+        .prepare('SELECT window_type FROM windows WHERE id = ?')
+        .get(win.id) as { window_type: string }
+      expect(row.window_type).toBe('assisted')
+    })
+
+    it('listWindows returns window_type field on each record', async () => {
+      const projectId = seedProject('git@github.com:org/repo3.git')
+      await createWindow('list-type-win', projectId)
+      const wins = listWindows()
+      expect(wins[0].window_type).toBe('manual')
+    })
   })
 
   describe('listWindows', () => {

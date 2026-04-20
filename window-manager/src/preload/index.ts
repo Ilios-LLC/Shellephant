@@ -19,8 +19,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, networkName: string = '') =>
-    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, networkName),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual', networkName: string = '') =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, windowType, networkName),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -51,6 +51,17 @@ contextBridge.exposeInMainWorld('api', {
   getClaudeTokenStatus: () => ipcRenderer.invoke('settings:get-claude-token-status'),
   setClaudeToken: (token: string) => ipcRenderer.invoke('settings:set-claude-token', token),
   clearClaudeToken: () => ipcRenderer.invoke('settings:clear-claude-token'),
+
+  // Fireworks API key
+  getFireworksKeyStatus: () => ipcRenderer.invoke('settings:get-fireworks-key-status'),
+  setFireworksKey: (key: string) => ipcRenderer.invoke('settings:set-fireworks-key', key),
+  clearFireworksKey: () => ipcRenderer.invoke('settings:clear-fireworks-key'),
+
+  // Kimi system prompt
+  getKimiSystemPrompt: () => ipcRenderer.invoke('settings:get-kimi-system-prompt'),
+  setKimiSystemPrompt: (prompt: string) => ipcRenderer.invoke('settings:set-kimi-system-prompt', prompt),
+  setProjectKimiSystemPrompt: (projectId: number, prompt: string | null) =>
+    ipcRenderer.invoke('project:set-kimi-system-prompt', projectId, prompt),
 
   // Terminal API
   openTerminal: (containerId: string, cols: number, rows: number, displayName: string, sessionType: string = 'terminal') =>
@@ -129,5 +140,25 @@ contextBridge.exposeInMainWorld('api', {
   stopPhoneServer: (): Promise<void> =>
     ipcRenderer.invoke('phone-server:stop'),
   getPhoneServerStatus: (): Promise<{ active: boolean; url?: string }> =>
-    ipcRenderer.invoke('phone-server:status')
+    ipcRenderer.invoke('phone-server:status'),
+
+  // Assisted window
+  assistedSend: (windowId: number, message: string) =>
+    ipcRenderer.invoke('assisted:send', windowId, message),
+  assistedCancel: (windowId: number) => ipcRenderer.invoke('assisted:cancel', windowId),
+  assistedResume: (windowId: number, message: string) =>
+    ipcRenderer.invoke('assisted:resume', windowId, message),
+  assistedHistory: (windowId: number) => ipcRenderer.invoke('assisted:history', windowId),
+  onAssistedStreamChunk: (callback: (windowId: number, chunk: string) => void) =>
+    ipcRenderer.on('assisted:stream-chunk', (_, windowId, chunk) => callback(windowId, chunk)),
+  offAssistedStreamChunk: () => ipcRenderer.removeAllListeners('assisted:stream-chunk'),
+  onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) =>
+    ipcRenderer.on('assisted:kimi-delta', (_, windowId, delta) => callback(windowId, delta)),
+  offAssistedKimiDelta: () => ipcRenderer.removeAllListeners('assisted:kimi-delta'),
+  onAssistedPingUser: (callback: (windowId: number, message: string) => void) =>
+    ipcRenderer.on('assisted:ping-user', (_, windowId, message) => callback(windowId, message)),
+  offAssistedPingUser: () => ipcRenderer.removeAllListeners('assisted:ping-user'),
+  onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) =>
+    ipcRenderer.on('assisted:turn-complete', (_, windowId, stats, error) => callback(windowId, stats, error)),
+  offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete')
 })

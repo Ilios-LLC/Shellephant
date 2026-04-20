@@ -19,6 +19,8 @@
   let error = $state('')
   let hasDeps = $state(false)
   let withDeps = $state(false)
+  let windowType = $state<'manual' | 'assisted'>('manual')
+  let fireworksConfigured = $state(false)
   let networkName = $state('')
   let selectedProjectIds = $state<number[]>([])
 
@@ -50,6 +52,8 @@
     } else if (isMultiMode && projects) {
       for (const p of projects) fetchBranches(p.id, p.git_url)
     }
+    const fwStatus = await window.api.getFireworksKeyStatus()
+    fireworksConfigured = fwStatus.configured
   })
 
   function toggleProject(id: number): void {
@@ -83,7 +87,7 @@
         if (selected && def && selected !== def) branchOverrides[id] = selected
       }
       const netArg = withDeps ? '' : networkName.trim()
-      const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides, netArg)
+      const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides, windowType, netArg)
       onCreated(record)
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
@@ -127,6 +131,27 @@
         onkeydown={handleKey}
         autofocus
       />
+    </div>
+
+    <div class="field">
+      <span class="field-label">Type</span>
+      <div class="type-toggle">
+        <label class="type-option">
+          <input type="radio" name="window-type" value="manual" bind:group={windowType} disabled={loading} />
+          Manual
+        </label>
+        <label class="type-option" title={!fireworksConfigured ? 'Set Fireworks API key in Settings' : ''}>
+          <input
+            type="radio"
+            name="window-type"
+            value="assisted"
+            bind:group={windowType}
+            disabled={loading || !fireworksConfigured}
+            aria-label="Assisted"
+          />
+          Assisted
+        </label>
+      </div>
     </div>
 
     {#if !isMultiMode && project}
@@ -483,4 +508,24 @@
     width: auto;
     cursor: pointer;
   }
+
+  .type-toggle {
+    display: flex;
+    gap: 1rem;
+  }
+
+  .type-option {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.82rem;
+    color: var(--fg-1);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: normal;
+  }
+
+  .type-option input { width: auto; cursor: pointer; }
 </style>
