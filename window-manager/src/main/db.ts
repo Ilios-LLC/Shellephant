@@ -179,6 +179,19 @@ export function initDb(dbPath: string): void {
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )
   `)
+  _db.exec(`
+    CREATE TABLE IF NOT EXISTS turns (
+      id          TEXT PRIMARY KEY,
+      window_id   INTEGER NOT NULL,
+      turn_type   TEXT NOT NULL,
+      status      TEXT NOT NULL DEFAULT 'running',
+      started_at  INTEGER NOT NULL,
+      ended_at    INTEGER,
+      duration_ms INTEGER,
+      error       TEXT,
+      log_file    TEXT
+    )
+  `)
   runColumnMigrations(_db)
   makeWindowProjectIdNullable(_db)
   backfillWindowProjects(_db)
