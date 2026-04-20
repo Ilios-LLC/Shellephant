@@ -113,15 +113,23 @@
   let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
 
   async function loadTurns(): Promise<void> {
-    turns = await window.api.listTurns({ windowId: win.id, limit: 20 })
+    try {
+      turns = await window.api.listTurns({ windowId: win.id, limit: 20 })
+    } catch {
+      // keep last-known turns on error
+    }
   }
 
   async function expandTurn(turnId: string): Promise<void> {
     if (expandedTurnId === turnId) { expandedTurnId = null; return }
     expandedTurnId = turnId
     if (!turnEvents.has(turnId)) {
-      const events = await window.api.getTurnEvents(turnId)
-      turnEvents = new Map(turnEvents).set(turnId, events)
+      try {
+        const events = await window.api.getTurnEvents(turnId)
+        turnEvents = new Map(turnEvents).set(turnId, events)
+      } catch {
+        expandedTurnId = null
+      }
     }
   }
 
