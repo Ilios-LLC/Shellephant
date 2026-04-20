@@ -27,25 +27,28 @@
     }
   }
 
-  const offStarted = window.api.onTurnStarted((t: unknown) => {
-    turns = [t as TurnRecord, ...turns]
-  })
+  let offStarted: () => void
+  let offUpdated: () => void
+  let offEvent: () => void
 
-  const offUpdated = window.api.onTurnUpdated((patch: unknown) => {
-    const p = patch as Partial<TurnRecord> & { id: string }
-    turns = turns.map(t => t.id === p.id ? { ...t, ...p } : t)
+  onMount(() => {
+    loadTurns()
+    offStarted = window.api.onTurnStarted((t: unknown) => {
+      turns = [t as TurnRecord, ...turns]
+    })
+    offUpdated = window.api.onTurnUpdated((patch: unknown) => {
+      const p = patch as Partial<TurnRecord> & { id: string }
+      turns = turns.map(t => t.id === p.id ? { ...t, ...p } : t)
+    })
+    offEvent = window.api.onTurnEvent((e: unknown) => {
+      const ev = e as LogEvent
+      if (expandedTurnId === ev.turnId) {
+        const existing = turnEvents.get(ev.turnId) ?? []
+        turnEvents = new Map(turnEvents).set(ev.turnId, [...existing, ev])
+      }
+    })
   })
-
-  const offEvent = window.api.onTurnEvent((e: unknown) => {
-    const ev = e as LogEvent
-    if (expandedTurnId === ev.turnId) {
-      const existing = turnEvents.get(ev.turnId) ?? []
-      turnEvents = new Map(turnEvents).set(ev.turnId, [...existing, ev])
-    }
-  })
-
-  onMount(loadTurns)
-  onDestroy(() => { offStarted(); offUpdated(); offEvent() })
+  onDestroy(() => { offStarted?.(); offUpdated?.(); offEvent?.() })
 </script>
 
 <div class="trace-explorer">
