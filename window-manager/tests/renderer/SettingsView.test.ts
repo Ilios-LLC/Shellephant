@@ -42,7 +42,9 @@ describe('SettingsView', () => {
       setClaudeToken: mockSetClaude,
       clearClaudeToken: mockClearClaude,
       setFireworksKey: mockSetFireworks,
-      clearFireworksKey: mockClearFireworks
+      clearFireworksKey: mockClearFireworks,
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
   })
 

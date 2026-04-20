@@ -139,8 +139,9 @@ ENV PATH=$PATH:/usr/local/share/npm-global/bin
 # Install pnpm (Svelte frontend package manager)
 RUN npm install -g pnpm
 
-# Install Claude Code SDK for programmatic access by assisted windows
-RUN npm install -g @anthropic-ai/claude-code
+# Install Claude Agent SDK for programmatic access by assisted windows
+RUN npm install -g @anthropic-ai/claude-agent-sdk
+ENV NODE_PATH=/usr/local/share/npm-global/lib/node_modules
 
 # Set the default shell to zsh rather than sh
 ENV SHELL=/bin/zsh

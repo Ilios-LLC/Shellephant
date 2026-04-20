@@ -7,12 +7,14 @@ let mockApi: {
   assistedSend: ReturnType<typeof vi.fn>
   assistedCancel: ReturnType<typeof vi.fn>
   assistedResume: ReturnType<typeof vi.fn>
-  onAssistedStreamChunk: ReturnType<typeof vi.fn>
-  offAssistedStreamChunk: ReturnType<typeof vi.fn>
+  onAssistedStreamEvent: ReturnType<typeof vi.fn>
+  offAssistedStreamEvent: ReturnType<typeof vi.fn>
   onAssistedKimiDelta: ReturnType<typeof vi.fn>
   offAssistedKimiDelta: ReturnType<typeof vi.fn>
   onAssistedPingUser: ReturnType<typeof vi.fn>
   offAssistedPingUser: ReturnType<typeof vi.fn>
+  onAssistedToolCall: ReturnType<typeof vi.fn>
+  offAssistedToolCall: ReturnType<typeof vi.fn>
   onAssistedTurnComplete: ReturnType<typeof vi.fn>
   offAssistedTurnComplete: ReturnType<typeof vi.fn>
 }
@@ -23,12 +25,14 @@ beforeEach(() => {
     assistedSend: vi.fn().mockResolvedValue(undefined),
     assistedCancel: vi.fn().mockResolvedValue(undefined),
     assistedResume: vi.fn().mockResolvedValue(undefined),
-    onAssistedStreamChunk: vi.fn(),
-    offAssistedStreamChunk: vi.fn(),
+    onAssistedStreamEvent: vi.fn(),
+    offAssistedStreamEvent: vi.fn(),
     onAssistedKimiDelta: vi.fn(),
     offAssistedKimiDelta: vi.fn(),
     onAssistedPingUser: vi.fn(),
     offAssistedPingUser: vi.fn(),
+    onAssistedToolCall: vi.fn(),
+    offAssistedToolCall: vi.fn(),
     onAssistedTurnComplete: vi.fn(),
     offAssistedTurnComplete: vi.fn()
   }
@@ -100,19 +104,97 @@ describe('AssistedPanel', () => {
     })
   })
 
-  it('tool_result shows collapsed toggle button and expands on click', async () => {
-    let chunkCallback: ((wid: number, chunk: string) => void) | null = null
-    mockApi.onAssistedStreamChunk.mockImplementation((cb: typeof chunkCallback) => { chunkCallback = cb })
+  it('streams typed timeline events into a tool_result timeline', async () => {
+    let eventCallback: ((wid: number, event: unknown) => void) | null = null
+    mockApi.onAssistedStreamEvent.mockImplementation((cb: typeof eventCallback) => { eventCallback = cb })
     render(AssistedPanel, defaultProps)
     await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
-    chunkCallback!(1, 'some output')
+
+    eventCallback!(1, { kind: 'tool_use', id: 't1', name: 'Grep', input: { pattern: 'TODO' }, summary: 'TODO', ts: 2 })
+    eventCallback!(1, { kind: 'assistant_text', text: 'All done.', ts: 3 })
+
+    await waitFor(() => {
+      expect(screen.getByText(/Grep/)).toBeDefined()
+      expect(screen.getByText(/All done\./)).toBeDefined()
+    })
+  })
+
+  it('drops session_init and successful hook events from live stream', async () => {
+    let eventCallback: ((wid: number, event: unknown) => void) | null = null
+    mockApi.onAssistedStreamEvent.mockImplementation((cb: typeof eventCallback) => { eventCallback = cb })
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+    eventCallback!(1, { kind: 'session_init', model: 'claude-sonnet-4-6', sessionId: 'abc', ts: 1 })
+    eventCallback!(1, { kind: 'hook', name: 'SessionStart', status: 'ok', ts: 2 })
+    eventCallback!(1, { kind: 'assistant_text', text: 'signal', ts: 3 })
+
+    await waitFor(() => expect(screen.getByText('signal')).toBeDefined())
+    expect(screen.queryByText(/claude-sonnet-4-6/)).toBeNull()
+    expect(screen.queryByText(/SessionStart/)).toBeNull()
+  })
+
+  it('dedupes successful result that mirrors the preceding assistant_text', async () => {
+    let eventCallback: ((wid: number, event: unknown) => void) | null = null
+    mockApi.onAssistedStreamEvent.mockImplementation((cb: typeof eventCallback) => { eventCallback = cb })
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+    eventCallback!(1, { kind: 'assistant_text', text: 'the answer', ts: 1 })
+    eventCallback!(1, { kind: 'result', text: 'the answer', isError: false, ts: 2 })
+
+    await waitFor(() => expect(screen.getAllByText('the answer')).toHaveLength(1))
+  })
+
+  it('keeps failed result even when text matches prior assistant_text', async () => {
+    let eventCallback: ((wid: number, event: unknown) => void) | null = null
+    mockApi.onAssistedStreamEvent.mockImplementation((cb: typeof eventCallback) => { eventCallback = cb })
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+    eventCallback!(1, { kind: 'assistant_text', text: 'boom', ts: 1 })
+    eventCallback!(1, { kind: 'result', text: 'boom', isError: true, ts: 2 })
+
+    await waitFor(() => expect(screen.getAllByText('boom').length).toBeGreaterThanOrEqual(2))
+  })
+
+  it('hydrates timeline from history row with schemaVersion metadata', async () => {
+    mockApi.assistedHistory.mockResolvedValue([
+      {
+        id: 10,
+        window_id: 1,
+        role: 'tool_result',
+        content: 'compact context',
+        metadata: JSON.stringify({
+          schemaVersion: 1,
+          tool_name: 'run_claude_code',
+          events: [
+            { kind: 'assistant_text', text: 'persisted hello', ts: 5 },
+            { kind: 'result', text: 'persisted final', isError: false, ts: 6 }
+          ]
+        }),
+        created_at: ''
+      }
+    ])
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => {
+      expect(screen.getByText('persisted hello')).toBeDefined()
+      expect(screen.getByText('persisted final')).toBeDefined()
+    })
+  })
+
+  it('legacy tool_result without schemaVersion falls back to collapsed <pre>', async () => {
+    mockApi.assistedHistory.mockResolvedValue([
+      { id: 11, window_id: 1, role: 'tool_result', content: 'legacy raw json blob', metadata: null, created_at: '' }
+    ])
+    render(AssistedPanel, defaultProps)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /claude code output/i })).toBeDefined()
     })
-    expect(screen.queryByText('some output')).toBeNull()
+    expect(screen.queryByText('legacy raw json blob')).toBeNull()
     await fireEvent.click(screen.getByRole('button', { name: /claude code output/i }))
     await waitFor(() => {
-      expect(screen.getByText('some output')).toBeDefined()
+      expect(screen.getByText('legacy raw json blob')).toBeDefined()
     })
   })
 
@@ -120,7 +202,7 @@ describe('AssistedPanel', () => {
     const { unmount } = render(AssistedPanel, defaultProps)
     await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
     unmount()
-    expect(mockApi.offAssistedStreamChunk).toHaveBeenCalled()
+    expect(mockApi.offAssistedStreamEvent).toHaveBeenCalled()
     expect(mockApi.offAssistedKimiDelta).toHaveBeenCalled()
     expect(mockApi.offAssistedPingUser).toHaveBeenCalled()
     expect(mockApi.offAssistedTurnComplete).toHaveBeenCalled()

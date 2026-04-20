@@ -1,3 +1,8 @@
+import type { TimelineEvent } from '../../shared/timelineEvent'
+export type { TimelineEvent, TimelineMetadata } from '../../shared/timelineEvent'
+export { isTimelineMetadata } from '../../shared/timelineEvent'
+export { DEFAULT_KIMI_SYSTEM_PROMPT } from '../../shared/defaultKimiPrompt'
+
 export type ContainerStatus = 'running' | 'stopped' | 'unknown'
 export type WindowStatus = ContainerStatus
 
@@ -71,7 +76,7 @@ export interface WindowProjectRecord {
 export interface AssistedMessage {
   id: number
   window_id: number
-  role: 'user' | 'assistant' | 'tool_result' | 'ping_user'
+  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user'
   content: string
   metadata: string | null
   created_at: string
@@ -136,12 +141,14 @@ export interface Api {
   assistedCancel: (windowId: number) => Promise<void>
   assistedResume: (windowId: number, message: string) => Promise<void>
   assistedHistory: (windowId: number) => Promise<AssistedMessage[]>
-  onAssistedStreamChunk: (callback: (windowId: number, chunk: string) => void) => void
-  offAssistedStreamChunk: () => void
+  onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) => void
+  offAssistedStreamEvent: () => void
   onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) => void
   offAssistedKimiDelta: () => void
   onAssistedPingUser: (callback: (windowId: number, message: string) => void) => void
   offAssistedPingUser: () => void
+  onAssistedToolCall: (callback: (windowId: number, toolName: string, message: string) => void) => void
+  offAssistedToolCall: () => void
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) => void
   offAssistedTurnComplete: () => void
 

@@ -135,5 +135,10 @@ export function getKimiSystemPrompt(): string | null {
 }
 
 export function setKimiSystemPrompt(prompt: string): void {
+  // Empty/whitespace clears the override so the default or project-level prompt takes effect.
+  if (!prompt.trim()) {
+    deleteRow(KIMI_PROMPT_KEY)
+    return
+  }
   setPlainSetting(KIMI_PROMPT_KEY, prompt)
 }

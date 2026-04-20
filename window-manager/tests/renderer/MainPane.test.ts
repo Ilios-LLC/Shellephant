@@ -85,7 +85,9 @@ describe('MainPane', () => {
       setClaudeToken: vi.fn(),
       clearClaudeToken: vi.fn(),
       setFireworksKey: vi.fn(),
-      clearFireworksKey: vi.fn()
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,
@@ -103,7 +105,9 @@ describe('MainPane', () => {
       setClaudeToken: vi.fn(),
       clearClaudeToken: vi.fn(),
       setFireworksKey: vi.fn(),
-      clearFireworksKey: vi.fn()
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,
@@ -124,7 +128,9 @@ describe('MainPane', () => {
       setClaudeToken: vi.fn(),
       clearClaudeToken: vi.fn(),
       setFireworksKey: vi.fn(),
-      clearFireworksKey: vi.fn()
+      clearFireworksKey: vi.fn(),
+      getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
     })
     render(
       MainPane,

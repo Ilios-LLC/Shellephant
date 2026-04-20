@@ -1,16 +1,15 @@
 import { parentPort } from 'worker_threads'
 import { spawn } from 'child_process'
 import OpenAI from 'openai'
-
-const DEFAULT_SYSTEM_PROMPT = `You are an autonomous coding assistant orchestrating a Claude Code session inside a development container.
-Use run_claude_code to execute coding tasks. Use ping_user only when you genuinely cannot proceed without human input — prefer to resolve ambiguity yourself.
-When the task is complete, summarize what was accomplished.`
+import { StreamFilterBuffer } from './assistedStreamFilter'
+import type { TimelineEvent } from '../shared/timelineEvent'
+import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../shared/defaultKimiPrompt'
 
 export function resolveSystemPrompt(
   projectPrompt: string | null,
   globalPrompt: string | null
 ): string {
-  return projectPrompt ?? globalPrompt ?? DEFAULT_SYSTEM_PROMPT
+  return projectPrompt ?? globalPrompt ?? DEFAULT_KIMI_SYSTEM_PROMPT
 }
 
 export function buildKimiTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
@@ -19,14 +18,13 @@ export function buildKimiTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
       type: 'function',
       function: {
         name: 'run_claude_code',
-        description: 'Send a message to the Claude Code SDK session inside the container. Pass null session_id to start a new session.',
+        description: 'Send a message to Claude Code inside the container. The session is managed for you automatically — every call in this window continues the same CC conversation. You do not need to (and cannot) pass a session id.',
         parameters: {
           type: 'object',
           properties: {
-            session_id: { type: ['string', 'null'], description: 'Existing session ID, or null to start new' },
             message: { type: 'string', description: 'The task or message for Claude Code' }
           },
-          required: ['session_id', 'message']
+          required: ['message']
         }
       }
     },
@@ -53,22 +51,34 @@ export function parseDockerOutput(stdout: string, stderr: string): { outputLines
   return { outputLines, sessionId }
 }
 
-async function runClaudeCode(
+export async function runClaudeCode(
   containerId: string,
   sessionId: string | null,
   message: string
-): Promise<{ output: string; newSessionId: string | null }> {
+): Promise<{ output: string; events: TimelineEvent[]; newSessionId: string | null }> {
   return new Promise((resolve, reject) => {
     const sidArg = sessionId ?? 'new'
     const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message])
 
-    let stdout = ''
+    const filter = new StreamFilterBuffer()
+    const contextParts: string[] = []
+    const eventsLog: TimelineEvent[] = []
     let stderr = ''
+    let hadAnyOutput = false
+    let streamSessionId: string | null = null
+
+    const drain = (result: { displayChunks: string[]; contextChunks: string[]; events: TimelineEvent[]; sessionId: string | null }): void => {
+      contextParts.push(...result.contextChunks)
+      if (result.sessionId) streamSessionId = result.sessionId
+      for (const event of result.events) {
+        eventsLog.push(event)
+        parentPort?.postMessage({ type: 'stream-event', event })
+      }
+    }
 
     child.stdout.on('data', (chunk: Buffer) => {
-      const text = chunk.toString()
-      stdout += text
-      parentPort?.postMessage({ type: 'stream-chunk', chunk: text })
+      hadAnyOutput = true
+      drain(filter.push(chunk.toString()))
     })
 
     child.stderr.on('data', (chunk: Buffer) => {
@@ -76,12 +86,19 @@ async function runClaudeCode(
     })
 
     child.on('close', (code) => {
-      if (code !== 0 && !stdout) {
+      drain(filter.flush())
+
+      if (code !== 0 && !hadAnyOutput) {
         reject(new Error(`docker exec failed (exit ${code}): ${stderr}`))
         return
       }
-      const { outputLines, sessionId: newSessionId } = parseDockerOutput(stdout, stderr)
-      resolve({ output: outputLines.join('\n'), newSessionId })
+      // Session id now travels on stdout as a `session_final` event. stderr is
+      // reserved for error diagnostics and must not be parsed for control data
+      // — SDK/container warnings on stderr used to corrupt the resume id.
+      const newSessionId = streamSessionId
+      // eslint-disable-next-line no-console
+      console.error(`[assisted:session] resumed=${sessionId ?? 'none'} final=${newSessionId ?? 'none'}`)
+      resolve({ output: contextParts.join('\n'), events: eventsLog, newSessionId })
     })
 
     child.on('error', reject)
@@ -93,6 +110,7 @@ type KimiLoopData = {
   containerId: string
   message: string
   conversationHistory: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
+  initialSessionId?: string | null
   systemPrompt: string
   fireworksKey: string
 }
@@ -133,21 +151,42 @@ async function handleRunClaudeCode(
   tc: ToolCallAccum,
   activeSessionId: string | null
 ): Promise<{ toolResult: string; newActiveSessionId: string | null }> {
-  const args = JSON.parse(tc.arguments) as { session_id: string | null; message: string }
+  // The tool schema no longer exposes session_id. Session state is owned by
+  // this worker — seeded from DB at turn start, updated in-place as CC emits
+  // session_final events. We intentionally ignore any session_id the model
+  // tries to sneak in via tc.arguments; old persisted tool calls may still
+  // carry the field, so we parse loosely.
+  const args = JSON.parse(tc.arguments) as { message: string }
+  parentPort?.postMessage({ type: 'tool-call', windowId, toolName: 'run_claude_code', message: args.message })
+  parentPort?.postMessage({ type: 'save-message', windowId, role: 'tool_call', content: args.message, metadata: JSON.stringify({ tool_name: 'run_claude_code' }) })
   let output: string
+  let events: TimelineEvent[] = []
   let newActiveSessionId = activeSessionId
 
   try {
-    const result = await runClaudeCode(containerId, args.session_id ?? activeSessionId, args.message)
+    const result = await runClaudeCode(containerId, activeSessionId, args.message)
     output = result.output
+    events = result.events
     newActiveSessionId = result.newSessionId ?? activeSessionId
   } catch (err) {
-    output = `ERROR: ${err instanceof Error ? err.message : String(err)}`
+    const message = err instanceof Error ? err.message : String(err)
+    output = `ERROR: ${message}`
+    // Surface the failure on the timeline so the UI shows *something* when a
+    // docker exec fails — otherwise the tool_call bubble sits next to nothing.
+    const errorEvent: TimelineEvent = { kind: 'result', text: output, isError: true, ts: Date.now() }
+    events = [errorEvent]
+    parentPort?.postMessage({ type: 'stream-event', event: errorEvent })
   }
 
   parentPort?.postMessage({
     type: 'save-message', windowId, role: 'tool_result', content: output,
-    metadata: JSON.stringify({ session_id: newActiveSessionId, complete: true, tool_name: 'run_claude_code' })
+    metadata: JSON.stringify({
+      schemaVersion: 1,
+      session_id: newActiveSessionId,
+      complete: true,
+      tool_name: 'run_claude_code',
+      events
+    })
   })
   return { toolResult: output, newActiveSessionId }
 }
@@ -187,7 +226,7 @@ async function processStreamChunk(
 }
 
 async function kimiLoop(data: KimiLoopData): Promise<void> {
-  const { windowId, containerId, message, conversationHistory, systemPrompt, fireworksKey } = data
+  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey } = data
 
   const client = new OpenAI({ apiKey: fireworksKey, baseURL: 'https://api.fireworks.ai/inference/v1' })
 
@@ -199,7 +238,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
 
   parentPort?.postMessage({ type: 'save-message', windowId, role: 'user', content: message, metadata: null })
 
-  let activeSessionId: string | null = null
+  let activeSessionId: string | null = initialSessionId ?? null
   const tokenRef = { input: 0, output: 0 }
 
   while (true) {
@@ -208,7 +247,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
     const currentIndexRef = { value: -1 }
 
     const stream = await client.chat.completions.create({
-      model: 'accounts/fireworks/models/kimi-k2-instruct',
+      model: 'accounts/fireworks/models/kimi-k2p5',
       messages,
       tools: buildKimiTools(),
       stream: true
@@ -234,15 +273,24 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
       tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function' as const, function: { name: tc.name, arguments: tc.arguments } }))
     })
 
+    let ranClaudeCodeThisTurn = false
     for (const tc of toolCalls) {
       let toolResult: string
 
       if (tc.name === 'ping_user') {
         toolResult = await handlePingUser(windowId, tc, messages)
       } else if (tc.name === 'run_claude_code') {
-        const res = await handleRunClaudeCode(windowId, containerId, tc, activeSessionId)
-        toolResult = res.toolResult
-        activeSessionId = res.newActiveSessionId
+        // Enforce one CC call per turn: any extras in the same batch get a
+        // synthetic deferral so the model sees the first response before
+        // deciding what to send next.
+        if (ranClaudeCodeThisTurn) {
+          toolResult = 'Deferred — only one run_claude_code allowed per turn. Re-plan after reading the previous response, then call run_claude_code again.'
+        } else {
+          const res = await handleRunClaudeCode(windowId, containerId, tc, activeSessionId)
+          toolResult = res.toolResult
+          activeSessionId = res.newActiveSessionId
+          ranClaudeCodeThisTurn = true
+        }
       } else {
         toolResult = 'Unknown tool'
       }

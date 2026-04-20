@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { TokenStatus } from '../types'
+  import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../types'
 
   export type SettingsRequirement = null | 'project' | 'window' | 'multi-window'
 
@@ -36,6 +38,21 @@
   let fireworksInput = $state('')
   let fireworksBusy = $state(false)
   let fireworksError = $state('')
+
+  let kimiPromptInput = $state('')
+  let kimiPromptLoaded = $state(false)
+  let kimiBusy = $state(false)
+  let kimiError = $state('')
+  let kimiSaved = $state(false)
+
+  onMount(async () => {
+    try {
+      const stored = await window.api.getKimiSystemPrompt()
+      kimiPromptInput = stored ?? ''
+    } finally {
+      kimiPromptLoaded = true
+    }
+  })
 
   let bannerText = $derived.by(() => {
     if (requiredFor === 'project') {
@@ -150,6 +167,36 @@
   function onFireworksKey(e: KeyboardEvent): void {
     if (e.key === 'Enter') saveFireworks()
     else if (e.key === 'Escape') onCancel()
+  }
+
+  async function saveKimiPrompt(): Promise<void> {
+    if (kimiBusy) return
+    kimiBusy = true
+    kimiError = ''
+    kimiSaved = false
+    try {
+      await window.api.setKimiSystemPrompt(kimiPromptInput)
+      kimiSaved = true
+    } catch (err) {
+      kimiError = err instanceof Error ? err.message : String(err)
+    } finally {
+      kimiBusy = false
+    }
+  }
+
+  async function clearKimiPrompt(): Promise<void> {
+    if (kimiBusy) return
+    kimiBusy = true
+    kimiError = ''
+    kimiSaved = false
+    try {
+      await window.api.setKimiSystemPrompt('')
+      kimiPromptInput = ''
+    } catch (err) {
+      kimiError = err instanceof Error ? err.message : String(err)
+    } finally {
+      kimiBusy = false
+    }
   }
 </script>
 
@@ -288,8 +335,45 @@
       {/if}
     </section>
 
+    <section class="field">
+      <label for="kimi-prompt">Kimi System Prompt (global override)</label>
+      <div class="status-line">
+        {#if !kimiPromptLoaded}
+          <span class="status unconfigured">Loading…</span>
+        {:else if kimiPromptInput.trim()}
+          <span class="status configured">Custom override active</span>
+        {:else}
+          <span class="status unconfigured">Using built-in default</span>
+        {/if}
+      </div>
+      <textarea
+        id="kimi-prompt"
+        rows="8"
+        placeholder={DEFAULT_KIMI_SYSTEM_PROMPT}
+        bind:value={kimiPromptInput}
+        disabled={kimiBusy || !kimiPromptLoaded}
+        oninput={() => { kimiSaved = false }}
+      ></textarea>
+      <p class="help">
+        Precedence: per-project prompt → this global override → built-in default (shown as placeholder above).
+      </p>
+      <div class="row-actions">
+        {#if kimiPromptInput}
+          <button type="button" class="clear" onclick={clearKimiPrompt} disabled={kimiBusy}>
+            {kimiBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button type="button" class="submit" onclick={saveKimiPrompt} disabled={kimiBusy || !kimiPromptLoaded}>
+          {kimiBusy ? 'Saving…' : kimiSaved ? 'Saved ✓' : 'Save Prompt'}
+        </button>
+      </div>
+      {#if kimiError}
+        <p class="error">{kimiError}</p>
+      {/if}
+    </section>
+
     <p class="help">
-      Stored locally, encrypted via your OS keychain. The Claude token is passed to each window as
+      Credentials are stored locally, encrypted via your OS keychain. The Claude token is passed to each window as
       <code>CLAUDE_CODE_OAUTH_TOKEN</code>. The PAT never enters a container.
     </p>
 
@@ -382,7 +466,8 @@
     color: var(--fg-2);
   }
 
-  input {
+  input,
+  textarea {
     width: 100%;
     padding: 0.5rem 0.65rem;
     background: var(--bg-2);
@@ -394,7 +479,14 @@
     outline: none;
   }
 
-  input:focus {
+  textarea {
+    resize: vertical;
+    min-height: 6em;
+    line-height: 1.5;
+  }
+
+  input:focus,
+  textarea:focus {
     border-color: var(--accent);
   }
 

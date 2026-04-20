@@ -4,6 +4,9 @@ import { BrowserWindow, Notification } from 'electron'
 import { getFireworksKey, getKimiSystemPrompt } from './settingsService'
 import { getDb } from './db'
 import { isUserWatching } from './focusState'
+import { resolveKimiSystemPrompt } from '../shared/defaultKimiPrompt'
+import type { ChatHistoryEntry } from '../shared/chatHistory'
+import { mapDbRowToHistoryEntry } from '../shared/chatHistory'
 
 const workers = new Map<number, Worker>()
 
@@ -19,10 +22,41 @@ function getWorkerPath(): string {
   return path.join(__dirname, 'assistedWindowWorker.js')
 }
 
-function loadHistory(windowId: number): { role: string; content: string }[] {
-  return getDb()
+function loadHistory(windowId: number): ChatHistoryEntry[] {
+  const rows = getDb()
     .prepare('SELECT role, content FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
     .all(windowId) as { role: string; content: string }[]
+  const entries: ChatHistoryEntry[] = []
+  for (const row of rows) {
+    const mapped = mapDbRowToHistoryEntry(row.role, row.content)
+    if (mapped) entries.push(mapped)
+  }
+  return entries
+}
+
+// Returns the session_id from the newest run_claude_code tool_result that has
+// a non-null session_id. Ordered by id (DESC) — created_at only has second
+// resolution and can tie across rapid-fire tool calls. The loop scans the last
+// 20 rows so a null-metadata row doesn't mask the real last session.
+export function loadLastSessionId(windowId: number): string | null {
+  const rows = getDb()
+    .prepare(`
+      SELECT metadata FROM assisted_messages
+      WHERE window_id = ? AND role = 'tool_result' AND metadata IS NOT NULL
+      ORDER BY id DESC LIMIT 20
+    `)
+    .all(windowId) as { metadata: string | null }[]
+  for (const row of rows) {
+    if (!row.metadata) continue
+    try {
+      const parsed = JSON.parse(row.metadata) as { session_id?: string | null; tool_name?: string }
+      if (parsed.tool_name && parsed.tool_name !== 'run_claude_code') continue
+      if (parsed.session_id) return parsed.session_id
+    } catch {
+      continue
+    }
+  }
+  return null
 }
 
 function saveMessage(windowId: number, role: string, content: string, metadata: string | null): void {
@@ -52,6 +86,7 @@ export async function sendToWindow(
   const projectPrompt = resolveProjectSystemPrompt(projectId)
   const globalPrompt = getKimiSystemPrompt()
   const history = loadHistory(windowId)
+  const initialSessionId = loadLastSessionId(windowId)
 
   let worker = workers.get(windowId)
   if (!worker) {
@@ -60,10 +95,12 @@ export async function sendToWindow(
     worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
       if (msg.type === 'save-message') {
         saveMessage(windowId, msg.role as string, msg.content as string, msg.metadata as string | null)
-      } else if (msg.type === 'stream-chunk') {
-        sendToRenderer('assisted:stream-chunk', windowId, msg.chunk)
+      } else if (msg.type === 'stream-event') {
+        sendToRenderer('assisted:stream-event', windowId, msg.event)
       } else if (msg.type === 'kimi-delta') {
         sendToRenderer('assisted:kimi-delta', windowId, msg.delta)
+      } else if (msg.type === 'tool-call') {
+        sendToRenderer('assisted:tool-call', windowId, msg.toolName, msg.message)
       } else if (msg.type === 'ping-user') {
         sendToRenderer('assisted:ping-user', windowId, msg.message)
         const focusedWin = BrowserWindow.getFocusedWindow()
@@ -97,7 +134,8 @@ export async function sendToWindow(
     containerId,
     message,
     conversationHistory: history,
-    systemPrompt: projectPrompt ?? globalPrompt ?? null,
+    initialSessionId,
+    systemPrompt: resolveKimiSystemPrompt(projectPrompt, globalPrompt),
     fireworksKey
   })
 }
