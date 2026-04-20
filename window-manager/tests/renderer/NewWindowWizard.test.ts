@@ -204,3 +204,105 @@ describe('multi-project mode', () => {
     )
   })
 })
+
+describe('network mode radio group', () => {
+  it('renders auto-create, use-default, and custom radio options', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => {
+      expect(screen.getByRole('radio', { name: /auto-create/i })).toBeDefined()
+      expect(screen.getByRole('radio', { name: /use project default/i })).toBeDefined()
+      expect(screen.getByRole('radio', { name: /custom/i })).toBeDefined()
+    })
+  })
+
+  it('"Use project default" is disabled when project has no default_network', async () => {
+    render(NewWindowWizard, baseProps({ project: { ...project, default_network: null } }))
+    await waitFor(() => {
+      const radio = screen.getByRole('radio', { name: /use project default/i }) as HTMLInputElement
+      expect(radio.disabled).toBe(true)
+    })
+  })
+
+  it('pre-selects "Use project default" when project.default_network is set', async () => {
+    render(NewWindowWizard, baseProps({ project: { ...project, default_network: 'my-net' } }))
+    await waitFor(() => {
+      const radio = screen.getByRole('radio', { name: /use project default/i }) as HTMLInputElement
+      expect(radio.checked).toBe(true)
+    })
+  })
+
+  it('pre-selects "Auto-create" when project has no default_network', async () => {
+    render(NewWindowWizard, baseProps({ project: { ...project, default_network: null } }))
+    await waitFor(() => {
+      const radio = screen.getByRole('radio', { name: /auto-create/i }) as HTMLInputElement
+      expect(radio.checked).toBe(true)
+    })
+  })
+
+  it('"Use project default" is disabled in multi-project mode', async () => {
+    const p2: ProjectRecord = { id: 2, name: 'p2', git_url: 'git@github.com:x/p2.git', created_at: '', default_network: 'some-net' }
+    render(NewWindowWizard, {
+      projects: [{ ...project, default_network: 'my-net' }, p2],
+      onCreated: vi.fn(),
+      onCancel: vi.fn()
+    })
+    await waitFor(() => {
+      const radio = screen.getByRole('radio', { name: /use project default/i }) as HTMLInputElement
+      expect(radio.disabled).toBe(true)
+    })
+  })
+
+  it('Custom option reveals a network name text input', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('radio', { name: /custom/i }))
+    await fireEvent.click(screen.getByRole('radio', { name: /custom/i }))
+    await waitFor(() => expect(screen.getByPlaceholderText('network-name')).toBeDefined())
+  })
+
+  it('withDeps=true disables the network fieldset', async () => {
+    mockListDeps.mockResolvedValue([
+      { id: 1, project_id: 1, image: 'redis', tag: 'latest', env_vars: null, created_at: '' }
+    ])
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
+    await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
+    await waitFor(() => {
+      const fieldset = screen.getByRole('group', { name: /docker network/i })
+      expect(fieldset).toBeDisabled()
+    })
+  })
+
+  it('passes empty netArg when "Auto-create" is selected', async () => {
+    render(NewWindowWizard, baseProps({ project: { ...project, default_network: 'my-net' } }))
+    await waitFor(() => screen.getByRole('combobox', { name: /branch/i }))
+    await fireEvent.click(screen.getByRole('radio', { name: /auto-create/i }))
+    await fireEvent.input(screen.getByPlaceholderText('dev-window'), { target: { value: 'w1' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('w1', [1], false, {}, '')
+    )
+  })
+
+  it('passes project default_network as netArg for "Use project default"', async () => {
+    render(NewWindowWizard, baseProps({ project: { ...project, default_network: 'my-net' } }))
+    await waitFor(() => screen.getByRole('combobox', { name: /branch/i }))
+    await fireEvent.input(screen.getByPlaceholderText('dev-window'), { target: { value: 'w2' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('w2', [1], false, {}, 'my-net')
+    )
+  })
+
+  it('passes trimmed custom input as netArg for "Custom"', async () => {
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => screen.getByRole('combobox', { name: /branch/i }))
+    await fireEvent.click(screen.getByRole('radio', { name: /custom/i }))
+    await waitFor(() => screen.getByPlaceholderText('network-name'))
+    await fireEvent.input(screen.getByPlaceholderText('network-name'), { target: { value: '  custom-net  ' } })
+    await fireEvent.input(screen.getByPlaceholderText('dev-window'), { target: { value: 'w3' } })
+    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
+    await waitFor(() =>
+      expect(mockCreateWindow).toHaveBeenCalledWith('w3', [1], false, {}, 'custom-net')
+    )
+  })
+})
