@@ -26,6 +26,9 @@
   let currentRecipient = $state<Recipient>('claude')
   let fireworksConfigured = $state(false)
 
+  type PermissionMode = 'bypassPermissions' | 'plan'
+  let permissionMode = $state<PermissionMode>('bypassPermissions')
+
   let mountActive = true
   let syntheticIdSeq = 0
   function nextId(): number {
@@ -189,7 +192,7 @@
     lastStats = null
     messages = [...messages, { id: nextId(), role: 'user', content: trimmed, metadata: null }]
     if (currentRecipient === 'claude') {
-      await window.api.claudeSend(windowId, trimmed)
+      await window.api.claudeSend(windowId, trimmed, permissionMode)
     } else {
       await window.api.assistedSend(windowId, trimmed)
     }
@@ -319,6 +322,17 @@
       />
       Shellephant
     </label>
+    {#if currentRecipient === 'claude'}
+      <span class="mode-divider">|</span>
+      <label>
+        <input type="radio" name="permission-mode-{windowId}" value="bypassPermissions" bind:group={permissionMode} />
+        Bypass
+      </label>
+      <label>
+        <input type="radio" name="permission-mode-{windowId}" value="plan" bind:group={permissionMode} />
+        Plan
+      </label>
+    {/if}
   </div>
 
   <div class="input-row">
@@ -484,6 +498,12 @@
 
   .recipient-toggle label:has(input:checked) { color: var(--fg-0); }
   .recipient-toggle label:has(input:disabled) { opacity: 0.4; cursor: not-allowed; }
+
+  .mode-divider {
+    color: var(--border);
+    user-select: none;
+    padding: 0 0.25rem;
+  }
 
   .input-row {
     display: flex;
