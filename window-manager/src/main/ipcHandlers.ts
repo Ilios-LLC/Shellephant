@@ -1,6 +1,6 @@
 import { ipcMain, BrowserWindow, shell } from 'electron'
 import { createWindow, listWindows, deleteWindow } from './windowService'
-import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, updateProjectPorts, type PortMapping } from './projectService'
+import { createProject, listProjects, deleteProject, updateProject, getProject, updateProjectEnvVars, updateProjectPorts, updateProjectDefaultNetwork, type PortMapping } from './projectService'
 import { createGroup, listGroups } from './projectGroupService'
 import { openTerminal, writeInput, resizeTerminal, closeTerminal, type SessionType } from './terminalService'
 import { setActiveContainer } from './focusState'
@@ -21,7 +21,7 @@ import {
 } from './settingsService'
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
-import { getDocker } from './docker'
+import { getDocker, listBridgeNetworks } from './docker'
 import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
@@ -84,6 +84,10 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('project:update-ports', (_, id: number, ports: PortMapping[]) =>
     updateProjectPorts(id, ports)
   )
+  ipcMain.handle('project:update-default-network', (_, id: number, network: string | null) =>
+    updateProjectDefaultNetwork(id, network)
+  )
+  ipcMain.handle('docker:list-bridge-networks', () => listBridgeNetworks())
 
   // Group handlers
   ipcMain.handle('group:create', (_, name: string) => createGroup(name))

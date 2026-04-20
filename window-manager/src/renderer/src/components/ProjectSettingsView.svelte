@@ -29,10 +29,33 @@
   let portRows = $state<PortRow[]>([])
   let busy = $state(false)
   let error = $state('')
+  let networks = $state<{ id: string; name: string }[]>([])
+  let networksLoading = $state(false)
+  let selectedNetwork = $state('')
+
+  async function loadNetworks(): Promise<void> {
+    networksLoading = true
+    try {
+      networks = await window.api.listDockerNetworks()
+    } catch {
+      // best-effort; user can retry with refresh button
+    } finally {
+      networksLoading = false
+    }
+  }
+
+  async function handleNetworkChange(e: Event): Promise<void> {
+    const value = (e.target as HTMLSelectElement).value
+    selectedNetwork = value
+    await window.api.updateProjectDefaultNetwork(project.id, value || null)
+  }
 
   onMount(async () => {
     try {
-      const record = await window.api.getProject(project.id)
+      const [record] = await Promise.all([
+        window.api.getProject(project.id),
+        loadNetworks()
+      ])
       if (record?.env_vars) {
         const parsed = JSON.parse(record.env_vars) as Record<string, string>
         rows = Object.entries(parsed).map(([key, value]) => ({ id: nextId++, key, value }))
@@ -45,6 +68,7 @@
           host: pm.host !== undefined ? String(pm.host) : ''
         }))
       }
+      selectedNetwork = record?.default_network ?? ''
     } catch (err) {
       error = err instanceof Error ? err.message : String(err)
     }
@@ -192,6 +216,35 @@
       <button type="button" class="add-btn" onclick={addPortRow} disabled={busy}>
         + Add Port
       </button>
+    </section>
+
+    <section class="section">
+      <div class="section-title">Default Bridge Network</div>
+      <p class="hint">Applies to new windows without dependencies.</p>
+      <div class="network-row">
+        {#if networksLoading}
+          <span class="hint">Loading…</span>
+        {:else}
+          <select
+            aria-label="Default bridge network"
+            value={selectedNetwork}
+            onchange={handleNetworkChange}
+            disabled={busy}
+          >
+            <option value="">None (no default)</option>
+            {#each networks as net (net.id)}
+              <option value={net.name}>{net.name}</option>
+            {/each}
+          </select>
+          <button
+            type="button"
+            aria-label="refresh networks"
+            class="refresh-btn"
+            onclick={loadNetworks}
+            disabled={busy}
+          >↺</button>
+        {/if}
+      </div>
     </section>
 
     {#if error}
@@ -379,6 +432,49 @@
   .submit:disabled,
   .remove-btn:disabled,
   .add-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  .network-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .network-row select {
+    flex: 1;
+    padding: 0.4rem 0.55rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-0);
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    outline: none;
+  }
+
+  .network-row select:focus {
+    border-color: var(--accent);
+  }
+
+  .refresh-btn {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-2);
+    font-size: 0.9rem;
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+
+  .refresh-btn:hover:not(:disabled) {
+    color: var(--fg-0);
+    border-color: var(--fg-1);
+  }
+
+  .refresh-btn:disabled {
     opacity: 0.4;
     cursor: not-allowed;
   }

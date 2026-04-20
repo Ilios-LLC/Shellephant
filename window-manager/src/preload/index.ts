@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('project:update-env-vars', id, envVars),
   updateProjectPorts: (id: number, ports: { container: number; host?: number }[]) =>
     ipcRenderer.invoke('project:update-ports', id, ports),
+  updateProjectDefaultNetwork: (id: number, network: string | null) =>
+    ipcRenderer.invoke('project:update-default-network', id, network),
+  listDockerNetworks: () => ipcRenderer.invoke('docker:list-bridge-networks'),
 
   // Group API
   createGroup: (name: string) => ipcRenderer.invoke('group:create', name),

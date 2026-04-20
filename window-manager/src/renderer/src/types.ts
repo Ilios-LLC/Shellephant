@@ -24,6 +24,7 @@ export interface ProjectRecord {
   ports?: string
   env_vars?: string | null
   group_id?: number | null
+  default_network?: string | null
   kimi_system_prompt?: string | null
   created_at: string
 }
@@ -91,6 +92,8 @@ export interface Api {
   getProject: (id: number) => Promise<ProjectRecord | undefined>
   updateProjectEnvVars: (id: number, envVars: Record<string, string>) => Promise<void>
   updateProjectPorts: (id: number, ports: PortMapping[]) => Promise<void>
+  updateProjectDefaultNetwork: (id: number, network: string | null) => Promise<void>
+  listDockerNetworks: () => Promise<{ id: string; name: string }[]>
   createGroup: (name: string) => Promise<ProjectGroupRecord>
   listGroups: () => Promise<ProjectGroupRecord[]>
 

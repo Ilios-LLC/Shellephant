@@ -29,15 +29,24 @@ describe('ProjectSettingsView', () => {
   let mockGetProject: ReturnType<typeof vi.fn>
   let mockUpdateEnvVars: ReturnType<typeof vi.fn>
   let mockUpdatePorts: ReturnType<typeof vi.fn>
+  let mockListDockerNetworks: ReturnType<typeof vi.fn>
+  let mockUpdateProjectDefaultNetwork: ReturnType<typeof vi.fn>
 
   beforeEach(() => {
     mockGetProject = vi.fn().mockResolvedValue(project)
     mockUpdateEnvVars = vi.fn().mockResolvedValue(undefined)
     mockUpdatePorts = vi.fn().mockResolvedValue(undefined)
+    mockListDockerNetworks = vi.fn().mockResolvedValue([
+      { id: 'abc', name: 'app-net' },
+      { id: 'def', name: 'db-net' }
+    ])
+    mockUpdateProjectDefaultNetwork = vi.fn().mockResolvedValue(undefined)
     vi.stubGlobal('api', {
       getProject: mockGetProject,
       updateProjectEnvVars: mockUpdateEnvVars,
-      updateProjectPorts: mockUpdatePorts
+      updateProjectPorts: mockUpdatePorts,
+      listDockerNetworks: mockListDockerNetworks,
+      updateProjectDefaultNetwork: mockUpdateProjectDefaultNetwork
     })
   })
 
@@ -89,7 +98,7 @@ describe('ProjectSettingsView', () => {
     const onSave = vi.fn()
     mockGetProject.mockResolvedValue(projectWithVars)
     render(ProjectSettingsView, baseProps({ project: projectWithVars, onSave }))
-    await waitFor(() => screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => screen.getByDisplayValue('FOO'))
     await fireEvent.click(screen.getByRole('button', { name: /save/i }))
     await waitFor(() => {
       expect(mockUpdateEnvVars).toHaveBeenCalledWith(1, { FOO: 'bar', BAZ: 'qux' })
@@ -163,7 +172,7 @@ describe('ProjectSettingsView', () => {
     }
     mockGetProject.mockResolvedValue(projectWithPorts)
     render(ProjectSettingsView, baseProps({ project: projectWithPorts }))
-    await waitFor(() => screen.getByRole('button', { name: /save/i }))
+    await waitFor(() => screen.getByDisplayValue('3000'))
     await fireEvent.click(screen.getByRole('button', { name: /save/i }))
     await waitFor(() => {
       expect(mockUpdatePorts).toHaveBeenCalledWith(1, [{ container: 3000, host: 4000 }])
@@ -204,6 +213,72 @@ describe('ProjectSettingsView', () => {
     await waitFor(() => {
       expect(screen.queryByDisplayValue('3000')).toBeNull()
       expect(screen.getByDisplayValue('8080')).toBeInTheDocument()
+    })
+  })
+
+  describe('Default Bridge Network section', () => {
+    it('renders the network section heading', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => expect(screen.getByText(/default bridge network/i)).toBeInTheDocument())
+    })
+
+    it('renders "None (no default)" option and selects it when project.default_network is null', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => {
+        const select = screen.getByRole('combobox', { name: /default bridge network/i }) as HTMLSelectElement
+        expect(select.value).toBe('')
+      })
+    })
+
+    it('populates dropdown with networks from listDockerNetworks', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => {
+        expect(screen.getByRole('option', { name: 'app-net' })).toBeDefined()
+        expect(screen.getByRole('option', { name: 'db-net' })).toBeDefined()
+      })
+    })
+
+    it('calls updateProjectDefaultNetwork when a network is selected', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => screen.getByRole('combobox', { name: /default bridge network/i }))
+      await fireEvent.change(
+        screen.getByRole('combobox', { name: /default bridge network/i }),
+        { target: { value: 'app-net' } }
+      )
+      await waitFor(() =>
+        expect(mockUpdateProjectDefaultNetwork).toHaveBeenCalledWith(1, 'app-net')
+      )
+    })
+
+    it('calls listDockerNetworks again when refresh button is clicked', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => screen.getByRole('button', { name: /refresh networks/i }))
+      await fireEvent.click(screen.getByRole('button', { name: /refresh networks/i }))
+      expect(mockListDockerNetworks).toHaveBeenCalledTimes(2)
+    })
+
+    it('pre-selects the current default_network when set', async () => {
+      const projectWithNet = { ...project, default_network: 'app-net' }
+      mockGetProject.mockResolvedValue(projectWithNet)
+      render(ProjectSettingsView, baseProps({ project: projectWithNet }))
+      await waitFor(() => {
+        const select = screen.getByRole('combobox', { name: /default bridge network/i }) as HTMLSelectElement
+        expect(select.value).toBe('app-net')
+      })
+    })
+
+    it('calls updateProjectDefaultNetwork with null when "None" is selected', async () => {
+      const projectWithNet = { ...project, default_network: 'app-net' }
+      mockGetProject.mockResolvedValue(projectWithNet)
+      render(ProjectSettingsView, baseProps({ project: projectWithNet }))
+      await waitFor(() => screen.getByRole('combobox', { name: /default bridge network/i }))
+      await fireEvent.change(
+        screen.getByRole('combobox', { name: /default bridge network/i }),
+        { target: { value: '' } }
+      )
+      await waitFor(() =>
+        expect(mockUpdateProjectDefaultNetwork).toHaveBeenCalledWith(1, null)
+      )
     })
   })
 })

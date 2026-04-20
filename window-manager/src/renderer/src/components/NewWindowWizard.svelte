@@ -19,9 +19,13 @@
   let error = $state('')
   let hasDeps = $state(false)
   let withDeps = $state(false)
+  let networkMode = $state<'auto' | 'default' | 'custom'>('auto')
+  let customNetwork = $state('')
   let windowType = $state<'manual' | 'assisted'>('manual')
   let fireworksConfigured = $state(false)
-  let networkName = $state('')
+
+  const defaultNetworkAvailable = $derived(!isMultiMode && !!project?.default_network)
+
   let selectedProjectIds = $state<number[]>([])
 
   let branchOptions = $state<Record<number, string[]>>({})
@@ -46,6 +50,7 @@
 
   onMount(async () => {
     if (!isMultiMode && project) {
+      if (project.default_network) networkMode = 'default'
       const deps: ProjectDependency[] = await window.api.listDependencies(project.id)
       hasDeps = deps.length > 0
       fetchBranches(project.id, project.git_url)
@@ -86,7 +91,9 @@
         const def = defaultBranches[id]
         if (selected && def && selected !== def) branchOverrides[id] = selected
       }
-      const netArg = withDeps ? '' : networkName.trim()
+      const netArg = withDeps ? '' :
+        networkMode === 'default' ? (project?.default_network ?? '') :
+        networkMode === 'custom' ? customNetwork.trim() : ''
       const record = await window.api.createWindow(trimmed, ids, withDeps, branchOverrides, windowType, netArg)
       onCreated(record)
     } catch (err) {
@@ -224,22 +231,47 @@
       </label>
     {/if}
 
-    <div class="field">
-      <label for="network-name">Docker Network (optional)</label>
-      <input
-        id="network-name"
-        type="text"
-        placeholder="existing-bridge-network"
-        bind:value={networkName}
-        disabled={loading || withDeps}
-        onkeydown={handleKey}
-      />
+    <fieldset
+      class="network-fieldset"
+      aria-label="Docker network"
+      disabled={withDeps || loading}
+    >
+      <legend class="field-label">Docker Network</legend>
       {#if withDeps}
-        <span class="hint">Ignored when starting with dependencies (a dedicated network is created).</span>
+        <span class="hint">Network auto-created when dependencies enabled.</span>
       {:else}
-        <span class="hint">Name of an existing Docker network to attach this container to.</span>
+        <label class="radio-label">
+          <input type="radio" name="network-mode" value="auto" bind:group={networkMode} />
+          Auto-create
+        </label>
+        <label
+          class="radio-label"
+          title={!defaultNetworkAvailable ? 'No default set' : ''}
+        >
+          <input
+            type="radio"
+            name="network-mode"
+            value="default"
+            bind:group={networkMode}
+            disabled={!defaultNetworkAvailable}
+          />
+          Use project default{project?.default_network ? ` (${project.default_network})` : ''}
+        </label>
+        <label class="radio-label">
+          <input type="radio" name="network-mode" value="custom" bind:group={networkMode} />
+          Custom
+        </label>
+        {#if networkMode === 'custom'}
+          <input
+            type="text"
+            class="network-custom-input"
+            placeholder="network-name"
+            bind:value={customNetwork}
+            disabled={loading}
+          />
+        {/if}
       {/if}
-    </div>
+    </fieldset>
 
     {#if loading && progress}
       <p class="progress" aria-live="polite">
@@ -507,6 +539,63 @@
   .dep-toggle input {
     width: auto;
     cursor: pointer;
+  }
+
+  .network-fieldset {
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 0.65rem 0.75rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  .network-fieldset legend {
+    padding: 0 0.25rem;
+  }
+
+  .network-fieldset:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--fg-1);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: normal;
+  }
+
+  .radio-label input[type="radio"] {
+    width: auto;
+    cursor: pointer;
+  }
+
+  .radio-label input[type="radio"]:disabled {
+    cursor: not-allowed;
+  }
+
+  .network-custom-input {
+    margin-top: 0.2rem;
+    width: 100%;
+    padding: 0.4rem 0.55rem;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-0);
+    font-family: var(--font-ui);
+    font-size: 0.82rem;
+    outline: none;
+  }
+
+  .network-custom-input:focus {
+    border-color: var(--accent);
   }
 
   .type-toggle {
