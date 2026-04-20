@@ -14,9 +14,6 @@ export type FilteredEvent = {
 
 type Json = Record<string, unknown>
 
-const MAX_CONTEXT_RESULT_LEN = 500
-const MAX_DISPLAY_RESULT_LEN = 2000
-const MAX_EVENT_TEXT_LEN = 2000
 
 export function filterSdkLine(line: string): FilteredEvent {
   const trimmed = line.trim()
@@ -107,13 +104,13 @@ function tryExtractSummaryFromPartialJson(raw: string): string {
   try {
     const parsed = JSON.parse(raw) as Json
     const val = firstTruthyString(parsed, candidateKeys)
-    if (val) return truncate(val, 80)
+    if (val) return val
   } catch {
     /* fall through to regex scan */
   }
   for (const key of candidateKeys) {
     const match = raw.match(new RegExp(`"${key}"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)`))
-    if (match && match[1]) return truncate(match[1], 80)
+    if (match && match[1]) return match[1]
   }
   return ''
 }
@@ -140,12 +137,12 @@ function parseAssistantEvent(event: Json, ts: number): TimelineEvent[] {
     const btype = block.type as string
     if (btype === 'thinking') {
       const text = (block.thinking as string) ?? ''
-      out.push({ kind: 'thinking', text: truncate(text, MAX_EVENT_TEXT_LEN), ts })
+      out.push({ kind: 'thinking', text, ts })
       continue
     }
     if (btype === 'text') {
       const text = (block.text as string) ?? ''
-      if (text) out.push({ kind: 'assistant_text', text: truncate(text, MAX_EVENT_TEXT_LEN), ts })
+      if (text) out.push({ kind: 'assistant_text', text, ts })
       continue
     }
     if (btype === 'tool_use') {
@@ -176,7 +173,7 @@ function parseUserEvent(event: Json, ts: number): TimelineEvent[] {
     out.push({
       kind: 'tool_result',
       toolUseId: (block.tool_use_id as string) ?? '',
-      text: truncate(extractToolResultText(block.content), MAX_EVENT_TEXT_LEN),
+      text: extractToolResultText(block.content),
       isError: block.is_error === true,
       ts
     })
@@ -187,7 +184,7 @@ function parseUserEvent(event: Json, ts: number): TimelineEvent[] {
 function parseResultEvent(event: Json, ts: number): TimelineEvent[] {
   const text = (event.result as string) ?? ''
   if (!text) return []
-  return [{ kind: 'result', text: truncate(text, MAX_EVENT_TEXT_LEN), isError: event.is_error === true, ts }]
+  return [{ kind: 'result', text, isError: event.is_error === true, ts }]
 }
 
 function formatSystem(event: Json, subtype: string | undefined): FilteredEvent {
@@ -264,8 +261,8 @@ function formatUser(event: Json): FilteredEvent {
     const raw = extractToolResultText(block.content)
     const prefix = isError ? '⛔' : '✓'
 
-    displayParts.push(`${prefix} ${truncate(raw, MAX_DISPLAY_RESULT_LEN)}`)
-    contextParts.push(`tool_result${isError ? '(error)' : ''}: ${truncate(raw, MAX_CONTEXT_RESULT_LEN)}`)
+    displayParts.push(`${prefix} ${raw}`)
+    contextParts.push(`tool_result${isError ? '(error)' : ''}: ${raw}`)
   }
 
   return {
@@ -281,7 +278,7 @@ function formatResult(event: Json): FilteredEvent {
   const prefix = isError ? '⛔ final' : '✓ final'
   return {
     display: `${prefix}: ${result}`,
-    context: `final: ${truncate(result, MAX_CONTEXT_RESULT_LEN)}`
+    context: `final: ${result}`
   }
 }
 
@@ -290,10 +287,10 @@ function summarizeToolInput(_name: string, input: Json | undefined): string {
   const keys = ['file_path', 'path', 'pattern', 'command', 'url', 'prompt', 'description']
   for (const key of keys) {
     const val = input[key]
-    if (typeof val === 'string' && val) return truncate(val, 80)
+    if (typeof val === 'string' && val) return val
   }
   const firstString = Object.values(input).find(v => typeof v === 'string') as string | undefined
-  if (firstString) return truncate(firstString, 80)
+  if (firstString) return firstString
   return Object.keys(input).join(',')
 }
 
@@ -307,11 +304,6 @@ function extractToolResultText(content: unknown): string {
     }
   }
   return parts.join('\n')
-}
-
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text
-  return text.slice(0, max) + `…[+${text.length - max}b]`
 }
 
 // Line-buffered splitter. Each newline-terminated JSON line is parsed into
