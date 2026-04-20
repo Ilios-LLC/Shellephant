@@ -3,7 +3,7 @@ import { networkInterfaces } from 'os'
 import type { AddressInfo } from 'net'
 import { WebSocketServer, WebSocket } from 'ws'
 import { listWindows, getWindowTypeByContainerId } from './windowService'
-import { getSession } from './terminalService'
+import { getSession, spawnClaudePty, spawnTerminalPty } from './terminalService'
 import { getPhoneServerHtml } from './phoneServerHtml'
 
 const DEFAULT_PORT = 8765
@@ -28,18 +28,24 @@ function handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
   const windowType = getWindowTypeByContainerId(containerId)
   const sessionType = windowType === 'assisted' ? 'terminal' : 'claude'
   const session = getSession(containerId, sessionType)
-  if (!session) {
-    ws.send('ERROR: No active session')
-    ws.close()
-    return
+  if (session) {
+    const onData = session.pty.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
+    const onExit = session.pty.onExit(({ exitCode }) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(`\r\n[process exited: ${exitCode}]\r\n`)
+      ws.close()
+    })
+    ws.on('message', msg => session.pty.write(msg.toString()))
+    ws.on('close', () => { onData.dispose(); onExit.dispose() })
+  } else {
+    const child = sessionType === 'terminal' ? spawnTerminalPty(containerId) : spawnClaudePty(containerId)
+    const onData = child.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
+    const onExit = child.onExit(({ exitCode }) => {
+      if (ws.readyState === WebSocket.OPEN) ws.send(`\r\n[process exited: ${exitCode}]\r\n`)
+      ws.close()
+    })
+    ws.on('message', msg => child.write(msg.toString()))
+    ws.on('close', () => { onData.dispose(); onExit.dispose(); try { child.kill() } catch { /* already dead */ } })
   }
-  const onData = session.pty.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
-  const onExit = session.pty.onExit(({ exitCode }) => {
-    if (ws.readyState === WebSocket.OPEN) ws.send(`\r\n[process exited: ${exitCode}]\r\n`)
-    ws.close()
-  })
-  ws.on('message', msg => session.pty.write(msg.toString()))
-  ws.on('close', () => { onData.dispose(); onExit.dispose() })
 }
 
 async function handleHttpRequest(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
