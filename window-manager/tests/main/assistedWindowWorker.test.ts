@@ -24,7 +24,8 @@ vi.mock('openai', () => ({
   })
 }))
 
-import { resolveSystemPrompt, buildKimiTools, parseDockerOutput, runClaudeCode } from '../../src/main/assistedWindowWorker'
+import { resolveSystemPrompt, buildKimiTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
+import { runClaudeCode } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
 
 describe('resolveSystemPrompt', () => {

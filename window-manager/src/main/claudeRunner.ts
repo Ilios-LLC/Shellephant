@@ -19,15 +19,18 @@ export async function runClaudeCode(
     let hadAnyOutput = false
     let streamSessionId: string | null = null
 
-    child.stdout.on('data', (chunk: Buffer) => {
-      hadAnyOutput = true
-      const drained = filter.push(chunk.toString())
+    function processDrained(drained: { contextChunks: string[]; events: TimelineEvent[]; sessionId: string | null }) {
       contextParts.push(...drained.contextChunks)
       if (drained.sessionId) streamSessionId = drained.sessionId
       for (const event of drained.events) {
         eventsLog.push(event)
         parentPort?.postMessage({ type: 'claude:event', event })
       }
+    }
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      hadAnyOutput = true
+      processDrained(filter.push(chunk.toString()))
     })
 
     child.stderr.on('data', (chunk: Buffer) => {
@@ -35,13 +38,7 @@ export async function runClaudeCode(
     })
 
     child.on('close', (code) => {
-      const drained = filter.flush()
-      contextParts.push(...drained.contextChunks)
-      if (drained.sessionId) streamSessionId = drained.sessionId
-      for (const event of drained.events) {
-        eventsLog.push(event)
-        parentPort?.postMessage({ type: 'claude:event', event })
-      }
+      processDrained(filter.flush())
 
       if (code !== 0 && !hadAnyOutput) {
         reject(new Error(`docker exec failed (exit ${code}): ${stderr}`))

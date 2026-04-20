@@ -3,7 +3,6 @@ import OpenAI from 'openai'
 import type { TimelineEvent } from '../shared/timelineEvent'
 import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../shared/defaultKimiPrompt'
 import { runClaudeCode } from './claudeRunner'
-export { runClaudeCode }
 
 export function resolveSystemPrompt(
   projectPrompt: string | null,
@@ -121,7 +120,7 @@ async function handleRunClaudeCode(
     // docker exec fails — otherwise the tool_call bubble sits next to nothing.
     const errorEvent: TimelineEvent = { kind: 'result', text: output, isError: true, ts: Date.now() }
     events = [errorEvent]
-    parentPort?.postMessage({ type: 'stream-event', event: errorEvent })
+    parentPort?.postMessage({ type: 'claude:event', event: errorEvent })
   }
 
   parentPort?.postMessage({
