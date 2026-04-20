@@ -225,6 +225,18 @@ Svelte 5 runes-mode wizard for creating a new window, supporting single-project 
 - `handleSubmit` reads `branchSelections[id]` and `defaultBranches[id]` directly (single code path, no DOM refs); builds `branchOverrides: Record<number, string>` by comparing selection to default; calls `window.api.createWindow(name, ids, withDeps, branchOverrides)`.
 - Tests live in `window-manager/tests/renderer/NewWindowWizard.test.ts` (15 tests).
 
+### window-manager/src/main/assistedWindowWorker.ts
+Worker thread implementing the Kimi K2 orchestration loop for assisted windows.
+- Exports: `resolveSystemPrompt(projectPrompt, globalPrompt)`, `buildKimiTools()`, `parseDockerOutput(stdout, stderr)`.
+- `resolveSystemPrompt` — returns project prompt > global prompt > DEFAULT_SYSTEM_PROMPT (contains "autonomous coding assistant").
+- `buildKimiTools` — returns two `ChatCompletionTool` definitions: `run_claude_code` and `ping_user`.
+- `parseDockerOutput` — splits stdout lines (filter empty), extracts sessionId from stderr (null if empty).
+- Private `runClaudeCode(containerId, sessionId, message)` — spawns `docker exec` running `cw-claude-sdk.js`; streams chunks via `parentPort.postMessage({ type: 'stream-chunk' })`; resolves `{ output, newSessionId }`.
+- Private `kimiLoop(data)` — main orchestration: streams Kimi K2 via Fireworks AI (`baseURL: https://api.fireworks.ai/inference/v1`), handles `run_claude_code` and `ping_user` tool calls. Extracted helpers: `handlePingUser`, `handleRunClaudeCode`, `processStreamChunk` (all under 100 lines). Posts: `save-message`, `kimi-delta`, `ping-user`, `turn-complete` messages to parent.
+- `parentPort.on('message')` — handles `{ type: 'send' }` to invoke `kimiLoop`; on error posts `turn-complete` with error field.
+- Uses `vi.hoisted()` pattern in tests for mock references (same as MonacoEditor pattern).
+- Tests live in `window-manager/tests/main/assistedWindowWorker.test.ts` (6 tests).
+
 ### window-manager/src/main/phoneServerHtml.ts
 Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
 - Contains xterm.js CDN script tag, WebSocket connection code, and `/api/windows` fetch.
