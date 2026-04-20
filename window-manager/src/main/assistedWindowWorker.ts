@@ -57,8 +57,8 @@ type KimiLoopData = {
   initialSessionId?: string | null
   systemPrompt: string
   fireworksKey: string
-  turnId?: string
-  logPath?: string
+  turnId: string
+  logPath: string
 }
 
 type ToolCallAccum = { id: string; name: string; arguments: string }
@@ -154,7 +154,7 @@ async function processStreamChunk(
 }
 
 async function kimiLoop(data: KimiLoopData): Promise<void> {
-  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey, turnId = '', logPath = '' } = data
+  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey, turnId, logPath } = data
 
   const emitEvent = makeEmitter(turnId, logPath, windowId)
 

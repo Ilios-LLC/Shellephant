@@ -11,9 +11,10 @@ import type { TurnRecord } from './logWriter'
 import type { PermissionMode } from '../shared/permissionMode'
 
 const workers = new Map<number, Worker>()
+const activeTurnIds = new Map<number, string>()
 
 export function getDirectWorkerCount(): number { return workers.size }
-export function __resetDirectWorkersForTests(): void { workers.clear() }
+export function __resetDirectWorkersForTests(): void { workers.clear(); activeTurnIds.clear() }
 
 function getWorkerPath(): string {
   return path.join(__dirname, 'claudeDirectWorker.js')
@@ -45,6 +46,7 @@ export async function sendToClaudeDirectly(
     status: 'running', started_at: startedAt, log_file: logPath
   }
   insertTurn(turnRecord)
+  activeTurnIds.set(windowId, turnId)
   sendToRenderer('logs:turn-started', turnRecord)
 
   let worker = workers.get(windowId)
@@ -92,6 +94,7 @@ export async function sendToClaudeDirectly(
             }
           }
         }
+        activeTurnIds.delete(windowId)
         workers.delete(windowId)
       }
     })
@@ -102,6 +105,7 @@ export async function sendToClaudeDirectly(
       sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: err.message })
       sendToRenderer('claude:turn-complete', windowId)
       sendToRenderer('claude:error', windowId, err.message)
+      activeTurnIds.delete(windowId)
       workers.delete(windowId)
     })
 
@@ -112,6 +116,7 @@ export async function sendToClaudeDirectly(
         sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: `Worker exited with code ${code}` })
         sendToRenderer('claude:turn-complete', windowId)
         sendToRenderer('claude:error', windowId, `Worker exited with code ${code}`)
+        activeTurnIds.delete(windowId)
         workers.delete(windowId)
       }
     })
@@ -126,5 +131,11 @@ export function cancelClaudeDirect(windowId: number): void {
   const worker = workers.get(windowId)
   if (!worker) return
   worker.terminate()
+  const activeTurnId = activeTurnIds.get(windowId)
+  if (activeTurnId) {
+    const endedAt = Date.now()
+    updateTurn(activeTurnId, { status: 'error', ended_at: endedAt, error: 'Cancelled' })
+  }
+  activeTurnIds.delete(windowId)
   workers.delete(windowId)
 }

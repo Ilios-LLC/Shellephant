@@ -14,6 +14,7 @@ import type { TurnRecord } from './logWriter'
 
 const workers = new Map<number, Worker>()
 const workerCtxSetters = new Map<number, (ctx: SendCtx) => void>()
+const workerCtxMap = new Map<number, SendCtx>()
 
 export function getWorkerCount(): number {
   return workers.size
@@ -22,6 +23,7 @@ export function getWorkerCount(): number {
 export function __resetWorkersForTests(): void {
   workers.clear()
   workerCtxSetters.clear()
+  workerCtxMap.clear()
 }
 
 function getWorkerPath(): string {
@@ -135,6 +137,7 @@ function handleTurnComplete(msg: Record<string, unknown>, ctx: SendCtx): void {
   }
   workers.delete(windowId)
   workerCtxSetters.delete(windowId)
+  workerCtxMap.delete(windowId)
 }
 
 function spawnWorker(
@@ -178,6 +181,7 @@ function spawnWorker(
     sendToRenderer('assisted:turn-complete', windowId, null, err.message)
     workers.delete(windowId)
     workerCtxSetters.delete(windowId)
+    workerCtxMap.delete(windowId)
   })
 
   worker.on('exit', (code) => {
@@ -188,6 +192,7 @@ function spawnWorker(
       sendToRenderer('assisted:turn-complete', windowId, null, `Worker exited with code ${code}`)
       workers.delete(windowId)
       workerCtxSetters.delete(windowId)
+      workerCtxMap.delete(windowId)
     }
   })
 
@@ -230,6 +235,7 @@ export async function sendToWindow(
   } else {
     workerCtxSetters.get(windowId)?.(ctx)
   }
+  workerCtxMap.set(windowId, ctx)
 
   worker.postMessage({
     type: 'send', windowId, containerId, message,
@@ -242,8 +248,15 @@ export async function sendToWindow(
 export function cancelWindow(windowId: number): void {
   const worker = workers.get(windowId)
   if (!worker) return
+  const ctx = workerCtxMap.get(windowId)
   worker.terminate()
+  if (ctx) {
+    const endedAt = Date.now()
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, error: 'Cancelled' })
+    ctx.sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, error: 'Cancelled' })
+  }
   workers.delete(windowId)
   workerCtxSetters.delete(windowId)
+  workerCtxMap.delete(windowId)
 }
 
