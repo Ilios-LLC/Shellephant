@@ -90,7 +90,7 @@ export interface Api {
   listGroups: () => Promise<ProjectGroupRecord[]>
 
   // Windows
-  createWindow: (name: string, projectIds: number[], withDeps?: boolean) => Promise<WindowRecord>
+  createWindow: (name: string, projectIds: number[], withDeps?: boolean, branchOverrides?: Record<number, string>, windowType?: 'manual' | 'assisted') => Promise<WindowRecord>
   listWindows: (projectId?: number) => Promise<WindowRecord[]>
   deleteWindow: (id: number) => Promise<void>
   onWindowCreateProgress: (callback: (step: string) => void) => void

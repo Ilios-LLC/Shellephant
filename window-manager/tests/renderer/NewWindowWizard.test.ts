@@ -221,6 +221,22 @@ describe('window type toggle', () => {
     await waitFor(() => screen.getByLabelText('Assisted'))
     const assistedRadio = screen.getByLabelText('Assisted') as HTMLInputElement
     expect(assistedRadio.disabled).toBe(true)
+    const assistedLabel = assistedRadio.closest('label') as HTMLElement
+    expect(assistedLabel.title).toBe('Set Fireworks API key in Settings')
+  })
+
+  it('calls getFireworksKeyStatus on mount', async () => {
+    const mockFwStatus = vi.fn().mockResolvedValue({ configured: false, hint: null })
+    vi.stubGlobal('api', {
+      listDependencies: mockListDeps,
+      createWindow: mockCreateWindow,
+      onWindowCreateProgress: mockOnProgress,
+      offWindowCreateProgress: mockOffProgress,
+      listRemoteBranches: mockListRemoteBranches,
+      getFireworksKeyStatus: mockFwStatus
+    })
+    render(NewWindowWizard, baseProps())
+    await waitFor(() => expect(mockFwStatus).toHaveBeenCalled())
   })
 
   it('passes assisted windowType to createWindow when Assisted selected', async () => {
