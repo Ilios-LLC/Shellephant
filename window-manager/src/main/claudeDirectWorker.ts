@@ -1,4 +1,5 @@
 import { parentPort } from 'worker_threads'
+import type { TimelineEvent } from '../shared/timelineEvent'
 import { runClaudeCode } from './claudeRunner'
 
 type DirectSendMsg = {
@@ -14,7 +15,7 @@ parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>
   const { windowId, containerId, message, initialSessionId } = msg as unknown as DirectSendMsg
 
   try {
-    const { assistantText, newSessionId } = await runClaudeCode(containerId, initialSessionId, message)
+    const { output, assistantText, newSessionId, events } = await runClaudeCode(containerId, initialSessionId, message)
     if (assistantText) {
       parentPort?.postMessage({
         type: 'save-message',
@@ -23,7 +24,17 @@ parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>
         metadata: JSON.stringify({ session_id: newSessionId, complete: true })
       })
     }
-    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId, assistantText })
+    // Pick the most readable text for the notification body. 'result' events
+    // carry Claude's final answer; `assistantText` is the concatenated prose
+    // across assistant_text blocks. Both beat `output`, which is the compact
+    // context format (e.g. "tool_use: Write(src/foo.ts)…").
+    const resultText = events
+      .filter((e): e is Extract<TimelineEvent, { kind: 'result' }> => e.kind === 'result')
+      .filter(e => !e.isError)
+      .map(e => e.text)
+      .join(' ')
+    const notificationText = resultText || assistantText || output
+    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId, assistantText: notificationText })
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     parentPort?.postMessage({

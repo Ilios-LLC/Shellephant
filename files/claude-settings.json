@@ -6,6 +6,10 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
+  "statusLine": {
+    "type": "command",
+    "command": "bash /home/node/statusline-command.sh"
+  },
   "enabledPlugins": {
     "caveman@caveman": true,
     "superpowers@superpowers-marketplace": true

@@ -4,6 +4,7 @@ import { BrowserWindow, Notification } from 'electron'
 import { getDb } from './db'
 import { loadLastSessionId } from './assistedWindowService'
 import { isUserWatching } from './focusState'
+import { getWaitingInfoByContainerId } from './windowService'
 
 const workers = new Map<number, Worker>()
 
@@ -53,10 +54,14 @@ export async function sendToClaudeDirectly(
         }
         const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
         if (assistantText) {
-          const focusedWin = BrowserWindow.getFocusedWindow()
-          if (!focusedWin || !isUserWatching(containerId, focusedWin)) {
+          const win = BrowserWindow.getAllWindows()[0]
+          if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
             const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
             new Notification({ title: 'Claude responded', body }).show()
+            if (win && !win.isDestroyed()) {
+              const info = getWaitingInfoByContainerId(containerId)
+              if (info) win.webContents.send('terminal:waiting', info)
+            }
           }
         }
         workers.delete(windowId)
