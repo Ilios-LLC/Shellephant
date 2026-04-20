@@ -48,7 +48,10 @@ const { mockNotification, mockNotificationShow, mockIsUserWatching, mockGetFocus
 }))
 
 vi.mock('electron', () => ({
-  BrowserWindow: { getFocusedWindow: () => mockGetFocusedWindow() },
+  BrowserWindow: {
+    getFocusedWindow: () => mockGetFocusedWindow(),
+    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: vi.fn() } }]
+  },
   Notification: vi.fn().mockImplementation(function (this: Record<string, unknown>, opts: unknown) {
     mockNotification(opts)
     this.show = mockNotificationShow
