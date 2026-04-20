@@ -63,12 +63,14 @@ async function handleRunClaudeCode(
   parentPort?.postMessage({ type: 'tool-call', windowId, toolName: 'run_claude_code', message: args.message })
   parentPort?.postMessage({ type: 'save-message', windowId, role: 'tool_call', content: args.message, metadata: JSON.stringify({ tool_name: 'run_claude_code' }) })
   let output: string
+  let assistantText = ''
   let events: TimelineEvent[] = []
   let newActiveSessionId = activeSessionId
 
   try {
     const result = await runClaudeCode(containerId, activeSessionId, args.message, { eventType: 'claude-to-shellephant:event' })
     output = result.output
+    assistantText = result.assistantText
     events = result.events
     newActiveSessionId = result.newSessionId ?? activeSessionId
   } catch (err) {
@@ -82,7 +84,7 @@ async function handleRunClaudeCode(
   }
 
   parentPort?.postMessage({
-    type: 'save-message', windowId, role: 'claude-to-shellephant', content: output,
+    type: 'save-message', windowId, role: 'claude-to-shellephant', content: assistantText || output,
     metadata: JSON.stringify({
       schemaVersion: 1,
       session_id: newActiveSessionId,
