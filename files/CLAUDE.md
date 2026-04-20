@@ -218,6 +218,18 @@ Top-level window component hosting claude/terminal/editor panels in a split-pane
 - Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
 - Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (24 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` and `AssistedPanel.svelte` via stubs.
 
+### window-manager/src/renderer/src/components/AssistedPanel.svelte
+Svelte 5 runes-mode chat UI for assisted windows. Hosts both Claude direct and Shellephant (Kimi K2) conversations.
+- Props: `windowId: number`, `containerId: string`
+- Recipient toggle: `currentRecipient` state (`'claude'` default | `'shellephant'`). Shellephant radio disabled when `fireworksConfigured === false` (fetched via `window.api.getFireworksKeyStatus()` in `onMount`).
+- Four message roles: `user`, `shellephant`, `claude`, `claude-action`. Legacy roles `assistant`/`tool_result` mapped to `shellephant`/`claude` via `mapLegacyRole`.
+- IPC listeners registered in `onMount`: `onAssistedKimiDelta` (appends to streaming shellephant bubble), `onAssistedTurnComplete` (stops running, shows stats for shellephant), `onClaudeDelta` (appends to streaming claude bubble), `onClaudeAction` (adds `claude-action` mini-panel), `onClaudeTurnComplete` (stops running for claude).
+- `send()` routes to `window.api.claudeSend` or `window.api.assistedSend` based on `currentRecipient`.
+- `handleCancel()` routes to `window.api.claudeCancel` or `window.api.assistedCancel`.
+- `claude-action` messages rendered as collapsed toggle buttons; `getActionLabel` shows `actionType — summary`; `getActionDetail` shows `detail` in `<pre>` when expanded.
+- No `pingActive`, no `handlePingReply`, no `assistedResume`.
+- Tests live in `window-manager/tests/renderer/AssistedPanel.test.ts` (17 tests).
+
 ### window-manager/src/renderer/src/components/SettingsView.svelte
 Svelte 5 runes-mode settings form for credentials.
 - Props: `patStatus`, `claudeStatus`, `fireworksStatus` (all `TokenStatus`), `requiredFor?: SettingsRequirement`, `onPatStatusChange`, `onClaudeStatusChange`, `onFireworksStatusChange`, `onCancel`.
@@ -265,6 +277,24 @@ Worker thread implementing the Kimi K2 orchestration loop for assisted windows.
 - `parentPort.on('message')` — handles `{ type: 'send' }` to invoke `kimiLoop`; on error posts `turn-complete` with error field.
 - Uses `vi.hoisted()` pattern in tests for mock references (same as MonacoEditor pattern).
 - Tests live in `window-manager/tests/main/assistedWindowWorker.test.ts` (6 tests).
+
+### window-manager/src/main/claudeDirectWorker.ts
+Worker thread for direct Claude turns (bypassing Shellephant).
+- No exports (side-effect module — registers `parentPort.on('message')` handler at import time).
+- Handles `{ type: 'send', windowId, containerId, message, initialSessionId }` message.
+- Calls `runClaudeCode(containerId, initialSessionId, message)` from `claudeRunner.ts`.
+- On success: posts `save-message` (role: `claude`, content: output, metadata: JSON with session_id) then `turn-complete` (windowId, session_id).
+- On error: posts `save-message` (role: `claude`, content: `ERROR: <msg>`) then `turn-complete` (windowId, error: msg).
+- Tests live in `window-manager/tests/main/claudeDirectWorker.test.ts` (4 tests). Handler captured at module-level after import (before `beforeEach` clears mocks).
+
+### window-manager/src/main/claudeService.ts
+Worker pool manager for direct Claude windows.
+- Exports: `sendToClaudeDirectly`, `cancelClaudeDirect`, `getDirectWorkerCount`, `__resetDirectWorkersForTests`.
+- Module-level `workers: Map<number, Worker>` keyed by windowId.
+- `sendToClaudeDirectly(windowId, containerId, message, sendToRenderer)` — saves user message to DB, loads last sessionId, spawns/reuses Worker at `claudeDirectWorker.js`, posts `send` message. Worker message routing: `save-message` → DB insert; `claude:event` with `kind === 'text_delta'` → `sendToRenderer('claude:delta', windowId, text)`; `claude:event` with `kind === 'tool_use'` → saves `claude-action` to DB + `sendToRenderer('claude:action', ...)`; `turn-complete` → `sendToRenderer('claude:turn-complete', windowId)` + removes worker (also sends `claude:error` if error field present).
+- `cancelClaudeDirect(windowId)` — terminates worker and removes from map.
+- `loadLastSessionId` implemented inline (same logic as in `assistedWindowService.ts`) to avoid pulling in electron dependency.
+- Tests live in `window-manager/tests/main/claudeService.test.ts` (8 tests).
 
 ### window-manager/src/main/phoneServerHtml.ts
 Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
