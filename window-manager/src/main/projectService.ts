@@ -16,6 +16,7 @@ export interface ProjectRecord {
   ports?: string
   env_vars?: string | null
   group_id?: number | null
+  default_network?: string | null
   created_at: string
 }
 
@@ -79,6 +80,7 @@ export async function createProject(
       git_url: gitUrl,
       ports: portsJson ?? undefined,
       group_id: null,
+      default_network: null,
       created_at: new Date().toISOString()
     }
   } catch (err) {
@@ -92,7 +94,7 @@ export async function createProject(
 export function listProjects(): ProjectRecord[] {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, env_vars, group_id, default_network, created_at FROM projects WHERE deleted_at IS NULL'
     )
     .all() as ProjectRecord[]
 }
@@ -105,7 +107,7 @@ export function updateProject(id: number, patch: { groupId: number | null }): Pr
   )
   const record = db
     .prepare(
-      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, env_vars, group_id, default_network, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
     )
     .get(id) as ProjectRecord | undefined
   if (!record) throw new Error(`Project ${id} not found`)
@@ -134,7 +136,7 @@ export async function deleteProject(id: number): Promise<void> {
 export function getProject(id: number): ProjectRecord | undefined {
   return getDb()
     .prepare(
-      'SELECT id, name, git_url, ports, env_vars, group_id, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
+      'SELECT id, name, git_url, ports, env_vars, group_id, default_network, created_at FROM projects WHERE id = ? AND deleted_at IS NULL'
     )
     .get(id) as ProjectRecord | undefined
 }
@@ -163,5 +165,12 @@ export function updateProjectPorts(id: number, ports: PortMapping[]): void {
   const result = getDb()
     .prepare('UPDATE projects SET ports = ? WHERE id = ? AND deleted_at IS NULL')
     .run(portsJson, id)
+  if (result.changes === 0) throw new Error(`Project ${id} not found`)
+}
+
+export function updateProjectDefaultNetwork(id: number, network: string | null): void {
+  const result = getDb()
+    .prepare('UPDATE projects SET default_network = ? WHERE id = ? AND deleted_at IS NULL')
+    .run(network, id)
   if (result.changes === 0) throw new Error(`Project ${id} not found`)
 }
