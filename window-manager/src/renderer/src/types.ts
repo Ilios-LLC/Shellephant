@@ -142,16 +142,9 @@ export interface Api {
   // Assisted window API
   assistedSend: (windowId: number, message: string) => Promise<void>
   assistedCancel: (windowId: number) => Promise<void>
-  assistedResume: (windowId: number, message: string) => Promise<void>
   assistedHistory: (windowId: number) => Promise<AssistedMessage[]>
-  onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) => void
-  offAssistedStreamEvent: () => void
   onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) => void
   offAssistedKimiDelta: () => void
-  onAssistedPingUser: (callback: (windowId: number, message: string) => void) => void
-  offAssistedPingUser: () => void
-  onAssistedToolCall: (callback: (windowId: number, toolName: string, message: string) => void) => void
-  offAssistedToolCall: () => void
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) => void
   offAssistedTurnComplete: () => void
 

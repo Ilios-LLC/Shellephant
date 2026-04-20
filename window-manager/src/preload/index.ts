@@ -151,18 +151,9 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('assisted:send', windowId, message),
   assistedCancel: (windowId: number) => ipcRenderer.invoke('assisted:cancel', windowId),
   assistedHistory: (windowId: number) => ipcRenderer.invoke('assisted:history', windowId),
-  onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) =>
-    ipcRenderer.on('assisted:stream-event', (_, windowId, event) => callback(windowId, event)),
-  offAssistedStreamEvent: () => ipcRenderer.removeAllListeners('assisted:stream-event'),
   onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) =>
     ipcRenderer.on('assisted:kimi-delta', (_, windowId, delta) => callback(windowId, delta)),
   offAssistedKimiDelta: () => ipcRenderer.removeAllListeners('assisted:kimi-delta'),
-  onAssistedPingUser: (callback: (windowId: number, message: string) => void) =>
-    ipcRenderer.on('assisted:ping-user', (_, windowId, message) => callback(windowId, message)),
-  offAssistedPingUser: () => ipcRenderer.removeAllListeners('assisted:ping-user'),
-  onAssistedToolCall: (callback: (windowId: number, toolName: string, message: string) => void) =>
-    ipcRenderer.on('assisted:tool-call', (_, windowId, toolName, message) => callback(windowId, toolName, message)),
-  offAssistedToolCall: () => ipcRenderer.removeAllListeners('assisted:tool-call'),
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) =>
     ipcRenderer.on('assisted:turn-complete', (_, windowId, stats, error) => callback(windowId, stats, error)),
   offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete'),

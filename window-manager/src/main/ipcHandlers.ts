@@ -98,7 +98,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     'window:create',
     async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, networkName = '') => {
-      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), networkName)
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), 'manual', networkName)
     }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
