@@ -28,6 +28,9 @@ function runColumnMigrations(db: Database.Database): void {
   if (!col(db, 'windows').includes('network_id')) {
     db.exec('ALTER TABLE windows ADD COLUMN network_id TEXT DEFAULT NULL')
   }
+  if (!col(db, 'windows').includes('window_type')) {
+    db.exec("ALTER TABLE windows ADD COLUMN window_type TEXT NOT NULL DEFAULT 'manual'")
+  }
 }
 
 function makeWindowProjectIdNullable(db: Database.Database): void {

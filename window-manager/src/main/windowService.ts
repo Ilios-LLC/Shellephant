@@ -28,6 +28,7 @@ export interface WindowRecord {
   container_id: string
   ports?: string
   network_id?: string
+  window_type: 'manual' | 'assisted'
   created_at: string
   status: WindowStatus
   projects: WindowProjectRecord[]
@@ -370,7 +371,7 @@ export async function reconcileWindows(): Promise<void> {
 export function listWindows(projectId?: number): WindowRecord[] {
   const db = getDb()
   let windowQuery =
-    'SELECT id, name, project_id, container_id, ports, network_id, created_at FROM windows WHERE deleted_at IS NULL'
+    'SELECT id, name, project_id, container_id, ports, network_id, window_type, created_at FROM windows WHERE deleted_at IS NULL'
   const params: number[] = []
 
   if (projectId !== undefined) {
@@ -418,6 +419,14 @@ export function getWaitingInfoByContainerId(containerId: string): WaitingWindowI
     .get(containerId) as Omit<WaitingWindowInfo, 'containerId'> | undefined
   if (!row) return null
   return { containerId, ...row }
+}
+
+export function getWindowTypeByContainerId(containerId: string): 'manual' | 'assisted' | null {
+  const row = getDb()
+    .prepare('SELECT window_type FROM windows WHERE container_id = ? AND deleted_at IS NULL LIMIT 1')
+    .get(containerId) as { window_type: string } | undefined
+  if (!row) return null
+  return row.window_type as 'manual' | 'assisted'
 }
 
 export async function deleteWindow(id: number): Promise<void> {

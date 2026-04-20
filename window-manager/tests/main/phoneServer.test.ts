@@ -30,16 +30,18 @@ import {
 } from '../../src/main/phoneServer'
 
 vi.mock('../../src/main/windowService', () => ({
-  listWindows: vi.fn()
+  listWindows: vi.fn(),
+  getWindowTypeByContainerId: vi.fn()
 }))
 vi.mock('../../src/main/terminalService', () => ({
   getSession: vi.fn()
 }))
 
-import { listWindows } from '../../src/main/windowService'
+import { listWindows, getWindowTypeByContainerId } from '../../src/main/windowService'
 import { getSession } from '../../src/main/terminalService'
 
 const mockListWindows = vi.mocked(listWindows)
+const mockGetWindowTypeByContainerId = vi.mocked(getWindowTypeByContainerId)
 const mockGetSession = vi.mocked(getSession)
 
 const MOCK_IFACES = {
@@ -235,5 +237,53 @@ describe('WebSocket /ws/:containerId', () => {
     expect(await m1).toBe('broadcast')
     expect(await m2).toBe('broadcast')
     c1.close(); c2.close()
+  })
+})
+
+describe('WebSocket session routing by window_type', () => {
+  let port: number
+
+  function makeMockPty() {
+    const mockDisposable = { dispose: vi.fn() }
+    return {
+      onData: vi.fn(() => mockDisposable),
+      onExit: vi.fn(() => mockDisposable),
+      write: vi.fn()
+    }
+  }
+
+  beforeEach(async () => {
+    vi.spyOn(os, 'networkInterfaces').mockReturnValue(MOCK_IFACES as any)
+    mockListWindows.mockResolvedValue([])
+    const { url } = await startPhoneServer(0, '127.0.0.1')
+    port = parseInt(new URL(url).port)
+  })
+  afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
+
+  it('uses claude session for manual windows', async () => {
+    mockGetWindowTypeByContainerId.mockReturnValue('manual' as any)
+    mockGetSession.mockReturnValue({ pty: makeMockPty() } as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockGetSession).toHaveBeenCalledWith('container-1', 'claude')
+    client.close()
+  })
+
+  it('uses terminal session for assisted windows', async () => {
+    mockGetWindowTypeByContainerId.mockReturnValue('assisted' as any)
+    mockGetSession.mockReturnValue({ pty: makeMockPty() } as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockGetSession).toHaveBeenCalledWith('container-1', 'terminal')
+    client.close()
+  })
+
+  it('defaults to claude session when container not found in DB', async () => {
+    mockGetWindowTypeByContainerId.mockReturnValue(null as any)
+    mockGetSession.mockReturnValue({ pty: makeMockPty() } as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockGetSession).toHaveBeenCalledWith('container-1', 'claude')
+    client.close()
   })
 })

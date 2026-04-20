@@ -2,7 +2,7 @@ import http from 'http'
 import { networkInterfaces } from 'os'
 import type { AddressInfo } from 'net'
 import { WebSocketServer, WebSocket } from 'ws'
-import { listWindows } from './windowService'
+import { listWindows, getWindowTypeByContainerId } from './windowService'
 import { getSession } from './terminalService'
 import { getPhoneServerHtml } from './phoneServerHtml'
 
@@ -24,9 +24,12 @@ export function getTailscaleIp(): string | null {
 function handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
   const match = req.url?.match(/^\/ws\/([^/]+)$/)
   if (!match) { ws.close(); return }
-  const session = getSession(match[1], 'claude')
+  const containerId = match[1]
+  const windowType = getWindowTypeByContainerId(containerId)
+  const sessionType = windowType === 'assisted' ? 'terminal' : 'claude'
+  const session = getSession(containerId, sessionType)
   if (!session) {
-    ws.send('ERROR: No active claude session')
+    ws.send('ERROR: No active session')
     ws.close()
     return
   }
