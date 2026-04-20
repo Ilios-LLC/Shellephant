@@ -1,10 +1,13 @@
 import { Worker } from 'worker_threads'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { BrowserWindow, Notification } from 'electron'
 import { getDb } from './db'
 import { loadLastSessionId } from './assistedWindowService'
 import { isUserWatching } from './focusState'
 import { getWaitingInfoByContainerId } from './windowService'
+import { insertTurn, updateTurn, getLogFilePath } from './logWriter'
+import type { TurnRecord } from './logWriter'
 import type { PermissionMode } from '../shared/permissionMode'
 
 const workers = new Map<number, Worker>()
@@ -33,12 +36,25 @@ export async function sendToClaudeDirectly(
   saveMessage(windowId, 'user', message, null)
   const initialSessionId = loadLastSessionId(windowId)
 
+  const turnId = randomUUID()
+  const logPath = getLogFilePath()
+  const startedAt = Date.now()
+
+  const turnRecord: TurnRecord = {
+    id: turnId, window_id: windowId, turn_type: 'human-claude',
+    status: 'running', started_at: startedAt, log_file: logPath
+  }
+  insertTurn(turnRecord)
+  sendToRenderer('logs:turn-started', turnRecord)
+
   let worker = workers.get(windowId)
   if (!worker) {
     worker = new Worker(getWorkerPath())
 
     worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
-      if (msg.type === 'save-message') {
+      if (msg.type === 'log-event') {
+        sendToRenderer('logs:turn-event', msg.event)
+      } else if (msg.type === 'save-message') {
         saveMessage(windowId, msg.role as string, msg.content as string, msg.metadata as string | null)
       } else if (msg.type === 'claude:event') {
         const ev = msg.event as { kind: string; text?: string; name?: string; summary?: string; input?: unknown }
@@ -50,6 +66,16 @@ export async function sendToClaudeDirectly(
           sendToRenderer('claude:action', windowId, { actionType: ev.name, summary: ev.summary, detail })
         }
       } else if (msg.type === 'turn-complete') {
+        const endedAt = Date.now()
+        const status = (msg.error ? 'error' : 'success') as 'error' | 'success'
+        const patch: Partial<TurnRecord> = {
+          status,
+          ended_at: endedAt,
+          duration_ms: endedAt - startedAt,
+          ...(msg.error ? { error: msg.error as string } : {})
+        }
+        updateTurn(turnId, patch)
+        sendToRenderer('logs:turn-updated', { id: turnId, ...patch })
         sendToRenderer('claude:turn-complete', windowId)
         if (msg.error) {
           sendToRenderer('claude:error', windowId, msg.error)
@@ -71,6 +97,9 @@ export async function sendToClaudeDirectly(
     })
 
     worker.on('error', (err) => {
+      const endedAt = Date.now()
+      updateTurn(turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: err.message })
+      sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: err.message })
       sendToRenderer('claude:turn-complete', windowId)
       sendToRenderer('claude:error', windowId, err.message)
       workers.delete(windowId)
@@ -86,7 +115,7 @@ export async function sendToClaudeDirectly(
     workers.set(windowId, worker)
   }
 
-  worker.postMessage({ type: 'send', windowId, containerId, message, initialSessionId, permissionMode })
+  worker.postMessage({ type: 'send', windowId, containerId, message, initialSessionId, permissionMode, turnId, logPath })
 }
 
 export function cancelClaudeDirect(windowId: number): void {
