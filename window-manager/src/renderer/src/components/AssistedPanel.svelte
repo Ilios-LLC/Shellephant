@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
+  import type { PermissionMode } from '../../../shared/permissionMode'
 
   interface Props {
     windowId: number
@@ -26,7 +27,6 @@
   let currentRecipient = $state<Recipient>('claude')
   let fireworksConfigured = $state(false)
 
-  type PermissionMode = 'bypassPermissions' | 'plan'
   let permissionMode = $state<PermissionMode>('bypassPermissions')
 
   let mountActive = true
