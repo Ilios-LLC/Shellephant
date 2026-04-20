@@ -44,7 +44,11 @@ describe('SettingsView', () => {
       setFireworksKey: mockSetFireworks,
       clearFireworksKey: mockClearFireworks,
       getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
-      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined)
+      setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined),
+      getPhoneServerStatus: vi.fn().mockResolvedValue({ active: false, url: undefined }),
+      startPhoneServer: vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' }),
+      stopPhoneServer: vi.fn().mockResolvedValue(undefined),
+      openExternal: vi.fn()
     })
   })
 
@@ -167,6 +171,65 @@ describe('SettingsView', () => {
 
     await waitFor(() => {
       expect(screen.getByText(/secure storage unavailable/i)).toBeDefined()
+    })
+  })
+
+  describe('Phone Access section', () => {
+    let mockGetPhoneServerStatus: ReturnType<typeof vi.fn>
+    let mockStartPhoneServer: ReturnType<typeof vi.fn>
+    let mockStopPhoneServer: ReturnType<typeof vi.fn>
+    let mockOpenExternal: ReturnType<typeof vi.fn>
+
+    beforeEach(() => {
+      mockGetPhoneServerStatus = vi.fn().mockResolvedValue({ active: false, url: undefined })
+      mockStartPhoneServer = vi.fn().mockResolvedValue({ url: 'http://100.1.2.3:8765' })
+      mockStopPhoneServer = vi.fn().mockResolvedValue(undefined)
+      mockOpenExternal = vi.fn()
+      vi.stubGlobal('api', {
+        setGitHubPat: mockSetPat,
+        clearGitHubPat: mockClearPat,
+        setClaudeToken: mockSetClaude,
+        clearClaudeToken: mockClearClaude,
+        setFireworksKey: mockSetFireworks,
+        clearFireworksKey: mockClearFireworks,
+        getKimiSystemPrompt: vi.fn().mockResolvedValue(null),
+        setKimiSystemPrompt: vi.fn().mockResolvedValue(undefined),
+        getPhoneServerStatus: mockGetPhoneServerStatus,
+        startPhoneServer: mockStartPhoneServer,
+        stopPhoneServer: mockStopPhoneServer,
+        openExternal: mockOpenExternal
+      })
+    })
+
+    it('shows Phone Access button', async () => {
+      render(SettingsView, baseProps())
+      await screen.findByRole('button', { name: 'Phone Access' })
+    })
+
+    it('starts server and shows URL on click', async () => {
+      render(SettingsView, baseProps())
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByTitle('http://100.1.2.3:8765')
+    })
+
+    it('stops server and hides URL on second click', async () => {
+      mockGetPhoneServerStatus.mockResolvedValue({ active: true, url: 'http://100.1.2.3:8765' })
+      render(SettingsView, baseProps())
+      await screen.findByTitle('http://100.1.2.3:8765')
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await waitFor(() => {
+        expect(screen.queryByTitle('http://100.1.2.3:8765')).toBeNull()
+      })
+    })
+
+    it('shows error when start fails', async () => {
+      mockStartPhoneServer.mockRejectedValue(new Error('Tailscale IP not found'))
+      render(SettingsView, baseProps())
+      const btn = await screen.findByRole('button', { name: 'Phone Access' })
+      await fireEvent.click(btn)
+      await screen.findByText('Tailscale IP not found')
     })
   })
 
