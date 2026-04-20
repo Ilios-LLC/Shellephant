@@ -194,14 +194,15 @@ Thin vertical drag handle (4px) between adjacent visible panels in TerminalHost.
 - Tests live in `window-manager/tests/renderer/ResizeHandle.test.ts` (8 tests).
 
 ### window-manager/src/renderer/src/components/WindowDetailPane.svelte
-Footer pane showing window info and panel toggle buttons. Svelte 5 runes mode.
+Footer pane showing window info, panel toggle buttons, and per-window traces. Svelte 5 runes mode.
 - Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`
 - Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`. Claude button is filtered out for assisted windows (`win.window_type === 'assisted'`).
-- Phone button: `aria-pressed={phoneActive}`, `aria-label="Phone Access"`; toggles phone server via `window.api.startPhoneServer/stopPhoneServer`; shows URL button and error text alongside.
+- Traces button: toggles `showTraces` state; on show, calls `window.api.listTurns({ windowId, limit: 20 })`. Renders `data-testid="traces-pane"` with turn rows (type, status, duration, timestamp). Click turn row calls `expandTurn(turnId)` which loads events via `window.api.getTurnEvents`.
+- Real-time subscriptions via `window.api.onTurnStarted`, `onTurnUpdated`, `onTurnEvent`; cleaned up via returned unsubscribe fns in `onMount` return.
 - `panelVisible` derived object and `visibleCount` derived count computed from `$panelLayout.panels`.
 - Polls `window.api.getCurrentBranch` and `window.api.getGitStatus` on mount + every 5s.
 - Two-click delete pattern (arms 3s timeout, second click fires `onDelete`).
-- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (29 tests, includes 4 Phone server toggle tests).
+- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (44 tests).
 
 ### window-manager/src/renderer/src/components/TerminalHost.svelte
 Top-level window component hosting claude/terminal/editor panels in a split-pane layout. Svelte 5 runes mode.
@@ -296,6 +297,16 @@ Worker pool manager for direct Claude windows.
 - `cancelClaudeDirect(windowId)` — terminates worker and removes from map.
 - `loadLastSessionId` implemented inline (same logic as in `assistedWindowService.ts`) to avoid pulling in electron dependency.
 - Tests live in `window-manager/tests/main/claudeService.test.ts` (8 tests).
+
+### window-manager/src/renderer/src/components/TraceExplorer.svelte
+Global trace view component for observability. Svelte 5 runes mode. No props.
+- Loads turns via `window.api.listTurns({ limit: 100 })` in `onMount`.
+- Filter controls: status select (`aria-label="status"`) and type select (`aria-label="type"`); `filteredTurns` derived state applies both filters.
+- Table renders `human→claude` or `shellephant→claude` label, status badge, duration, and start time per turn.
+- Clicking a row calls `expandTurn(turnId)`: toggles expanded state, fetches events via `window.api.getTurnEvents(turnId)` (cached in `turnEvents` Map), renders event list inline below the row.
+- Real-time push: `onTurnStarted` prepends new turns; `onTurnUpdated` patches existing turns by id; `onTurnEvent` appends events when that turn is expanded. All unsubscribed in `onDestroy`.
+- Type filter select options use `human-claude`/`shellephant-claude` values (not arrow labels) to avoid text collision with table cell content.
+- Tests live in `window-manager/tests/renderer/TraceExplorer.test.ts` (5 tests).
 
 ### window-manager/src/main/phoneServerHtml.ts
 Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
