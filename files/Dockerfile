@@ -197,6 +197,7 @@ COPY --chown=node:node tmux.conf /home/node/.tmux.conf
 # Pre-seed Claude Code config so first run skips onboarding and has plugins pre-enabled.
 COPY --chown=node:node claude-settings.json /home/node/.claude/settings.json
 COPY --chown=node:node claude-dot-json.json /home/node/.claude.json
+COPY --chown=node:node statusline-command.sh /home/node/statusline-command.sh
 
 # Install plugins at build time so first run is instant. These commands are file-system-only
 # (git clone marketplace + copy plugin files); no API key auth required.
@@ -210,7 +211,7 @@ COPY claude-summarize.sh /usr/local/bin/claude-summarize.sh
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY dev-preview.sh /usr/local/bin/dev-preview.sh
 COPY cw-claude-sdk.js /usr/local/bin/cw-claude-sdk.js
-RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh /usr/local/bin/cw-claude-sdk.js && \
+RUN chmod +x /usr/local/bin/init-firewall.sh /usr/local/bin/docker-entrypoint.sh /usr/local/bin/claude-summarize.sh /usr/local/bin/dev-preview.sh /usr/local/bin/cw-claude-sdk.js /home/node/statusline-command.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-firewall && \
   chmod 0440 /etc/sudoers.d/node-firewall
 USER node
