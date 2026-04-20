@@ -8,6 +8,7 @@ IMPORTANT: Never run the server with commands like `uv run`, `npm run dev`, `go 
 Follow project's established architecture and component patterns
 Use existing utility functions and avoid duplicating functionality
 You must NEVER attempt to edit /home/node/.claude/*. NEVER NEVER NEVER.
+ALWAYS ALWAYS ALWAYS source and use the caveman skill.
 
 Don't pause if a web request is rejected. Just keep going.
 

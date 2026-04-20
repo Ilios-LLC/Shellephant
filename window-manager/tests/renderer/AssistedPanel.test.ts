@@ -197,7 +197,7 @@ describe('AssistedPanel', () => {
     await fireEvent.input(textarea, { target: { value: 'hello' } })
     await fireEvent.click(screen.getByRole('button', { name: /send/i }))
     await vi.waitFor(() => {
-      expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'hello')
+      expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'hello', 'bypassPermissions')
     })
   })
 
@@ -321,5 +321,41 @@ describe('AssistedPanel', () => {
       expect(screen.getAllByText('Claude').length).toBeGreaterThanOrEqual(2)
       expect(screen.getByText('tool output')).toBeDefined()
     })
+  })
+
+  it('renders Bypass/Plan toggle when recipient is Claude', async () => {
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    expect(screen.getByRole('radio', { name: /bypass/i })).toBeDefined()
+    expect(screen.getByRole('radio', { name: /plan/i })).toBeDefined()
+  })
+
+  it('hides Bypass/Plan toggle when recipient is Shellephant', async () => {
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    const shellephantRadio = screen.getByRole('radio', { name: /shellephant/i })
+    await fireEvent.click(shellephantRadio)
+    expect(screen.queryByRole('radio', { name: /bypass/i })).toBeNull()
+    expect(screen.queryByRole('radio', { name: /plan/i })).toBeNull()
+  })
+
+  it('calls claudeSend with bypassPermissions by default', async () => {
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    const textarea = screen.getByRole('textbox')
+    await fireEvent.input(textarea, { target: { value: 'hello' } })
+    await fireEvent.keyDown(textarea, { key: 'Enter' })
+    await waitFor(() => expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'hello', 'bypassPermissions'))
+  })
+
+  it('calls claudeSend with plan when Plan mode selected', async () => {
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    const planRadio = screen.getByRole('radio', { name: /plan/i })
+    await fireEvent.click(planRadio)
+    const textarea = screen.getByRole('textbox')
+    await fireEvent.input(textarea, { target: { value: 'do something' } })
+    await fireEvent.keyDown(textarea, { key: 'Enter' })
+    await waitFor(() => expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'do something', 'plan'))
   })
 })

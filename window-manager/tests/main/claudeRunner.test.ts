@@ -63,7 +63,7 @@ describe('runClaudeCode', () => {
     const promise = runClaudeCode('c1', null, 'msg')
     close(0)
     await promise
-    expect(mockSpawn).toHaveBeenCalledWith('docker', ['exec', 'c1', 'node', '/usr/local/bin/cw-claude-sdk.js', 'new', 'msg'])
+    expect(mockSpawn).toHaveBeenCalledWith('docker', ['exec', 'c1', 'node', '/usr/local/bin/cw-claude-sdk.js', 'new', 'msg', 'bypassPermissions'])
   })
 
   it('emits claude:event messages for each stream event', async () => {
@@ -87,6 +87,28 @@ describe('runClaudeCode', () => {
     expect(mockParentPort.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'claude:event', event: fakeEvent })
     )
+  })
+
+  it('passes permissionMode=plan to docker exec args', async () => {
+    const { child, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg', { permissionMode: 'plan' })
+    close(0)
+    await promise
+    expect(mockSpawn).toHaveBeenCalledWith('docker', [
+      'exec', 'c1', 'node', '/usr/local/bin/cw-claude-sdk.js', 'new', 'msg', 'plan'
+    ])
+  })
+
+  it('passes permissionMode=bypassPermissions by default', async () => {
+    const { child, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg')
+    close(0)
+    await promise
+    expect(mockSpawn).toHaveBeenCalledWith('docker', [
+      'exec', 'c1', 'node', '/usr/local/bin/cw-claude-sdk.js', 'new', 'msg', 'bypassPermissions'
+    ])
   })
 
   it('uses custom eventType when provided', async () => {

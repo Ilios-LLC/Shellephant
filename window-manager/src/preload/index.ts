@@ -170,8 +170,8 @@ contextBridge.exposeInMainWorld('api', {
   offShellephantToClaude: () => ipcRenderer.removeAllListeners('shellephant:to-claude'),
 
   // Direct Claude window
-  claudeSend: (windowId: number, message: string) =>
-    ipcRenderer.invoke('claude:send', windowId, message),
+  claudeSend: (windowId: number, message: string, permissionMode?: 'bypassPermissions' | 'plan') =>
+    ipcRenderer.invoke('claude:send', windowId, message, permissionMode),
   claudeCancel: (windowId: number) => ipcRenderer.invoke('claude:cancel', windowId),
   onClaudeDelta: (callback: (windowId: number, chunk: string) => void) =>
     ipcRenderer.on('claude:delta', (_, windowId, chunk) => callback(windowId, chunk)),

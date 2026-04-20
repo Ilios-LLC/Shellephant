@@ -1,5 +1,6 @@
 import { parentPort } from 'worker_threads'
 import type { TimelineEvent } from '../shared/timelineEvent'
+import type { PermissionMode } from '../shared/permissionMode'
 import { runClaudeCode } from './claudeRunner'
 
 type DirectSendMsg = {
@@ -8,14 +9,20 @@ type DirectSendMsg = {
   containerId: string
   message: string
   initialSessionId: string | null
+  permissionMode?: PermissionMode
 }
 
 parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>) => {
   if (msg.type !== 'send') return
-  const { windowId, containerId, message, initialSessionId } = msg as unknown as DirectSendMsg
+  const { windowId, containerId, message, initialSessionId, permissionMode } = msg as unknown as DirectSendMsg
 
   try {
-    const { output, assistantText, newSessionId, events } = await runClaudeCode(containerId, initialSessionId, message)
+    const { output, assistantText, newSessionId, events } = await runClaudeCode(
+      containerId,
+      initialSessionId,
+      message,
+      { permissionMode: permissionMode ?? 'bypassPermissions' }
+    )
     if (assistantText) {
       parentPort?.postMessage({
         type: 'save-message',
@@ -24,10 +31,7 @@ parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>
         metadata: JSON.stringify({ session_id: newSessionId, complete: true })
       })
     }
-    // Pick the most readable text for the notification body. 'result' events
-    // carry Claude's final answer; `assistantText` is the concatenated prose
-    // across assistant_text blocks. Both beat `output`, which is the compact
-    // context format (e.g. "tool_use: Write(src/foo.ts)…").
+    // Pick the most readable text for the notification body.
     const resultText = events
       .filter((e): e is Extract<TimelineEvent, { kind: 'result' }> => e.kind === 'result')
       .filter(e => !e.isError)

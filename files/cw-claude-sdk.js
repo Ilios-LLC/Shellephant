@@ -1,13 +1,15 @@
 #!/usr/bin/env node
 // Runs a single Claude Agent SDK turn inside the container.
-// Usage: node cw-claude-sdk.js <session_id|new> <message...>
+// Usage: node cw-claude-sdk.js <session_id|new> <message> [permissionMode]
 // Streams JSON message lines to stdout. Writes final session_id to stderr.
 
 async function main() {
   const { query } = await import('/usr/local/share/npm-global/lib/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs')
   const rawSessionId = process.argv[2]
   const sessionId = (!rawSessionId || rawSessionId === 'new') ? undefined : rawSessionId
-  const message = process.argv.slice(3).join(' ')
+  const message = process.argv[3]
+  const rawMode = process.argv[4]
+  const permissionMode = (rawMode === 'plan') ? 'plan' : 'bypassPermissions'
 
   if (!message) {
     process.stderr.write('ERROR: no message provided\n')
@@ -31,7 +33,7 @@ async function main() {
   process.env.CW_SDK_RUN = '1'
 
   const options = {
-    permissionMode: 'bypassPermissions',
+    permissionMode,
     includePartialMessages: true,
     ...(sessionId ? { resume: sessionId } : {})
   }

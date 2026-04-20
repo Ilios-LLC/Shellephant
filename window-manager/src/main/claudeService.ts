@@ -5,6 +5,7 @@ import { getDb } from './db'
 import { loadLastSessionId } from './assistedWindowService'
 import { isUserWatching } from './focusState'
 import { getWaitingInfoByContainerId } from './windowService'
+import type { PermissionMode } from '../shared/permissionMode'
 
 const workers = new Map<number, Worker>()
 
@@ -26,7 +27,8 @@ export async function sendToClaudeDirectly(
   windowId: number,
   containerId: string,
   message: string,
-  sendToRenderer: (channel: string, ...args: unknown[]) => void
+  sendToRenderer: (channel: string, ...args: unknown[]) => void,
+  permissionMode: PermissionMode = 'bypassPermissions'
 ): Promise<void> {
   saveMessage(windowId, 'user', message, null)
   const initialSessionId = loadLastSessionId(windowId)
@@ -84,7 +86,7 @@ export async function sendToClaudeDirectly(
     workers.set(windowId, worker)
   }
 
-  worker.postMessage({ type: 'send', windowId, containerId, message, initialSessionId })
+  worker.postMessage({ type: 'send', windowId, containerId, message, initialSessionId, permissionMode })
 }
 
 export function cancelClaudeDirect(windowId: number): void {

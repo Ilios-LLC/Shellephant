@@ -79,6 +79,20 @@ describe('sendToClaudeDirectly', () => {
       expect.objectContaining({ type: 'send', windowId: 4, message: 'do it' })
     )
   })
+
+  it('posts permissionMode in worker send message', async () => {
+    await sendToClaudeDirectly(5, 'c5', 'do it', vi.fn(), 'plan')
+    expect(mockWorkerPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'send', permissionMode: 'plan' })
+    )
+  })
+
+  it('defaults permissionMode to bypassPermissions', async () => {
+    await sendToClaudeDirectly(6, 'c6', 'do it', vi.fn())
+    expect(mockWorkerPostMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ type: 'send', permissionMode: 'bypassPermissions' })
+    )
+  })
 })
 
 describe('worker message routing', () => {
