@@ -336,7 +336,7 @@
     </section>
 
     <section class="field">
-      <label for="kimi-prompt">Kimi System Prompt (global override)</label>
+      <label for="kimi-prompt">Shellephant System Prompt (global override)</label>
       <div class="status-line">
         {#if !kimiPromptLoaded}
           <span class="status unconfigured">Loading…</span>

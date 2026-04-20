@@ -1,6 +1,6 @@
 // Filter raw Claude Agent SDK stream-json events into three outputs:
 //   display — short human-readable string (legacy fallback sink)
-//   context — ultra-compact string fed back to Kimi as tool_result
+//   context — ultra-compact string fed back to Shellephant as tool_result
 //   events  — typed TimelineEvent objects for the rich UI timeline
 // A null display/context means "drop this event for that sink".
 
