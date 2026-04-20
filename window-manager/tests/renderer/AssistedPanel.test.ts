@@ -33,6 +33,7 @@ let mockApi: {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   mockApi = {
     assistedHistory: vi.fn().mockResolvedValue([]),
     assistedSend: vi.fn().mockResolvedValue(undefined),
@@ -145,6 +146,13 @@ describe('AssistedPanel', () => {
     render(AssistedPanel, { props: { windowId: 1, containerId: 'c1' } })
     const claudeRadio = screen.getByRole('radio', { name: /^Claude$/i })
     expect(claudeRadio).toBeChecked()
+  })
+
+  it('restores saved recipient from localStorage on remount', async () => {
+    localStorage.setItem('assisted-recipient-1', 'shellephant')
+    render(AssistedPanel, { props: { windowId: 1, containerId: 'c1' } })
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    expect(screen.getByRole('radio', { name: /Shellephant/i })).toBeChecked()
   })
 
   it('shows Shellephant radio disabled when Fireworks key not configured', async () => {

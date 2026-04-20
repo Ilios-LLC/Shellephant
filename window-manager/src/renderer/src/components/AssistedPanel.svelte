@@ -23,7 +23,14 @@
   let input = $state('')
   let running = $state(false)
   let lastStats = $state<{ inputTokens: number; outputTokens: number; costUsd: number } | null>(null)
-  let currentRecipient = $state<Recipient>('claude')
+  const recipientKey = `assisted-recipient-${windowId}`
+  let currentRecipient = $state<Recipient>(
+    (localStorage.getItem(recipientKey) as Recipient | null) ?? 'claude'
+  )
+
+  $effect(() => {
+    localStorage.setItem(recipientKey, currentRecipient)
+  })
   let fireworksConfigured = $state(false)
 
   let mountActive = true
