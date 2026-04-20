@@ -23,7 +23,7 @@ beforeEach(() => {
 describe('claudeDirectWorker', () => {
   it('calls runClaudeCode with correct args on send message', async () => {
     await messageHandler?.({ type: 'send', windowId: 1, containerId: 'c1', message: 'hi', initialSessionId: null })
-    expect(mockRunClaudeCode).toHaveBeenCalledWith('c1', null, 'hi')
+    expect(mockRunClaudeCode).toHaveBeenCalledWith('c1', null, 'hi', { permissionMode: 'bypassPermissions' })
   })
 
   it('emits save-message with claude role on completion', async () => {
@@ -65,5 +65,28 @@ describe('claudeDirectWorker', () => {
     expect(mockParentPort.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ type: 'turn-complete', windowId: 4, error: 'docker failed' })
     )
+  })
+
+  it('forwards permissionMode to runClaudeCode', async () => {
+    await messageHandler?.({
+      type: 'send',
+      windowId: 7,
+      containerId: 'c7',
+      message: 'hi',
+      initialSessionId: null,
+      permissionMode: 'plan'
+    })
+    expect(mockRunClaudeCode).toHaveBeenCalledWith('c7', null, 'hi', { permissionMode: 'plan' })
+  })
+
+  it('defaults permissionMode to bypassPermissions when not provided', async () => {
+    await messageHandler?.({
+      type: 'send',
+      windowId: 8,
+      containerId: 'c8',
+      message: 'hi',
+      initialSessionId: null
+    })
+    expect(mockRunClaudeCode).toHaveBeenCalledWith('c8', null, 'hi', { permissionMode: 'bypassPermissions' })
   })
 })
