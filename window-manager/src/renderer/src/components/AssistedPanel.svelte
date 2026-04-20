@@ -3,6 +3,7 @@
   import type { AssistedMessage, TimelineEvent } from '../types'
   import { isTimelineMetadata } from '../types'
   import TimelineEventView from './TimelineEvent.svelte'
+  import { mergePartialEvent } from '../lib/mergePartialEvent'
 
   interface Props {
     windowId: number
@@ -85,12 +86,13 @@
       const prevEvents = last?.role === 'tool_result' && last.streaming ? last.events : undefined
       if (shouldDropEvent(event, prevEvents?.[prevEvents.length - 1])) return
 
+      const nextEvents = mergePartialEvent(prevEvents ?? [], event)
       if (last?.role === 'tool_result' && last.streaming) {
-        messages[messages.length - 1] = { ...last, events: [...(last.events ?? []), event] }
+        messages[messages.length - 1] = { ...last, events: nextEvents }
       } else {
         messages = [
           ...messages,
-          { id: nextId(), role: 'tool_result', content: '', metadata: null, events: [event], streaming: true, expanded: false }
+          { id: nextId(), role: 'tool_result', content: '', metadata: null, events: nextEvents, streaming: true, expanded: false }
         ]
       }
     })
@@ -220,6 +222,19 @@
   function toggleExpand(id: number): void {
     messages = messages.map(m => m.id === id ? { ...m, expanded: !m.expanded } : m)
   }
+
+  // Stable key per underlying content block so an in-place upgrade from
+  // tool_use_start → tool_use_progress → tool_use keeps the same DOM node
+  // (preserves expand state, avoids reflow jitter). Fall back to ts+idx for
+  // events without a natural identity.
+  function eventKey(ev: TimelineEvent, idx: number): string {
+    if (ev.kind === 'tool_use_start' || ev.kind === 'tool_use_progress' || ev.kind === 'tool_use') {
+      return `tu:${ev.id}`
+    }
+    if (ev.kind === 'tool_result') return `tr:${ev.toolUseId}`
+    if (ev.kind === 'text_delta') return `td:${ev.blockKey}`
+    return `${ev.ts}-${idx}`
+  }
 </script>
 
 <div class="assisted-panel">
@@ -243,7 +258,7 @@
               {#if msg.streaming}
                 <div class="timeline-header">Claude Code · running…</div>
               {/if}
-              {#each msg.events as ev, idx (ev.ts + '-' + idx)}
+              {#each msg.events as ev, idx (eventKey(ev, idx))}
                 <TimelineEventView event={ev} />
               {/each}
             </div>

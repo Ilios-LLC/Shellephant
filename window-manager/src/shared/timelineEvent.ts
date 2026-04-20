@@ -16,6 +16,13 @@ export type TimelineEvent =
     }
   | { kind: 'tool_result'; toolUseId: string; text: string; isError: boolean; ts: number }
   | { kind: 'result'; text: string; isError: boolean; ts: number }
+  // Partial-stream kinds — ephemeral, never persisted. Emitted while the model
+  // is still typing a content block; replaced in-place by their terminal
+  // counterparts (`tool_use`, `assistant_text`) when the assistant message
+  // finalizes.
+  | { kind: 'tool_use_start'; id: string; name: string; ts: number }
+  | { kind: 'tool_use_progress'; id: string; name: string; summary: string; bytesSeen: number; ts: number }
+  | { kind: 'text_delta'; blockKey: string; text: string; ts: number }
 
 export type TimelineMetadata = {
   schemaVersion: 1

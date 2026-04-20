@@ -7,6 +7,13 @@
 
   let { event }: Props = $props()
   let expanded = $state(false)
+
+  function formatBytes(n: number): string {
+    if (n < 1024) return `${n} B`
+    const kb = n / 1024
+    if (kb < 1024) return `${kb.toFixed(kb >= 10 ? 0 : 1)} kB`
+    return `${(kb / 1024).toFixed(1)} MB`
+  }
 </script>
 
 {#if event.kind === 'session_init'}
@@ -41,6 +48,27 @@
 
 {:else if event.kind === 'assistant_text'}
   <div class="tl-row assistant-text">{event.text}</div>
+
+{:else if event.kind === 'text_delta'}
+  <div class="tl-row assistant-text streaming">{event.text}<span class="tl-cursor">▍</span></div>
+
+{:else if event.kind === 'tool_use_start'}
+  <div class="tl-row tool-use streaming">
+    <span class="tl-badge">
+      <span class="tl-dot pulse">🔧</span>
+      <strong>{event.name}</strong>(<span class="muted">…</span>)
+      <span class="muted">· starting</span>
+    </span>
+  </div>
+
+{:else if event.kind === 'tool_use_progress'}
+  <div class="tl-row tool-use streaming">
+    <span class="tl-badge">
+      <span class="tl-dot pulse">🔧</span>
+      <strong>{event.name}</strong>(<span class="muted">{event.summary || '…'}</span>)
+      <span class="muted">· {formatBytes(event.bytesSeen)}</span>
+    </span>
+  </div>
 
 {:else if event.kind === 'tool_use'}
   <div class="tl-row tool-use">
@@ -170,4 +198,26 @@
   }
 
   .tool-use strong { font-weight: 600; }
+
+  .tl-row.streaming { opacity: 0.9; }
+
+  .tl-cursor {
+    display: inline-block;
+    margin-left: 0.15em;
+    color: var(--fg-2);
+    animation: tl-cursor-blink 1s steps(2, start) infinite;
+  }
+
+  @keyframes tl-cursor-blink {
+    to { visibility: hidden; }
+  }
+
+  .tl-dot.pulse {
+    animation: tl-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes tl-pulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
+  }
 </style>

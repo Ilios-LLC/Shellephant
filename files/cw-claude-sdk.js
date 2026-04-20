@@ -24,6 +24,7 @@ async function main() {
 
   const options = {
     dangerouslySkipPermissions: true,
+    includePartialMessages: true,
     ...(sessionId ? { resume: sessionId } : {})
   }
 

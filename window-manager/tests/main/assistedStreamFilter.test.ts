@@ -421,3 +421,217 @@ describe('StreamFilterBuffer — typed events', () => {
     expect(events[0].kind).toBe('assistant_text')
   })
 })
+
+describe('StreamFilterBuffer — stream_event partials', () => {
+  it('content_block_start for tool_use emits tool_use_start', () => {
+    const buf = new StreamFilterBuffer()
+    const events = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tu_1', name: 'Write', input: {} }
+        }
+      },
+      100
+    )
+    expect(events).toEqual([{ kind: 'tool_use_start', id: 'tu_1', name: 'Write', ts: 100 }])
+  })
+
+  it('first input_json_delta always emits progress; subsequent deltas throttle', () => {
+    const buf = new StreamFilterBuffer()
+    buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tu_1', name: 'Write', input: {} }
+        }
+      },
+      100
+    )
+
+    // First delta captures the complete file_path so later chunks extend the
+    // `content` field instead — summary stays stable so only throttling gates emit.
+    const firstPartial = '{"file_path":"/a.md","content":"'
+    const first = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: {
+          type: 'content_block_delta',
+          index: 0,
+          delta: { type: 'input_json_delta', partial_json: firstPartial }
+        }
+      },
+      110
+    )
+    expect(first).toHaveLength(1)
+    const p1 = first[0]
+    if (p1.kind !== 'tool_use_progress') throw new Error('wrong kind')
+    expect(p1.id).toBe('tu_1')
+    expect(p1.name).toBe('Write')
+    expect(p1.summary).toBe('/a.md')
+    expect(p1.bytesSeen).toBe(firstPartial.length)
+
+    // Same-window second delta: summary unchanged, throttled → no emit
+    const throttled = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'hello' } }
+      },
+      115
+    )
+    expect(throttled).toEqual([])
+
+    // Later delta past the 100ms throttle window → emits with accumulated bytes
+    const later = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: ' world' } }
+      },
+      220
+    )
+    expect(later).toHaveLength(1)
+    const p2 = later[0]
+    if (p2.kind !== 'tool_use_progress') throw new Error('wrong kind')
+    expect(p2.summary).toBe('/a.md')
+    expect(p2.bytesSeen).toBe(firstPartial.length + 'hello'.length + ' world'.length)
+  })
+
+  it('summary change inside throttle window still emits', () => {
+    const buf = new StreamFilterBuffer()
+    buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: {
+          type: 'content_block_start',
+          index: 0,
+          content_block: { type: 'tool_use', id: 'tu_1', name: 'Write', input: {} }
+        }
+      },
+      0
+    )
+    // First delta — no recognisable key yet
+    const r1 = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: '{"' } }
+      },
+      10
+    )
+    expect(r1).toHaveLength(1)
+    if (r1[0].kind !== 'tool_use_progress') throw new Error('wrong kind')
+    expect(r1[0].summary).toBe('')
+
+    // Second delta, still inside throttle window, but summary NOW resolves
+    const r2 = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's1',
+        event: { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: 'file_path":"/tmp/x.md' } }
+      },
+      20
+    )
+    expect(r2).toHaveLength(1)
+    if (r2[0].kind !== 'tool_use_progress') throw new Error('wrong kind')
+    expect(r2[0].summary).toBe('/tmp/x.md')
+  })
+
+  it('text_delta chunks pass through directly (renderer coalesces)', () => {
+    const buf = new StreamFilterBuffer()
+    buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 'sess-1',
+        event: { type: 'content_block_start', index: 1, content_block: { type: 'text', text: '' } }
+      },
+      0
+    )
+    const r1 = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 'sess-1',
+        event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'Hello, ' } }
+      },
+      5
+    )
+    const r2 = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 'sess-1',
+        event: { type: 'content_block_delta', index: 1, delta: { type: 'text_delta', text: 'world.' } }
+      },
+      10
+    )
+    expect(r1).toHaveLength(1)
+    expect(r2).toHaveLength(1)
+    if (r1[0].kind !== 'text_delta' || r2[0].kind !== 'text_delta') throw new Error('wrong kind')
+    expect(r1[0].blockKey).toBe('sess-1:1')
+    expect(r2[0].blockKey).toBe('sess-1:1')
+    expect(r1[0].text).toBe('Hello, ')
+    expect(r2[0].text).toBe('world.')
+  })
+
+  it('content_block_stop clears block state; further deltas on that index are ignored', () => {
+    const buf = new StreamFilterBuffer()
+    buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's',
+        event: { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } }
+      },
+      0
+    )
+    buf.ingestEvent(
+      { type: 'stream_event', session_id: 's', event: { type: 'content_block_stop', index: 0 } },
+      5
+    )
+    const after = buf.ingestEvent(
+      {
+        type: 'stream_event',
+        session_id: 's',
+        event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'orphan' } }
+      },
+      10
+    )
+    expect(after).toEqual([])
+  })
+
+  it('message_start/message_delta/message_stop are silently dropped', () => {
+    const buf = new StreamFilterBuffer()
+    const r1 = buf.ingestEvent({ type: 'stream_event', session_id: 's', event: { type: 'message_start', message: {} } }, 0)
+    const r2 = buf.ingestEvent({ type: 'stream_event', session_id: 's', event: { type: 'message_delta', delta: {} } }, 1)
+    const r3 = buf.ingestEvent({ type: 'stream_event', session_id: 's', event: { type: 'message_stop' } }, 2)
+    expect(r1).toEqual([])
+    expect(r2).toEqual([])
+    expect(r3).toEqual([])
+  })
+
+  it('push() forwards stream_event lines through to events', () => {
+    const buf = new StreamFilterBuffer()
+    const line = JSON.stringify({
+      type: 'stream_event',
+      session_id: 's',
+      event: {
+        type: 'content_block_start',
+        index: 0,
+        content_block: { type: 'tool_use', id: 'tu_x', name: 'Grep', input: {} }
+      }
+    })
+    const { events, displayChunks, contextChunks } = buf.push(line + '\n')
+    expect(events).toHaveLength(1)
+    expect(events[0].kind).toBe('tool_use_start')
+    // stream_event shouldn't pollute the legacy string sinks
+    expect(displayChunks).toEqual([])
+    expect(contextChunks).toEqual([])
+  })
+})
