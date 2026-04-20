@@ -40,7 +40,7 @@
       if (last?.role === 'tool_result' && last.streaming) {
         messages[messages.length - 1] = { ...last, content: last.content + chunk }
       } else {
-        messages = [...messages, { id: Date.now(), role: 'tool_result', content: chunk, metadata: null, streaming: true, expanded: true }]
+        messages = [...messages, { id: Date.now(), role: 'tool_result', content: chunk, metadata: null, streaming: true, expanded: false }]
       }
     })
 
@@ -63,7 +63,6 @@
     window.api.onAssistedTurnComplete((wid: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => {
       if (wid !== windowId) return
       running = false
-      pingActive = false
       lastStats = stats
       messages = messages.map(m => ({ ...m, streaming: false }))
       if (error) {
@@ -102,6 +101,7 @@
     if (!trimmed) return
     input = ''
     pingActive = false
+    running = true
     messages = [...messages, { id: Date.now(), role: 'user', content: trimmed, metadata: null }]
     await window.api.assistedResume(windowId, trimmed)
   }
@@ -145,7 +145,7 @@
     <div class="stats-bar">
       ↑ {lastStats.inputTokens.toLocaleString()} tokens
       ↓ {lastStats.outputTokens.toLocaleString()} tokens
-      ~${lastStats.costUsd.toFixed(4)}
+      ~${lastStats.costUsd.toFixed(3)}
     </div>
   {/if}
 

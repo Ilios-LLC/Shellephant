@@ -99,4 +99,42 @@ describe('AssistedPanel', () => {
       expect(screen.getByText('Which database?')).toBeDefined()
     })
   })
+
+  it('tool_result shows collapsed toggle button and expands on click', async () => {
+    let chunkCallback: ((wid: number, chunk: string) => void) | null = null
+    mockApi.onAssistedStreamChunk.mockImplementation((cb: typeof chunkCallback) => { chunkCallback = cb })
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    chunkCallback!(1, 'some output')
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /claude code output/i })).toBeDefined()
+    })
+    expect(screen.queryByText('some output')).toBeNull()
+    await fireEvent.click(screen.getByRole('button', { name: /claude code output/i }))
+    await waitFor(() => {
+      expect(screen.getByText('some output')).toBeDefined()
+    })
+  })
+
+  it('calls off* methods on destroy', async () => {
+    const { unmount } = render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    unmount()
+    expect(mockApi.offAssistedStreamChunk).toHaveBeenCalled()
+    expect(mockApi.offAssistedKimiDelta).toHaveBeenCalled()
+    expect(mockApi.offAssistedPingUser).toHaveBeenCalled()
+    expect(mockApi.offAssistedTurnComplete).toHaveBeenCalled()
+  })
+
+  it('cancel dialog uses correct confirmation text', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    render(AssistedPanel, defaultProps)
+    await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+    const textarea = screen.getByPlaceholderText(/ask kimi/i)
+    await fireEvent.input(textarea, { target: { value: 'go' } })
+    await fireEvent.click(screen.getByRole('button', { name: /send/i }))
+    await fireEvent.click(screen.getByRole('button', { name: /cancel/i }))
+    expect(confirmSpy).toHaveBeenCalledWith('Cancel current run? Conversation will be preserved.')
+    confirmSpy.mockRestore()
+  })
 })
