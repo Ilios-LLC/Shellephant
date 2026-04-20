@@ -13,6 +13,7 @@ import { insertTurn, updateTurn, getLogFilePath } from './logWriter'
 import type { TurnRecord } from './logWriter'
 
 const workers = new Map<number, Worker>()
+const workerCtxSetters = new Map<number, (ctx: SendCtx) => void>()
 
 export function getWorkerCount(): number {
   return workers.size
@@ -20,6 +21,7 @@ export function getWorkerCount(): number {
 
 export function __resetWorkersForTests(): void {
   workers.clear()
+  workerCtxSetters.clear()
 }
 
 function getWorkerPath(): string {
@@ -132,10 +134,16 @@ function handleTurnComplete(msg: Record<string, unknown>, ctx: SendCtx): void {
     }
   }
   workers.delete(windowId)
+  workerCtxSetters.delete(windowId)
 }
 
-function spawnWorker(ctx: SendCtx): Worker {
-  const { windowId, turnId, startedAt, sendToRenderer } = ctx
+function spawnWorker(
+  initialCtx: SendCtx,
+  sendToRenderer: (channel: string, ...args: unknown[]) => void
+): { worker: Worker; setCtx: (ctx: SendCtx) => void } {
+  let ctx = initialCtx
+  const { windowId } = ctx
+
   const worker = new Worker(getWorkerPath())
 
   worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
@@ -165,23 +173,25 @@ function spawnWorker(ctx: SendCtx): Worker {
 
   worker.on('error', (err) => {
     const endedAt = Date.now()
-    updateTurn(turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: err.message })
-    sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: err.message })
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: err.message })
+    sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: err.message })
     sendToRenderer('assisted:turn-complete', windowId, null, err.message)
     workers.delete(windowId)
+    workerCtxSetters.delete(windowId)
   })
 
   worker.on('exit', (code) => {
     if (code !== 0 && workers.has(windowId)) {
       const endedAt = Date.now()
-      updateTurn(turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: `Worker exited with code ${code}` })
-      sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: `Worker exited with code ${code}` })
+      updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: `Worker exited with code ${code}` })
+      sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: `Worker exited with code ${code}` })
       sendToRenderer('assisted:turn-complete', windowId, null, `Worker exited with code ${code}`)
       workers.delete(windowId)
+      workerCtxSetters.delete(windowId)
     }
   })
 
-  return worker
+  return { worker, setCtx: (newCtx: SendCtx) => { ctx = newCtx } }
 }
 
 export async function sendToWindow(
@@ -213,8 +223,12 @@ export async function sendToWindow(
   const ctx: SendCtx = { windowId, containerId, turnId, startedAt, sendToRenderer }
   let worker = workers.get(windowId)
   if (!worker) {
-    worker = spawnWorker(ctx)
+    const spawned = spawnWorker(ctx, sendToRenderer)
+    worker = spawned.worker
     workers.set(windowId, worker)
+    workerCtxSetters.set(windowId, spawned.setCtx)
+  } else {
+    workerCtxSetters.get(windowId)?.(ctx)
   }
 
   worker.postMessage({
@@ -230,5 +244,6 @@ export function cancelWindow(windowId: number): void {
   if (!worker) return
   worker.terminate()
   workers.delete(windowId)
+  workerCtxSetters.delete(windowId)
 }
 
