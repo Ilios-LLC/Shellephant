@@ -193,5 +193,35 @@ contextBridge.exposeInMainWorld('api', {
   offClaudeToShellephantAction: () => ipcRenderer.removeAllListeners('claude-to-shellephant:action'),
   onClaudeToShellephantTurnComplete: (callback: (windowId: number) => void) =>
     ipcRenderer.on('claude-to-shellephant:turn-complete', (_, windowId) => callback(windowId)),
-  offClaudeToShellephantTurnComplete: () => ipcRenderer.removeAllListeners('claude-to-shellephant:turn-complete')
+  offClaudeToShellephantTurnComplete: () => ipcRenderer.removeAllListeners('claude-to-shellephant:turn-complete'),
+
+  // Observability / Logs
+  listTurns: (filter?: {
+    windowId?: number
+    status?: string
+    turnType?: string
+    limit?: number
+    offset?: number
+  }) => ipcRenderer.invoke('logs:list-turns', filter),
+
+  getTurnEvents: (turnId: string) =>
+    ipcRenderer.invoke('logs:get-turn-events', turnId),
+
+  onTurnStarted: (cb: (turn: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, turn: unknown) => cb(turn)
+    ipcRenderer.on('logs:turn-started', handler)
+    return () => ipcRenderer.off('logs:turn-started', handler)
+  },
+
+  onTurnUpdated: (cb: (patch: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, patch: unknown) => cb(patch)
+    ipcRenderer.on('logs:turn-updated', handler)
+    return () => ipcRenderer.off('logs:turn-updated', handler)
+  },
+
+  onTurnEvent: (cb: (event: unknown) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, logEvent: unknown) => cb(logEvent)
+    ipcRenderer.on('logs:turn-event', handler)
+    return () => ipcRenderer.off('logs:turn-event', handler)
+  }
 })

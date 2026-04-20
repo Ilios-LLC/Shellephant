@@ -1,6 +1,7 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { initDb } from './db'
+import { initLogWriter } from './logWriter'
 import { registerIpcHandlers } from './ipcHandlers'
 import { reconcileWindows } from './windowService'
 import { startWaitingPoller } from './waitingPoller'
@@ -36,6 +37,7 @@ function createWindow(): BrowserWindow {
 app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
+  initLogWriter(app.getPath('logs'))
   startWaitingPoller()
 
   try {

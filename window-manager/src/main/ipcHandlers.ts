@@ -38,6 +38,7 @@ import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
 import { sendToWindow, cancelWindow } from './assistedWindowService'
 import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
+import { readEventsForTurn } from './logWriter'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -385,5 +386,31 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('claude:cancel', (_, windowId: number) => {
     cancelClaudeDirect(windowId)
+  })
+
+  ipcMain.handle('logs:list-turns', (_event, filter?: {
+    windowId?: number
+    status?: string
+    turnType?: string
+    limit?: number
+    offset?: number
+  }) => {
+    let query = 'SELECT * FROM turns WHERE 1=1'
+    const params: (string | number)[] = []
+    if (filter?.windowId != null) { query += ' AND window_id = ?'; params.push(filter.windowId) }
+    if (filter?.status) { query += ' AND status = ?'; params.push(filter.status) }
+    if (filter?.turnType) { query += ' AND turn_type = ?'; params.push(filter.turnType) }
+    query += ' ORDER BY started_at DESC'
+    if (filter?.limit != null) { query += ' LIMIT ?'; params.push(filter.limit) }
+    if (filter?.offset != null) { query += ' OFFSET ?'; params.push(filter.offset) }
+    return getDb().prepare(query).all(...params as [])
+  })
+
+  ipcMain.handle('logs:get-turn-events', (_event, turnId: string) => {
+    const row = getDb()
+      .prepare('SELECT log_file FROM turns WHERE id = ?')
+      .get(turnId) as { log_file: string | null } | undefined
+    if (!row?.log_file) return []
+    return readEventsForTurn(row.log_file, turnId)
   })
 }
