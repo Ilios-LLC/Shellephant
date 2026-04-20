@@ -91,7 +91,7 @@ describe('runClaudeCode — streaming wire-up', () => {
     mockSpawn.mockReset()
   })
 
-  it('emits stream-event per SDK event, returns compact context + event log', async () => {
+  it('emits claude:event per SDK event, returns compact context + event log', async () => {
     const { child, emitStdout, emitStderr, close } = makeFakeChild()
     mockSpawn.mockReturnValue(child)
 
@@ -132,12 +132,12 @@ describe('runClaudeCode — streaming wire-up', () => {
     expect(output).not.toContain('session_id')
     expect(output).toContain('Done.')
 
-    // parentPort received one stream-event per typed event (session_init filtered out)
-    const streamEventCalls = mockParentPort.postMessage.mock.calls
-      .filter(c => (c[0] as { type: string }).type === 'stream-event')
-    expect(streamEventCalls).toHaveLength(5)
-    expect((streamEventCalls[0][0] as { event: { kind: string } }).event.kind).toBe('thinking')
-    expect((streamEventCalls[2][0] as { event: { kind: string } }).event.kind).toBe('tool_result')
+    // parentPort received one claude:event per typed event (session_init filtered out)
+    const claudeEventCalls = mockParentPort.postMessage.mock.calls
+      .filter(c => (c[0] as { type: string }).type === 'claude:event')
+    expect(claudeEventCalls).toHaveLength(5)
+    expect((claudeEventCalls[0][0] as { event: { kind: string } }).event.kind).toBe('thinking')
+    expect((claudeEventCalls[2][0] as { event: { kind: string } }).event.kind).toBe('tool_result')
   })
 
   it('does not emit stream-chunk (legacy channel removed)', async () => {

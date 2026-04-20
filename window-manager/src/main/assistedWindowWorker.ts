@@ -1,9 +1,9 @@
 import { parentPort } from 'worker_threads'
-import { spawn } from 'child_process'
 import OpenAI from 'openai'
-import { StreamFilterBuffer } from './assistedStreamFilter'
 import type { TimelineEvent } from '../shared/timelineEvent'
 import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../shared/defaultKimiPrompt'
+import { runClaudeCode } from './claudeRunner'
+export { runClaudeCode }
 
 export function resolveSystemPrompt(
   projectPrompt: string | null,
@@ -49,60 +49,6 @@ export function parseDockerOutput(stdout: string, stderr: string): { outputLines
   const outputLines = stdout.split('\n').filter(l => l.trim())
   const sessionId = stderr.trim() || null
   return { outputLines, sessionId }
-}
-
-export async function runClaudeCode(
-  containerId: string,
-  sessionId: string | null,
-  message: string
-): Promise<{ output: string; events: TimelineEvent[]; newSessionId: string | null }> {
-  return new Promise((resolve, reject) => {
-    const sidArg = sessionId ?? 'new'
-    const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message])
-
-    const filter = new StreamFilterBuffer()
-    const contextParts: string[] = []
-    const eventsLog: TimelineEvent[] = []
-    let stderr = ''
-    let hadAnyOutput = false
-    let streamSessionId: string | null = null
-
-    const drain = (result: { displayChunks: string[]; contextChunks: string[]; events: TimelineEvent[]; sessionId: string | null }): void => {
-      contextParts.push(...result.contextChunks)
-      if (result.sessionId) streamSessionId = result.sessionId
-      for (const event of result.events) {
-        eventsLog.push(event)
-        parentPort?.postMessage({ type: 'stream-event', event })
-      }
-    }
-
-    child.stdout.on('data', (chunk: Buffer) => {
-      hadAnyOutput = true
-      drain(filter.push(chunk.toString()))
-    })
-
-    child.stderr.on('data', (chunk: Buffer) => {
-      stderr += chunk.toString()
-    })
-
-    child.on('close', (code) => {
-      drain(filter.flush())
-
-      if (code !== 0 && !hadAnyOutput) {
-        reject(new Error(`docker exec failed (exit ${code}): ${stderr}`))
-        return
-      }
-      // Session id now travels on stdout as a `session_final` event. stderr is
-      // reserved for error diagnostics and must not be parsed for control data
-      // — SDK/container warnings on stderr used to corrupt the resume id.
-      const newSessionId = streamSessionId
-      // eslint-disable-next-line no-console
-      console.error(`[assisted:session] resumed=${sessionId ?? 'none'} final=${newSessionId ?? 'none'}`)
-      resolve({ output: contextParts.join('\n'), events: eventsLog, newSessionId })
-    })
-
-    child.on('error', reject)
-  })
 }
 
 type KimiLoopData = {
