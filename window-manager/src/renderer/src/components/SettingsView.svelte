@@ -39,6 +39,10 @@
   let fireworksBusy = $state(false)
   let fireworksError = $state('')
 
+  let phoneActive = $state(false)
+  let phoneUrl = $state<string | null>(null)
+  let phoneError = $state<string | null>(null)
+
   let kimiPromptInput = $state('')
   let kimiPromptLoaded = $state(false)
   let kimiBusy = $state(false)
@@ -46,13 +50,36 @@
   let kimiSaved = $state(false)
 
   onMount(async () => {
-    try {
-      const stored = await window.api.getKimiSystemPrompt()
-      kimiPromptInput = stored ?? ''
-    } finally {
-      kimiPromptLoaded = true
-    }
+    const [stored, phoneStatus] = await Promise.all([
+      window.api.getKimiSystemPrompt().catch(() => null),
+      window.api.getPhoneServerStatus().catch(() => ({ active: false, url: undefined }))
+    ])
+    kimiPromptInput = stored ?? ''
+    kimiPromptLoaded = true
+    phoneActive = phoneStatus.active
+    phoneUrl = phoneStatus.url ?? null
   })
+
+  async function togglePhone(): Promise<void> {
+    phoneError = null
+    if (phoneActive) {
+      try {
+        await window.api.stopPhoneServer()
+      } catch {
+        // ignore stop errors
+      }
+      phoneActive = false
+      phoneUrl = null
+    } else {
+      try {
+        const result = await window.api.startPhoneServer()
+        phoneActive = true
+        phoneUrl = result.url
+      } catch (e) {
+        phoneError = e instanceof Error ? e.message : 'Failed to start'
+      }
+    }
+  }
 
   let bannerText = $derived.by(() => {
     if (requiredFor === 'project') {
@@ -336,6 +363,38 @@
     </section>
 
     <section class="field">
+      <p class="field-heading">Phone Access</p>
+      <div class="status-line">
+        {#if phoneActive && phoneUrl}
+          <span class="status configured">Active</span>
+        {:else}
+          <span class="status unconfigured">Inactive</span>
+        {/if}
+      </div>
+      <p class="help">Starts a local web server accessible via Tailscale for terminal access from mobile.</p>
+      <div class="row-actions phone-row">
+        <button
+          type="button"
+          class={phoneActive ? 'clear' : 'submit'}
+          aria-pressed={phoneActive}
+          aria-label="Phone Access"
+          onclick={togglePhone}
+        >{phoneActive ? 'Stop' : 'Start'}</button>
+        {#if phoneActive && phoneUrl}
+          <button
+            type="button"
+            class="phone-url-btn"
+            title={phoneUrl}
+            onclick={() => window.api.openExternal(phoneUrl!)}
+          >{phoneUrl}</button>
+        {/if}
+      </div>
+      {#if phoneError}
+        <p class="error">{phoneError}</p>
+      {/if}
+    </section>
+
+    <section class="field">
       <label for="kimi-prompt">Kimi System Prompt (global override)</label>
       <div class="status-line">
         {#if !kimiPromptLoaded}
@@ -572,5 +631,35 @@
     font-size: 0.78rem;
     color: var(--danger);
     margin: 0;
+  }
+
+  .field-heading {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--fg-2);
+    margin: 0;
+  }
+
+  .phone-row {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .phone-url-btn {
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--accent);
+    border-radius: 4px;
+    cursor: pointer;
+    max-width: 280px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 </style>
