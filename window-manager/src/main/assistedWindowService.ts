@@ -109,6 +109,18 @@ export async function sendToWindow(
         }
       } else if (msg.type === 'turn-complete') {
         sendToRenderer('assisted:turn-complete', windowId, msg.stats, msg.error)
+        // Notify when Kimi finishes a turn with a user-facing message. Plain
+        // assistant text is one of two paths Kimi uses to talk to the user
+        // (the other is ping_user, handled above). No text → tool-only turn →
+        // no alert. Silent when the user is already watching this window.
+        const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
+        if (assistantText) {
+          const focusedWin = BrowserWindow.getFocusedWindow()
+          if (!focusedWin || !isUserWatching(containerId, focusedWin)) {
+            const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
+            new Notification({ title: 'Kimi responded', body }).show()
+          }
+        }
         workers.delete(windowId)
       }
     })

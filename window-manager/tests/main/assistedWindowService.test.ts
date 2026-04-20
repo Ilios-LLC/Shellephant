@@ -36,19 +36,31 @@ vi.mock('../../src/main/db', () => ({
   })
 }))
 
+const { mockNotification, mockNotificationShow, mockIsUserWatching, mockGetFocusedWindow } = vi.hoisted(() => ({
+  mockNotification: vi.fn(),
+  mockNotificationShow: vi.fn(),
+  mockIsUserWatching: vi.fn().mockReturnValue(false),
+  mockGetFocusedWindow: vi.fn().mockReturnValue({ isDestroyed: () => false })
+}))
+
 vi.mock('electron', () => ({
-  BrowserWindow: { getFocusedWindow: vi.fn().mockReturnValue(null) },
-  Notification: vi.fn().mockImplementation(() => ({ show: vi.fn() }))
+  BrowserWindow: { getFocusedWindow: () => mockGetFocusedWindow() },
+  Notification: vi.fn().mockImplementation(function (this: Record<string, unknown>, opts: unknown) {
+    mockNotification(opts)
+    this.show = mockNotificationShow
+  })
 }))
 
 vi.mock('../../src/main/focusState', () => ({
-  isUserWatching: vi.fn().mockReturnValue(false)
+  isUserWatching: (...args: unknown[]) => mockIsUserWatching(...args)
 }))
 
 import { sendToWindow, cancelWindow, resumeWindow, loadLastSessionId, getWorkerCount, __resetWorkersForTests } from '../../src/main/assistedWindowService'
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mockIsUserWatching.mockReturnValue(false)
+  mockGetFocusedWindow.mockReturnValue({ isDestroyed: () => false })
   mockDbGet.mockReturnValue(null)
   mockDbAll.mockReturnValue([])
   __resetWorkersForTests()
@@ -202,6 +214,42 @@ describe('worker message routing', () => {
     const stats = { inputTokens: 100, outputTokens: 50, costUsd: 0.001 }
     messageHandler({ type: 'turn-complete', windowId: 11, stats })
     expect(mockSend).toHaveBeenCalledWith('assisted:turn-complete', 11, stats, undefined)
+  })
+
+  it('turn-complete with assistantText fires OS notification when user not watching', async () => {
+    await sendToWindow(60, 'c60', 'msg', null, vi.fn())
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'turn-complete', windowId: 60, stats: null, assistantText: 'done — here are the results' })
+    expect(mockNotification).toHaveBeenCalledWith(expect.objectContaining({
+      title: 'Kimi responded',
+      body: 'done — here are the results'
+    }))
+    expect(mockNotificationShow).toHaveBeenCalled()
+  })
+
+  it('turn-complete with empty assistantText does not fire notification', async () => {
+    await sendToWindow(61, 'c61', 'msg', null, vi.fn())
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'turn-complete', windowId: 61, stats: null, assistantText: '' })
+    expect(mockNotification).not.toHaveBeenCalled()
+  })
+
+  it('turn-complete does not fire notification when user is watching', async () => {
+    mockIsUserWatching.mockReturnValue(true)
+    await sendToWindow(62, 'c62', 'msg', null, vi.fn())
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'turn-complete', windowId: 62, stats: null, assistantText: 'hi' })
+    expect(mockNotification).not.toHaveBeenCalled()
+  })
+
+  it('turn-complete truncates very long assistantText in notification body', async () => {
+    await sendToWindow(63, 'c63', 'msg', null, vi.fn())
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    const long = 'x'.repeat(500)
+    messageHandler({ type: 'turn-complete', windowId: 63, stats: null, assistantText: long })
+    const call = mockNotification.mock.calls[0]![0] as { body: string }
+    expect(call.body.length).toBeLessThanOrEqual(201)
+    expect(call.body.endsWith('…')).toBe(true)
   })
 
   it('stream-event calls sendToRenderer with TimelineEvent payload', async () => {

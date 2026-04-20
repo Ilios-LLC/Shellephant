@@ -239,6 +239,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
   parentPort?.postMessage({ type: 'save-message', windowId, role: 'user', content: message, metadata: null })
 
   let activeSessionId: string | null = initialSessionId ?? null
+  let finalAssistantText = ''
   const tokenRef = { input: 0, output: 0 }
 
   while (true) {
@@ -265,7 +266,13 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
       })
     }
 
-    if (toolCalls.length === 0) break
+    if (toolCalls.length === 0) {
+      // The iteration that exits without tool calls is the one that carries
+      // the user-facing text for this turn. Everything earlier is interstitial
+      // commentary between tool calls.
+      finalAssistantText = kimiDeltaRef.value
+      break
+    }
 
     messages.push({
       role: 'assistant',
@@ -302,7 +309,8 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
   const costUsd = (tokenRef.input * 0.000001) + (tokenRef.output * 0.000003)
   parentPort?.postMessage({
     type: 'turn-complete', windowId,
-    stats: { inputTokens: tokenRef.input, outputTokens: tokenRef.output, costUsd }
+    stats: { inputTokens: tokenRef.input, outputTokens: tokenRef.output, costUsd },
+    assistantText: finalAssistantText.trim()
   })
 }
 
