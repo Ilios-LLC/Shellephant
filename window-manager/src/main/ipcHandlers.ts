@@ -92,13 +92,13 @@ export function registerIpcHandlers(): void {
   // Window handlers
   ipcMain.handle(
     'window:create',
-    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual') => {
+    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual', networkName = '') => {
       if (windowType === 'assisted') {
         if (!getFireworksKey()) {
           throw new Error('Fireworks API key not configured. Set it in Settings.')
         }
       }
-      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), windowType)
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), windowType, networkName)
     }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))

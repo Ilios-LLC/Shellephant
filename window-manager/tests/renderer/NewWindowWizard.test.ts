@@ -94,7 +94,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual', '')
     )
   })
 
@@ -105,7 +105,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' }, 'manual')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' }, 'manual', '')
     )
   })
 
@@ -117,7 +117,7 @@ describe('NewWindowWizard', () => {
     await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual'))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual', ''))
   })
 
   it('calls createWindow with withDeps=true when toggle is checked', async () => {
@@ -129,7 +129,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}, 'manual'))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}, 'manual', ''))
   })
 })
 
@@ -159,7 +159,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {}, 'manual')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {}, 'manual', '')
     )
   })
 
@@ -179,7 +179,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {}, 'manual')
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {}, 'manual', '')
     )
   })
 
@@ -201,7 +201,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' }, 'manual')
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' }, 'manual', '')
     )
   })
 })
@@ -258,7 +258,7 @@ describe('window type toggle', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'my-window' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('my-window', [1], false, {}, 'assisted')
+      expect(mockCreateWindow).toHaveBeenCalledWith('my-window', [1], false, {}, 'assisted', '')
     )
   })
 })
