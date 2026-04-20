@@ -35,7 +35,9 @@ CC claims full project done → force it to:
 Any missed → not done.
 
 5 CC messages with no response → pause, ping_user.
-3 disagreements with CC → ping_user.`;
+3 disagreements with CC → ping_user.
+
+Tell user when fully done with workflow.`;
 
 // Resolves the effective Kimi system prompt. Precedence: project override → global override → built-in default.
 // An empty/whitespace string at any level is treated as "not set" so that clearing a field truly falls back.

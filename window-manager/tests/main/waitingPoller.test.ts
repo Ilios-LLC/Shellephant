@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
-const { mockDbAll, mockExecInContainer, mockDispatchWaiting, mockDispatchSummary, mockGetContainer } = vi.hoisted(
+const { mockDbAll, mockDbPrepare, mockExecInContainer, mockDispatchWaiting, mockDispatchSummary, mockGetContainer } = vi.hoisted(
   () => ({
     mockDbAll: vi.fn(),
+    mockDbPrepare: vi.fn(),
     mockExecInContainer: vi.fn(),
     mockDispatchWaiting: vi.fn(),
     mockDispatchSummary: vi.fn(),
@@ -11,7 +12,12 @@ const { mockDbAll, mockExecInContainer, mockDispatchWaiting, mockDispatchSummary
 )
 
 vi.mock('../../src/main/db', () => ({
-  getDb: () => ({ prepare: () => ({ all: () => mockDbAll() }) })
+  getDb: () => ({
+    prepare: (sql: string) => {
+      mockDbPrepare(sql)
+      return { all: () => mockDbAll() }
+    }
+  })
 }))
 vi.mock('../../src/main/gitOps', () => ({
   execInContainer: (...args: unknown[]) => mockExecInContainer(...args)
@@ -113,6 +119,15 @@ describe('waitingPoller', () => {
       setContainers([])
       await pollOnce()
       expect(mockExecInContainer).not.toHaveBeenCalled()
+    })
+
+    it('queries only manual windows — assisted windows stay silent', async () => {
+      setContainers(['cid-manual'])
+      bothEmpty()
+      await pollOnce()
+      const sql = mockDbPrepare.mock.calls.find(c => /SELECT container_id FROM windows/i.test(c[0] as string))?.[0] as string
+      expect(sql).toBeDefined()
+      expect(sql).toMatch(/window_type\s*=\s*'manual'/)
     })
 
     it('does not dispatch summary even with valid JSON while SUMMARY_ENABLED = false', async () => {
