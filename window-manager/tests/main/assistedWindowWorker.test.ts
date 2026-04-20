@@ -24,7 +24,7 @@ vi.mock('openai', () => ({
   })
 }))
 
-import { resolveSystemPrompt, buildKimiTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
+import { resolveSystemPrompt, buildShellephantTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
 import { runClaudeCode } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
 
@@ -45,12 +45,13 @@ describe('resolveSystemPrompt', () => {
   })
 })
 
-describe('buildKimiTools', () => {
-  it('returns array with run_claude_code and ping_user tools', () => {
-    const tools = buildKimiTools()
+describe('buildShellephantTools', () => {
+  it('returns only run_claude_code (no ping_user)', () => {
+    const tools = buildShellephantTools()
     const names = tools.map((t: { function: { name: string } }) => t.function.name)
     expect(names).toContain('run_claude_code')
-    expect(names).toContain('ping_user')
+    expect(names).not.toContain('ping_user')
+    expect(names).toHaveLength(1)
   })
 })
 
@@ -262,11 +263,11 @@ describe('kimiLoop — single run_claude_code per turn', () => {
 
     expect(mockSpawn).toHaveBeenCalledTimes(1)
 
-    const toolResultSaves = mockParentPort.postMessage.mock.calls
+    const claudeResultSaves = mockParentPort.postMessage.mock.calls
       .map(c => c[0] as { type: string; role?: string; content?: string })
-      .filter(m => m.type === 'save-message' && m.role === 'tool_result')
-    // One real tool_result from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
-    expect(toolResultSaves).toHaveLength(1)
+      .filter(m => m.type === 'save-message' && m.role === 'claude')
+    // One real claude-role save from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
+    expect(claudeResultSaves).toHaveLength(1)
   })
 
   it('seeds activeSessionId from initialSessionId so the first CC call resumes', async () => {

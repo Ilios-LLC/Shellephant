@@ -11,31 +11,17 @@ export function resolveSystemPrompt(
   return projectPrompt ?? globalPrompt ?? DEFAULT_KIMI_SYSTEM_PROMPT
 }
 
-export function buildKimiTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
+export function buildShellephantTools(): OpenAI.Chat.Completions.ChatCompletionTool[] {
   return [
     {
       type: 'function',
       function: {
         name: 'run_claude_code',
-        description: 'Send a message to Claude Code inside the container. The session is managed for you automatically — every call in this window continues the same CC conversation. You do not need to (and cannot) pass a session id.',
+        description: 'Send a message to Claude Code inside the container. The session is managed for you automatically — every call in this window continues the same CC conversation.',
         parameters: {
           type: 'object',
           properties: {
             message: { type: 'string', description: 'The task or message for Claude Code' }
-          },
-          required: ['message']
-        }
-      }
-    },
-    {
-      type: 'function',
-      function: {
-        name: 'ping_user',
-        description: 'Send a message to the user and pause until they respond. Use only when you cannot proceed without human input.',
-        parameters: {
-          type: 'object',
-          properties: {
-            message: { type: 'string', description: 'The question or information for the user' }
           },
           required: ['message']
         }
@@ -61,34 +47,6 @@ type KimiLoopData = {
 }
 
 type ToolCallAccum = { id: string; name: string; arguments: string }
-
-async function handlePingUser(
-  windowId: number,
-  tc: ToolCallAccum,
-  messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[]
-): Promise<string> {
-  const args = JSON.parse(tc.arguments) as { message: string }
-  parentPort?.postMessage({ type: 'ping-user', windowId, message: args.message })
-  parentPort?.postMessage({ type: 'save-message', windowId, role: 'ping_user', content: args.message, metadata: null })
-
-  // Use filtered on-listener to prevent race condition when multiple windows are running.
-  // The parent must send `{ type: 'resume', windowId, message }` in the resume message.
-  // Note: when assistedWindowService.ts wires up IPC, worker.postMessage({ type: 'resume', message })
-  // must become worker.postMessage({ type: 'resume', windowId, message }) to include the window ID.
-  const userReply = await new Promise<string>((resolve) => {
-    const handler = (msg: { type: string; windowId: number; message: string }) => {
-      if (msg.type === 'resume' && msg.windowId === windowId) {
-        parentPort?.removeListener('message', handler)
-        resolve(msg.message)
-      }
-    }
-    parentPort?.on('message', handler)
-  })
-
-  messages.push({ role: 'user', content: userReply })
-  parentPort?.postMessage({ type: 'save-message', windowId, role: 'user', content: userReply, metadata: null })
-  return userReply
-}
 
 async function handleRunClaudeCode(
   windowId: number,
@@ -124,7 +82,7 @@ async function handleRunClaudeCode(
   }
 
   parentPort?.postMessage({
-    type: 'save-message', windowId, role: 'tool_result', content: output,
+    type: 'save-message', windowId, role: 'claude', content: output,
     metadata: JSON.stringify({
       schemaVersion: 1,
       session_id: newActiveSessionId,
@@ -133,6 +91,7 @@ async function handleRunClaudeCode(
       events
     })
   })
+  parentPort?.postMessage({ type: 'claude:turn-complete', windowId })
   return { toolResult: output, newActiveSessionId }
 }
 
@@ -195,7 +154,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
     const stream = await client.chat.completions.create({
       model: 'accounts/fireworks/models/kimi-k2p5',
       messages,
-      tools: buildKimiTools(),
+      tools: buildShellephantTools(),
       stream: true
     })
 
@@ -206,7 +165,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
     if (kimiDeltaRef.value) {
       messages.push({ role: 'assistant', content: kimiDeltaRef.value })
       parentPort?.postMessage({
-        type: 'save-message', windowId, role: 'assistant', content: kimiDeltaRef.value,
+        type: 'save-message', windowId, role: 'shellephant', content: kimiDeltaRef.value,
         metadata: JSON.stringify({ input_tokens: tokenRef.input, output_tokens: tokenRef.output })
       })
     }
@@ -229,12 +188,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
     for (const tc of toolCalls) {
       let toolResult: string
 
-      if (tc.name === 'ping_user') {
-        toolResult = await handlePingUser(windowId, tc, messages)
-      } else if (tc.name === 'run_claude_code') {
-        // Enforce one CC call per turn: any extras in the same batch get a
-        // synthetic deferral so the model sees the first response before
-        // deciding what to send next.
+      if (tc.name === 'run_claude_code') {
         if (ranClaudeCodeThisTurn) {
           toolResult = 'Deferred — only one run_claude_code allowed per turn. Re-plan after reading the previous response, then call run_claude_code again.'
         } else {
