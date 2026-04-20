@@ -22,7 +22,7 @@ import {
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
 import { getDocker, listBridgeNetworks } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, createFileInContainer, createDirInContainer, deleteInContainer, renameInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 import {
@@ -306,6 +306,26 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('fs:write-file', async (_, containerId: string, path: string, content: string) => {
     const container = getDocker().getContainer(containerId)
     return writeFileInContainer(container, path, content)
+  })
+
+  ipcMain.handle('fs:create-file', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return createFileInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:create-dir', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return createDirInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:delete', async (_, containerId: string, path: string) => {
+    const container = getDocker().getContainer(containerId)
+    return deleteInContainer(container, path)
+  })
+
+  ipcMain.handle('fs:rename', async (_, containerId: string, oldPath: string, newPath: string) => {
+    const container = getDocker().getContainer(containerId)
+    return renameInContainer(container, oldPath, newPath)
   })
 
   ipcMain.handle('fs:exec', async (_, containerId: string, cmd: string[]) => {

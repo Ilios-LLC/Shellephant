@@ -197,6 +197,10 @@ export interface Api {
   listContainerDir: (containerId: string, path: string) => Promise<{ name: string; isDir: boolean }[]>
   readContainerFile: (containerId: string, path: string) => Promise<string>
   writeContainerFile: (containerId: string, path: string, content: string) => Promise<void>
+  createContainerFile: (containerId: string, path: string) => Promise<void>
+  createContainerDir: (containerId: string, path: string) => Promise<void>
+  deleteContainerPath: (containerId: string, path: string) => Promise<void>
+  renameContainerPath: (containerId: string, oldPath: string, newPath: string) => Promise<void>
 
   // Shell
   openExternal: (url: string) => Promise<void>
