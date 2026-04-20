@@ -23,8 +23,8 @@ contextBridge.exposeInMainWorld('api', {
   listGroups: () => ipcRenderer.invoke('group:list'),
 
   // Window API
-  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual', networkName: string = '') =>
-    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, windowType, networkName),
+  createWindow: (name: string, projectIds: number[], withDeps: boolean = false, branchOverrides: Record<number, string> = {}, networkName: string = '') =>
+    ipcRenderer.invoke('window:create', name, projectIds, withDeps, branchOverrides, networkName),
   listWindows: (projectId?: number) => ipcRenderer.invoke('window:list', projectId),
   deleteWindow: (id: number) => ipcRenderer.invoke('window:delete', id),
   onWindowCreateProgress: (callback: (step: string) => void) =>
@@ -150,8 +150,6 @@ contextBridge.exposeInMainWorld('api', {
   assistedSend: (windowId: number, message: string) =>
     ipcRenderer.invoke('assisted:send', windowId, message),
   assistedCancel: (windowId: number) => ipcRenderer.invoke('assisted:cancel', windowId),
-  assistedResume: (windowId: number, message: string) =>
-    ipcRenderer.invoke('assisted:resume', windowId, message),
   assistedHistory: (windowId: number) => ipcRenderer.invoke('assisted:history', windowId),
   onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) =>
     ipcRenderer.on('assisted:stream-event', (_, windowId, event) => callback(windowId, event)),
@@ -167,5 +165,19 @@ contextBridge.exposeInMainWorld('api', {
   offAssistedToolCall: () => ipcRenderer.removeAllListeners('assisted:tool-call'),
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) =>
     ipcRenderer.on('assisted:turn-complete', (_, windowId, stats, error) => callback(windowId, stats, error)),
-  offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete')
+  offAssistedTurnComplete: () => ipcRenderer.removeAllListeners('assisted:turn-complete'),
+
+  // Direct Claude window
+  claudeSend: (windowId: number, message: string) =>
+    ipcRenderer.invoke('claude:send', windowId, message),
+  claudeCancel: (windowId: number) => ipcRenderer.invoke('claude:cancel', windowId),
+  onClaudeDelta: (callback: (windowId: number, chunk: string) => void) =>
+    ipcRenderer.on('claude:delta', (_, windowId, chunk) => callback(windowId, chunk)),
+  offClaudeDelta: () => ipcRenderer.removeAllListeners('claude:delta'),
+  onClaudeAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) =>
+    ipcRenderer.on('claude:action', (_, windowId, action) => callback(windowId, action)),
+  offClaudeAction: () => ipcRenderer.removeAllListeners('claude:action'),
+  onClaudeTurnComplete: (callback: (windowId: number) => void) =>
+    ipcRenderer.on('claude:turn-complete', (_, windowId) => callback(windowId)),
+  offClaudeTurnComplete: () => ipcRenderer.removeAllListeners('claude:turn-complete')
 })
