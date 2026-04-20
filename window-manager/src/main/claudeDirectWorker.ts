@@ -14,14 +14,16 @@ parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>
   const { windowId, containerId, message, initialSessionId } = msg as unknown as DirectSendMsg
 
   try {
-    const { output, newSessionId } = await runClaudeCode(containerId, initialSessionId, message)
-    parentPort?.postMessage({
-      type: 'save-message',
-      role: 'claude',
-      content: output,
-      metadata: JSON.stringify({ session_id: newSessionId, complete: true })
-    })
-    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId, assistantText: output })
+    const { assistantText, newSessionId } = await runClaudeCode(containerId, initialSessionId, message)
+    if (assistantText) {
+      parentPort?.postMessage({
+        type: 'save-message',
+        role: 'claude',
+        content: assistantText,
+        metadata: JSON.stringify({ session_id: newSessionId, complete: true })
+      })
+    }
+    parentPort?.postMessage({ type: 'turn-complete', windowId, session_id: newSessionId, assistantText })
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
     parentPort?.postMessage({
