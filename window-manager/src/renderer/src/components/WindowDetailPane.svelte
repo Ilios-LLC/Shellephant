@@ -568,6 +568,10 @@
   .turn-row:hover {
     background: var(--bg-2);
   }
+  .turn-row:focus-visible {
+    outline: 2px solid var(--accent, #7ed321);
+    outline-offset: -1px;
+  }
   .turn-type {
     font-family: var(--font-mono);
     color: var(--fg-1);
