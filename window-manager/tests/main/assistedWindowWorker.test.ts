@@ -275,6 +275,52 @@ describe('kimiLoop — single run_claude_code per turn', () => {
     expect(claudeToShellephantEvents.length).toBeGreaterThan(0)
   })
 
+  it('saves claude-to-shellephant message with prose text, not raw context format', async () => {
+    mockCreate
+      .mockResolvedValueOnce(makeToolCallStream([
+        { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ message: 'read the file' }) }
+      ]))
+      .mockResolvedValueOnce(makeEmptyStream())
+
+    const { child, emitStdout, close } = makeFakeChild()
+    mockSpawn.mockReturnValueOnce(child)
+    setTimeout(() => {
+      // Emit tool_use + tool_result + prose text — context format would include
+      // "tool_use: Read(a.ts)" and "tool_result: file content", but assistantText
+      // should only be the prose response.
+      emitStdout(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: 'a.ts' } }] } }) + '\n')
+      emitStdout(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'file content' }] } }) + '\n')
+      emitStdout(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Done, I read the file.' }] } }) + '\n')
+      emitStdout(JSON.stringify({ type: 'session_final', session_id: 'sess-B' }) + '\n')
+      close(0)
+    }, 0)
+
+    const handler = messageHandlerRef.current
+    expect(handler).toBeDefined()
+
+    await handler!({
+      type: 'send',
+      windowId: 101,
+      containerId: 'c-test',
+      message: 'read the file',
+      conversationHistory: [],
+      initialSessionId: null,
+      systemPrompt: 'sys',
+      fireworksKey: 'fw'
+    })
+
+    const claudeResultSaves = mockParentPort.postMessage.mock.calls
+      .map(c => c[0] as { type: string; role?: string; content?: string })
+      .filter(m => m.type === 'save-message' && m.role === 'claude-to-shellephant')
+    expect(claudeResultSaves).toHaveLength(1)
+
+    const content = claudeResultSaves[0].content ?? ''
+    // Should be clean prose, not context-format tool_use/tool_result lines
+    expect(content).toBe('Done, I read the file.')
+    expect(content).not.toContain('tool_use:')
+    expect(content).not.toContain('tool_result:')
+  })
+
   it('seeds activeSessionId from initialSessionId so the first CC call resumes', async () => {
     mockCreate
       .mockResolvedValueOnce(makeToolCallStream([
