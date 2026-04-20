@@ -18,6 +18,7 @@
     view: MainPaneView
     patStatus: TokenStatus
     claudeStatus: TokenStatus
+    fireworksStatus: TokenStatus
     settingsRequiredFor: SettingsRequirement
     onWindowSelect: (win: WindowRecord) => void
     onRequestNewProject: () => void
@@ -28,6 +29,7 @@
     onWindowDeleted: (id: number) => void
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
+    onFireworksStatusChange: (status: TokenStatus) => void
     onWizardCancel: () => void
     onNavigateToWindow: (projectId: number | null, windowId: number) => void
     groups: ProjectGroupRecord[]
@@ -43,6 +45,7 @@
     view,
     patStatus,
     claudeStatus,
+    fireworksStatus,
     settingsRequiredFor,
     onWindowSelect,
     onRequestNewProject,
@@ -53,6 +56,7 @@
     onWindowDeleted,
     onPatStatusChange,
     onClaudeStatusChange,
+    onFireworksStatusChange,
     onWizardCancel,
     onNavigateToWindow,
     groups,
@@ -65,9 +69,11 @@
     <SettingsView
       {patStatus}
       {claudeStatus}
+      {fireworksStatus}
       requiredFor={settingsRequiredFor}
       {onPatStatusChange}
       {onClaudeStatusChange}
+      {onFireworksStatusChange}
       onCancel={onWizardCancel}
     />
   {:else if view === 'new-project'}

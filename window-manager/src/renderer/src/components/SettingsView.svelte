@@ -6,18 +6,22 @@
   interface Props {
     patStatus: TokenStatus
     claudeStatus: TokenStatus
+    fireworksStatus: TokenStatus
     requiredFor?: SettingsRequirement
     onPatStatusChange: (status: TokenStatus) => void
     onClaudeStatusChange: (status: TokenStatus) => void
+    onFireworksStatusChange: (status: TokenStatus) => void
     onCancel: () => void
   }
 
   let {
     patStatus,
     claudeStatus,
+    fireworksStatus,
     requiredFor = null,
     onPatStatusChange,
     onClaudeStatusChange,
+    onFireworksStatusChange,
     onCancel
   }: Props = $props()
 
@@ -28,6 +32,10 @@
   let claudeInput = $state('')
   let claudeBusy = $state(false)
   let claudeError = $state('')
+
+  let fireworksInput = $state('')
+  let fireworksBusy = $state(false)
+  let fireworksError = $state('')
 
   let bannerText = $derived.by(() => {
     if (requiredFor === 'project') {
@@ -96,6 +104,36 @@
       claudeError = err instanceof Error ? err.message : String(err)
     } finally {
       claudeBusy = false
+    }
+  }
+
+  async function saveFireworks(): Promise<void> {
+    const trimmed = fireworksInput.trim()
+    if (!trimmed || fireworksBusy) return
+    fireworksBusy = true
+    fireworksError = ''
+    try {
+      const next = await window.api.setFireworksKey(trimmed)
+      fireworksInput = ''
+      onFireworksStatusChange(next)
+    } catch (err) {
+      fireworksError = err instanceof Error ? err.message : String(err)
+    } finally {
+      fireworksBusy = false
+    }
+  }
+
+  async function clearFireworks(): Promise<void> {
+    if (fireworksBusy) return
+    fireworksBusy = true
+    fireworksError = ''
+    try {
+      const next = await window.api.clearFireworksKey()
+      onFireworksStatusChange(next)
+    } catch (err) {
+      fireworksError = err instanceof Error ? err.message : String(err)
+    } finally {
+      fireworksBusy = false
     }
   }
 
@@ -201,6 +239,47 @@
       </div>
       {#if claudeError}
         <p class="error">{claudeError}</p>
+      {/if}
+    </section>
+
+    <section class="field">
+      <label for="fireworks-key">Fireworks API Key</label>
+      <div class="status-line">
+        {#if fireworksStatus.configured}
+          <span class="status configured">
+            Configured{fireworksStatus.hint ? ` • ends in ${fireworksStatus.hint}` : ''}
+          </span>
+        {:else}
+          <span class="status unconfigured">Not configured</span>
+        {/if}
+      </div>
+      <input
+        id="fireworks-key"
+        type="password"
+        autocomplete="off"
+        placeholder={fireworksStatus.configured ? 'Enter a new key to replace' : 'fw-...'}
+        bind:value={fireworksInput}
+        disabled={fireworksBusy}
+        onkeydown={(e) => { if (e.key === 'Enter') saveFireworks(); else if (e.key === 'Escape') onCancel() }}
+      />
+      <p class="help">Required for Assisted windows. Get one at fireworks.ai.</p>
+      <div class="row-actions">
+        {#if fireworksStatus.configured}
+          <button type="button" class="clear" onclick={clearFireworks} disabled={fireworksBusy}>
+            {fireworksBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="submit"
+          onclick={saveFireworks}
+          disabled={!fireworksInput.trim() || fireworksBusy}
+        >
+          {fireworksBusy ? 'Saving…' : 'Save Fireworks Key'}
+        </button>
+      </div>
+      {#if fireworksError}
+        <p class="error">{fireworksError}</p>
       {/if}
     </section>
 
