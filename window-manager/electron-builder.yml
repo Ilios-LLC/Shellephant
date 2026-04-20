@@ -12,6 +12,9 @@ files:
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
 asarUnpack:
   - resources/**
+extraResources:
+  - from: ../files/cw-claude-sdk.js
+    to: cw-claude-sdk.js
 win:
   executableName: shellephant
 nsis:

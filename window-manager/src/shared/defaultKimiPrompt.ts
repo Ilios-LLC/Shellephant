@@ -22,7 +22,7 @@ Turn-taking (CRITICAL):
 CC question needing judgment:
 1. CC gives rec, sensible, not security/privacy/ethics → accept.
 2. CC gives rec, answer derivable from user prefs → answer from prefs.
-3. No rec but 90% sure from user prefs → answer.
+3. No rec but 99% sure from user prefs → answer.
 4. Else → ping_user, then follow user.
 
 run_claude_code = coding tasks. ping_user = stuck without human input — prefer self-resolve.

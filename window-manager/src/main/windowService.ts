@@ -1,4 +1,8 @@
 import Dockerode from 'dockerode'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { existsSync } from 'fs'
+import path from 'path'
 import { getDb } from './db'
 import { extractRepoName } from './gitUrl'
 import { getGitHubPat, getClaudeToken } from './settingsService'
@@ -9,6 +13,8 @@ import { remoteBranchExists, execInContainer, cloneInContainer, checkoutSlug, ap
 import { getDocker } from './docker'
 import { listDependencies, listWindowDepContainers } from './dependencyService'
 import type { PortMapping } from './projectService'
+
+const execFileAsync = promisify(execFile)
 
 export type WindowStatus = 'running' | 'stopped' | 'unknown'
 
@@ -47,6 +53,26 @@ interface DepContainerRecord {
   depId: number
   containerId: string
   container: Dockerode.Container
+}
+
+// The wrapper script is baked into the `cc` image at build time
+// (files/Dockerfile), but image rebuilds lag behind edits to files/cw-claude-sdk.js —
+// running containers end up with a stale wrapper that breaks CC session
+// persistence (session_id stops flowing through the stdout `session_final`
+// event). Inject the current host copy after `container.start()` so every
+// assisted window gets the wrapper that matches the checked-in worker.
+function resolveClaudeSdkWrapperPath(): string {
+  if (process.resourcesPath) {
+    const packaged = path.join(process.resourcesPath, 'cw-claude-sdk.js')
+    if (existsSync(packaged)) return packaged
+  }
+  return path.join(__dirname, '../../../files/cw-claude-sdk.js')
+}
+
+async function injectClaudeSdkWrapper(containerId: string): Promise<void> {
+  const src = resolveClaudeSdkWrapperPath()
+  if (!existsSync(src)) throw new Error(`cw-claude-sdk.js not found at ${src}`)
+  await execFileAsync('docker', ['cp', src, `${containerId}:/usr/local/bin/cw-claude-sdk.js`])
 }
 
 async function pullImage(imageRef: string): Promise<void> {
@@ -241,6 +267,10 @@ export async function createWindow(
       ...(projectPorts.length > 0 && { ExposedPorts: exposedPorts, HostConfig: { PortBindings: portBindings } })
     })
     await container.start()
+
+    if (windowType === 'assisted') {
+      await injectClaudeSdkWrapper(container.id)
+    }
 
     if (networkId) {
       await getDocker().getNetwork(networkId).connect({ Container: container.id })
