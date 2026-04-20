@@ -2,17 +2,19 @@ import { parentPort } from 'worker_threads'
 import { spawn } from 'child_process'
 import { StreamFilterBuffer } from './assistedStreamFilter'
 import type { TimelineEvent } from '../shared/timelineEvent'
+import type { PermissionMode } from '../shared/permissionMode'
 
 export async function runClaudeCode(
   containerId: string,
   sessionId: string | null,
   message: string,
-  options: { eventType?: string } = {}
+  options: { eventType?: string; permissionMode?: PermissionMode } = {}
 ): Promise<{ output: string; assistantText: string; events: TimelineEvent[]; newSessionId: string | null }> {
   const eventType = options.eventType ?? 'claude:event'
+  const permissionMode = options.permissionMode ?? 'bypassPermissions'
   return new Promise((resolve, reject) => {
     const sidArg = sessionId ?? 'new'
-    const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message])
+    const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message, permissionMode])
 
     const filter = new StreamFilterBuffer()
     const contextParts: string[] = []
