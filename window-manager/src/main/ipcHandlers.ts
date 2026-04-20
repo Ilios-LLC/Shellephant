@@ -396,14 +396,16 @@ export function registerIpcHandlers(): void {
     offset?: number
   }) => {
     let query = 'SELECT * FROM turns WHERE 1=1'
-    const params: (string | number)[] = []
+    const params: unknown[] = []
     if (filter?.windowId != null) { query += ' AND window_id = ?'; params.push(filter.windowId) }
     if (filter?.status) { query += ' AND status = ?'; params.push(filter.status) }
     if (filter?.turnType) { query += ' AND turn_type = ?'; params.push(filter.turnType) }
     query += ' ORDER BY started_at DESC'
-    if (filter?.limit != null) { query += ' LIMIT ?'; params.push(filter.limit) }
-    if (filter?.offset != null) { query += ' OFFSET ?'; params.push(filter.offset) }
-    return getDb().prepare(query).all(...params as [])
+    if (filter?.limit != null) {
+      query += ' LIMIT ?'; params.push(filter.limit)
+      if (filter?.offset != null) { query += ' OFFSET ?'; params.push(filter.offset) }
+    }
+    return getDb().prepare(query).all(...params)
   })
 
   ipcMain.handle('logs:get-turn-events', (_event, turnId: string) => {
