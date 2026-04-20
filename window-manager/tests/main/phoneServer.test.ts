@@ -48,6 +48,15 @@ const mockGetSession = vi.mocked(getSession)
 const mockSpawnClaudePty = vi.mocked(spawnClaudePty)
 const mockSpawnTerminalPty = vi.mocked(spawnTerminalPty)
 
+function makeMockPty() {
+  const mockDisposable = { dispose: vi.fn() }
+  return {
+    onData: vi.fn(() => mockDisposable),
+    onExit: vi.fn(() => mockDisposable),
+    write: vi.fn()
+  }
+}
+
 const MOCK_IFACES = {
   tailscale0: [{
     family: 'IPv4' as const,
@@ -311,15 +320,6 @@ describe('WebSocket /ws/:containerId', () => {
 describe('WebSocket session routing by window_type', () => {
   let port: number
 
-  function makeMockPty() {
-    const mockDisposable = { dispose: vi.fn() }
-    return {
-      onData: vi.fn(() => mockDisposable),
-      onExit: vi.fn(() => mockDisposable),
-      write: vi.fn()
-    }
-  }
-
   beforeEach(async () => {
     vi.spyOn(os, 'networkInterfaces').mockReturnValue(MOCK_IFACES as any)
     mockListWindows.mockResolvedValue([])
@@ -368,6 +368,77 @@ describe('WebSocket session routing by window_type', () => {
     mockSpawnTerminalPty.mockReturnValue(mockChild as any)
 
     const client = new WebSocket(`ws://localhost:${port}/ws/container-1`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockSpawnTerminalPty).toHaveBeenCalledWith('container-1')
+    client.close()
+  })
+})
+
+describe('WebSocket /ws/:containerId/:sessionType (explicit)', () => {
+  let port: number
+
+  beforeEach(async () => {
+    vi.clearAllMocks()
+    vi.spyOn(os, 'networkInterfaces').mockReturnValue(MOCK_IFACES as any)
+    mockListWindows.mockResolvedValue([])
+    const { url } = await startPhoneServer(0, '127.0.0.1')
+    port = parseInt(new URL(url).port)
+  })
+  afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
+
+  it('routes /ws/:id/claude to claude session regardless of window type', async () => {
+    mockGetWindowTypeByContainerId.mockReturnValue('assisted' as any)
+    mockGetSession.mockReturnValue({ pty: makeMockPty() } as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1/claude`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockGetSession).toHaveBeenCalledWith('container-1', 'claude')
+    expect(mockGetWindowTypeByContainerId).not.toHaveBeenCalled()
+    client.close()
+  })
+
+  it('routes /ws/:id/terminal to terminal session regardless of window type', async () => {
+    mockGetWindowTypeByContainerId.mockReturnValue('manual' as any)
+    mockGetSession.mockReturnValue({ pty: makeMockPty() } as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1/terminal`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockGetSession).toHaveBeenCalledWith('container-1', 'terminal')
+    expect(mockGetWindowTypeByContainerId).not.toHaveBeenCalled()
+    client.close()
+  })
+
+  it('rejects unknown session type in URL', async () => {
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1/badtype`)
+    await new Promise<void>(resolve => client.on('close', resolve))
+    expect(mockGetSession).not.toHaveBeenCalled()
+  })
+
+  it('explicit /ws/:id/claude spawns claude PTY on-demand when no session', async () => {
+    mockGetSession.mockReturnValue(undefined)
+    const mockDisposable = { dispose: vi.fn() }
+    const mockChild = {
+      onData: vi.fn(() => mockDisposable),
+      onExit: vi.fn(() => mockDisposable),
+      write: vi.fn(),
+      kill: vi.fn()
+    }
+    mockSpawnClaudePty.mockReturnValue(mockChild as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1/claude`)
+    await new Promise<void>(resolve => client.on('open', resolve))
+    expect(mockSpawnClaudePty).toHaveBeenCalledWith('container-1')
+    client.close()
+  })
+
+  it('explicit /ws/:id/terminal spawns terminal PTY on-demand when no session', async () => {
+    mockGetSession.mockReturnValue(undefined)
+    const mockDisposable = { dispose: vi.fn() }
+    const mockChild = {
+      onData: vi.fn(() => mockDisposable),
+      onExit: vi.fn(() => mockDisposable),
+      write: vi.fn(),
+      kill: vi.fn()
+    }
+    mockSpawnTerminalPty.mockReturnValue(mockChild as any)
+    const client = new WebSocket(`ws://localhost:${port}/ws/container-1/terminal`)
     await new Promise<void>(resolve => client.on('open', resolve))
     expect(mockSpawnTerminalPty).toHaveBeenCalledWith('container-1')
     client.close()
