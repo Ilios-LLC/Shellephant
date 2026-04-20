@@ -107,7 +107,11 @@ export async function sendToClaudeDirectly(
 
     worker.on('exit', (code) => {
       if (code !== 0 && workers.has(windowId)) {
+        const endedAt = Date.now()
+        updateTurn(turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: `Worker exited with code ${code}` })
+        sendToRenderer('logs:turn-updated', { id: turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - startedAt, error: `Worker exited with code ${code}` })
         sendToRenderer('claude:turn-complete', windowId)
+        sendToRenderer('claude:error', windowId, `Worker exited with code ${code}`)
         workers.delete(windowId)
       }
     })
