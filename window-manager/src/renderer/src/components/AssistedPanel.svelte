@@ -391,9 +391,9 @@
   }
 
   .sender-bubble.claude {
-    background: rgba(16, 185, 129, 0.08);
-    border: 1px solid rgba(16, 185, 129, 0.35);
-    color: var(--fg-0);
+    background: rgba(10, 10, 10, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    color: #ffffff;
   }
 
   .sender-tag {
@@ -406,7 +406,7 @@
   }
 
   .shellephant .sender-tag { color: rgb(96, 165, 250); }
-  .claude .sender-tag { color: rgb(52, 211, 153); }
+  .claude .sender-tag { color: rgba(255, 255, 255, 0.55); }
   .shellephant-to-claude .sender-tag { color: rgb(167, 139, 250); }
   .claude-to-shellephant .sender-tag { color: rgb(45, 212, 191); }
 
