@@ -53,6 +53,23 @@ export function spawnClaudePty(
   })
 }
 
+export function spawnTerminalPty(
+  containerId: string,
+  cols = 80,
+  rows = 24
+): IPty {
+  const args = ['exec', '-i', '-t', '-e', 'TERM=xterm-256color', '-e', 'LANG=C.UTF-8', '-e', 'LC_ALL=C.UTF-8']
+  const tmuxCmd = 'exec tmux -u new-session -A -s cw'
+  args.push(containerId, 'sh', '-c', tmuxCmd)
+  return pty.spawn('docker', args, {
+    name: 'xterm-256color',
+    cols: Math.max(1, Math.floor(cols)),
+    rows: Math.max(1, Math.floor(rows)),
+    cwd: process.env.HOME,
+    env: process.env as { [key: string]: string }
+  })
+}
+
 export function openTerminal(
   containerId: string,
   win: BrowserWindow,
