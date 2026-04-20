@@ -88,3 +88,47 @@ describe('resumeWindow', () => {
     )
   })
 })
+
+describe('worker message routing', () => {
+  it('turn-complete removes worker from map', async () => {
+    await sendToWindow(10, 'c10', 'msg', null, vi.fn())
+    expect(getWorkerCount()).toBe(1)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'turn-complete', windowId: 10, stats: null })
+    expect(getWorkerCount()).toBe(0)
+  })
+
+  it('turn-complete calls sendToRenderer', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(11, 'c11', 'msg', null, mockSend)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    const stats = { inputTokens: 100, outputTokens: 50, costUsd: 0.001 }
+    messageHandler({ type: 'turn-complete', windowId: 11, stats })
+    expect(mockSend).toHaveBeenCalledWith('assisted:turn-complete', 11, stats, undefined)
+  })
+
+  it('stream-chunk calls sendToRenderer', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(12, 'c12', 'msg', null, mockSend)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'stream-chunk', windowId: 12, chunk: 'hello' })
+    expect(mockSend).toHaveBeenCalledWith('assisted:stream-chunk', 12, 'hello')
+  })
+
+  it('worker error removes worker from map and sends turn-complete', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(13, 'c13', 'msg', null, mockSend)
+    const errorHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'error')?.[1]
+    errorHandler(new Error('worker crashed'))
+    expect(getWorkerCount()).toBe(0)
+    expect(mockSend).toHaveBeenCalledWith('assisted:turn-complete', 13, null, 'worker crashed')
+  })
+
+  it('non-zero worker exit removes worker from map', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(14, 'c14', 'msg', null, mockSend)
+    const exitHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'exit')?.[1]
+    exitHandler(1)  // non-zero exit
+    expect(getWorkerCount()).toBe(0)
+  })
+})
