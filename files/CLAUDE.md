@@ -105,8 +105,19 @@ Schema notes:
 - `windows` table: has `window_type TEXT NOT NULL DEFAULT 'manual'` column (values: 'manual' | 'assisted') and `network_id TEXT DEFAULT NULL`.
 - `projects` table: has `kimi_system_prompt TEXT DEFAULT NULL` column.
 - `assisted_messages` table: `id`, `window_id` (FK → windows), `role`, `content`, `metadata` (JSON TEXT, nullable), `created_at`.
+- `turns` table: `id TEXT PK`, `window_id INTEGER`, `turn_type TEXT` ('human-claude' | 'shellephant-claude'), `status TEXT` ('running' | 'success' | 'error'), `started_at INTEGER` (ms epoch), `ended_at INTEGER` (ms epoch, nullable), `duration_ms INTEGER` (nullable), `error TEXT` (nullable), `log_file TEXT` (nullable). Indexes: `idx_turns_window_started ON turns(window_id, started_at DESC)`, `idx_turns_started ON turns(started_at DESC)`.
 - Column migrations run via `runColumnMigrations(db)` using `col(db, table).includes(colName)` guard pattern.
 - Tests live in `window-manager/tests/main/db.test.ts` (34 tests).
+
+### window-manager/src/main/logWriter.ts
+Exports: `initLogWriter`, `getLogFilePath`, `insertTurn`, `updateTurn`, `readEventsForTurn`, `writeEvent`, `__resetForTests`. Type: `TurnRecord`, `LogEvent`.
+- `initLogWriter(logDir)` — sets `_logDir`; subsequent `getLogFilePath()` returns `logDir/window-manager-YYYY-MM-DD.jsonl` (UTC date).
+- `insertTurn(record)` / `updateTurn(id, patch)` — write/update rows in `turns` table. `updateTurn` builds dynamic SET clauses with `params: unknown[]` (no unsafe casts).
+- `writeEvent(logPath, event)` — synchronous `appendFileSync` wrapped in try/catch; logs errors via `console.error`. Used by worker threads for crash-safe event persistence.
+- `readEventsForTurn(logPath, turnId)` — reads JSONL file line-by-line, parses each, filters by `turnId`. Returns `LogEvent[]`. Empty file or missing file returns `[]`.
+- `LogEvent` fields: `turnId`, `windowId`, `eventType`, `ts` (ms epoch), `payload?` (arbitrary object).
+- `TurnRecord` fields match `turns` table (all snake_case): `id`, `window_id`, `turn_type`, `status`, `started_at`, `ended_at?`, `duration_ms?`, `error?`, `log_file?`.
+- Tests live in `window-manager/tests/main/logWriter.test.ts` (22 tests).
 
 ### window-manager/src/main/settingsService.ts
 Exports: `getGitHubPat`, `getGitHubPatStatus`, `setGitHubPat`, `clearGitHubPat`, `getClaudeToken`, `getClaudeTokenStatus`, `setClaudeToken`, `clearClaudeToken`, `getFireworksKey`, `getFireworksKeyStatus`, `setFireworksKey`, `clearFireworksKey`, `getKimiSystemPrompt`, `setKimiSystemPrompt`. Type: `TokenStatus`.
@@ -261,9 +272,11 @@ Svelte 5 runes-mode wizard for creating a new window, supporting single-project 
 ### window-manager/src/main/assistedWindowService.ts
 Manages Worker thread lifecycle for Shellephant (Kimi K2) assisted windows and wires IPC channels.
 - Exports: `sendToWindow`, `cancelWindow`, `getWorkerCount`, `__resetWorkersForTests`.
-- Module-level `workers: Map<number, Worker>` keyed by windowId.
-- `sendToWindow(windowId, containerId, message, projectId, sendToRenderer)` — resolves Fireworks key, loads history from `assisted_messages`, spawns a new Worker (or reuses existing) at `assistedWindowWorker.js`. Worker message handler: `save-message` → DB insert; `stream-chunk` / `kimi-delta` / `turn-complete` → forward to renderer via `sendToRenderer`. On `turn-complete` or worker error/exit, removes from map. `turn-complete` fires `Notification` ("Shellephant responded") when user is not watching via `isUserWatching`.
-- `cancelWindow(windowId)` — terminates worker and removes from map.
+- Module-level: `workers: Map<number, Worker>`, `workerCtxSetters: Map<number, (ctx: SendCtx) => void>`, `workerCtxMap: Map<number, SendCtx>` keyed by windowId.
+- `SendCtx` type: `{ windowId, containerId, turnId, startedAt, sendToRenderer }`.
+- `sendToWindow(windowId, containerId, message, projectId, sendToRenderer)` — generates turnId, calls `insertTurn`, sends `logs:turn-started`. Spawns or reuses worker; on reuse, calls `workerCtxSetters.get(windowId)?.(ctx)` to update mutable ctx ref. Worker message routing: `log-event` → `sendToRenderer('logs:turn-event', event)`; `save-message` → DB insert; `kimi-delta` / `claude-to-shellephant:event` / tool-call events → forwarded to renderer; `turn-complete` → `handleTurnComplete`. Fires `Notification` ("Shellephant responded") when user is not watching.
+- `cancelWindow(windowId)` — reads ctx from `workerCtxMap`, calls `updateTurn(ctx.turnId, { status: 'error', error: 'cancelled' })` before terminating; removes all three maps.
+- `spawnWorker` uses mutable `let ctx = initialCtx` + returned `setCtx` fn so all event handlers dereference `ctx` at call time (safe for worker reuse across turns).
 - IPC handlers in `ipcHandlers.ts`: `assisted:send`, `assisted:cancel`, `assisted:history`.
 - Preload channels: `assistedSend`, `assistedCancel`, `assistedHistory`, `on/offAssistedStreamChunk`, `on/offAssistedKimiDelta`, `on/offAssistedTurnComplete`.
 - Tests live in `window-manager/tests/main/assistedWindowService.test.ts` (6 tests). Uses `vi.hoisted()` + constructor function pattern for Worker mock.
@@ -275,7 +288,8 @@ Worker thread implementing the Shellephant (Kimi K2) orchestration loop for assi
 - `buildShellephantTools` — returns one `ChatCompletionTool` definition: `run_claude_code` (no `ping_user`).
 - `parseDockerOutput` — splits stdout lines (filter empty), extracts sessionId from stderr (null if empty).
 - Private `runClaudeCode(containerId, sessionId, message)` — spawns `docker exec` running `cw-claude-sdk.js`; streams chunks via `parentPort.postMessage({ type: 'stream-chunk' })`; resolves `{ output, newSessionId }`.
-- Private `kimiLoop(data)` — main orchestration: streams Kimi K2 via Fireworks AI (`baseURL: https://api.fireworks.ai/inference/v1`), handles `run_claude_code` tool call. Extracted helpers: `handleRunClaudeCode`, `processStreamChunk` (all under 100 lines). Posts: `save-message`, `kimi-delta`, `turn-complete` messages to parent.
+- Private `kimiLoop(data)` — main orchestration: streams Kimi K2 via Fireworks AI (`baseURL: https://api.fireworks.ai/inference/v1`), handles `run_claude_code` tool call. Extracted helpers: `handleRunClaudeCode`, `processStreamChunk` (all under 100 lines). Posts: `save-message`, `kimi-delta`, `turn-complete` messages to parent. `KimiLoopData` requires `turnId: string` and `logPath: string`.
+- `makeEmitter(turnId, logPath, windowId)` — module-level factory returning `emitEvent(eventType, payload?)`. Calls `writeEvent(logPath, event)` then `parentPort.postMessage({ type: 'log-event', event })`. Used by both `kimiLoop` and `handleRunClaudeCode` to avoid duplicate closures.
 - `parentPort.on('message')` — handles `{ type: 'send' }` to invoke `kimiLoop`; on error posts `turn-complete` with error field.
 - Uses `vi.hoisted()` pattern in tests for mock references (same as MonacoEditor pattern).
 - Tests live in `window-manager/tests/main/assistedWindowWorker.test.ts` (6 tests).
@@ -283,20 +297,21 @@ Worker thread implementing the Shellephant (Kimi K2) orchestration loop for assi
 ### window-manager/src/main/claudeDirectWorker.ts
 Worker thread for direct Claude turns (bypassing Shellephant).
 - No exports (side-effect module — registers `parentPort.on('message')` handler at import time).
-- Handles `{ type: 'send', windowId, containerId, message, initialSessionId }` message.
-- Calls `runClaudeCode(containerId, initialSessionId, message)` from `claudeRunner.ts`.
-- On success: posts `save-message` (role: `claude`, content: output, metadata: JSON with session_id) then `turn-complete` (windowId, session_id).
-- On error: posts `save-message` (role: `claude`, content: `ERROR: <msg>`) then `turn-complete` (windowId, error: msg).
-- Tests live in `window-manager/tests/main/claudeDirectWorker.test.ts` (4 tests). Handler captured at module-level after import (before `beforeEach` clears mocks).
+- Handles `{ type: 'send', windowId, containerId, message, initialSessionId, permissionMode?, turnId, logPath }` message.
+- `emitEvent(eventType, payload?)` helper — calls `writeEvent(logPath, event)` then posts `log-event` to parent. Emits `turn_start` on entry, `turn_end` on success, `error` on failure.
+- Passes `onExecEvent` callback to `runClaudeCode`; on each exec event, emits matching log event and posts `log-event` to parent.
+- On success: posts `save-message` (role: `claude`, content: assistantText, metadata: JSON with session_id) if assistantText non-empty; then `turn-complete` (windowId, assistantText, newSessionId).
+- On error: posts `turn-complete` (windowId, error: msg). Skips save-message when assistantText is empty.
+- Tests live in `window-manager/tests/main/claudeDirectWorker.test.ts` (14 tests). Handler captured at module-level after import (before `beforeEach` clears mocks).
 
 ### window-manager/src/main/claudeService.ts
 Worker pool manager for direct Claude windows.
 - Exports: `sendToClaudeDirectly`, `cancelClaudeDirect`, `getDirectWorkerCount`, `__resetDirectWorkersForTests`.
-- Module-level `workers: Map<number, Worker>` keyed by windowId.
-- `sendToClaudeDirectly(windowId, containerId, message, sendToRenderer)` — saves user message to DB, loads last sessionId, spawns/reuses Worker at `claudeDirectWorker.js`, posts `send` message. Worker message routing: `save-message` → DB insert; `claude:event` with `kind === 'text_delta'` → `sendToRenderer('claude:delta', windowId, text)`; `claude:event` with `kind === 'tool_use'` → saves `claude-action` to DB + `sendToRenderer('claude:action', ...)`; `turn-complete` → `sendToRenderer('claude:turn-complete', windowId)` + removes worker (also sends `claude:error` if error field present).
-- `cancelClaudeDirect(windowId)` — terminates worker and removes from map.
+- Module-level: `workers: Map<number, Worker>` and `activeTurnIds: Map<number, string>` keyed by windowId.
+- `sendToClaudeDirectly(windowId, containerId, message, sendToRenderer)` — generates turnId/logPath/startedAt, calls `insertTurn`, sends `logs:turn-started`. Saves user message to DB, loads last sessionId, spawns/reuses Worker. Posts `send` with turnId+logPath. Worker message routing: `log-event` → `sendToRenderer('logs:turn-event', event)`; `save-message` → DB insert; `claude:event` text_delta/tool_use → delta/action events; `turn-complete` → `updateTurn`, `sendToRenderer('logs:turn-updated', ...)`, then claude turn-complete; worker error/exit also calls `updateTurn`.
+- `cancelClaudeDirect(windowId)` — reads `activeTurnIds.get(windowId)`, calls `updateTurn(activeTurnId, { status: 'error', error: 'Cancelled' })` before terminating; removes from both maps.
 - `loadLastSessionId` implemented inline (same logic as in `assistedWindowService.ts`) to avoid pulling in electron dependency.
-- Tests live in `window-manager/tests/main/claudeService.test.ts` (8 tests).
+- Tests live in `window-manager/tests/main/claudeService.test.ts` (14 tests).
 
 ### window-manager/src/renderer/src/components/TraceExplorer.svelte
 Global trace view component for observability. Svelte 5 runes mode. No props.
