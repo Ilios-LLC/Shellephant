@@ -12,9 +12,10 @@ import type { PermissionMode } from '../shared/permissionMode'
 
 const workers = new Map<number, Worker>()
 const activeTurnIds = new Map<number, string>()
+const activeTurnCtx = new Map<number, { turnId: string; startedAt: number }>()
 
 export function getDirectWorkerCount(): number { return workers.size }
-export function __resetDirectWorkersForTests(): void { workers.clear(); activeTurnIds.clear() }
+export function __resetDirectWorkersForTests(): void { workers.clear(); activeTurnIds.clear(); activeTurnCtx.clear() }
 
 function getWorkerPath(): string {
   return path.join(__dirname, 'claudeDirectWorker.js')
@@ -47,6 +48,7 @@ export async function sendToClaudeDirectly(
   }
   insertTurn(turnRecord)
   activeTurnIds.set(windowId, turnId)
+  activeTurnCtx.set(windowId, { turnId, startedAt })
   sendToRenderer('logs:turn-started', turnRecord)
 
   let worker = workers.get(windowId)
@@ -95,6 +97,7 @@ export async function sendToClaudeDirectly(
           }
         }
         activeTurnIds.delete(windowId)
+        activeTurnCtx.delete(windowId)
         workers.delete(windowId)
       }
     })
@@ -106,6 +109,7 @@ export async function sendToClaudeDirectly(
       sendToRenderer('claude:turn-complete', windowId)
       sendToRenderer('claude:error', windowId, err.message)
       activeTurnIds.delete(windowId)
+      activeTurnCtx.delete(windowId)
       workers.delete(windowId)
     })
 
@@ -117,6 +121,7 @@ export async function sendToClaudeDirectly(
         sendToRenderer('claude:turn-complete', windowId)
         sendToRenderer('claude:error', windowId, `Worker exited with code ${code}`)
         activeTurnIds.delete(windowId)
+        activeTurnCtx.delete(windowId)
         workers.delete(windowId)
       }
     })
@@ -130,12 +135,13 @@ export async function sendToClaudeDirectly(
 export function cancelClaudeDirect(windowId: number): void {
   const worker = workers.get(windowId)
   if (!worker) return
-  worker.terminate()
-  const activeTurnId = activeTurnIds.get(windowId)
-  if (activeTurnId) {
+  const ctx = activeTurnCtx.get(windowId)
+  if (ctx) {
     const endedAt = Date.now()
-    updateTurn(activeTurnId, { status: 'error', ended_at: endedAt, error: 'Cancelled' })
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
+    activeTurnCtx.delete(windowId)
   }
+  worker.terminate()
   activeTurnIds.delete(windowId)
   workers.delete(windowId)
 }

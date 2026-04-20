@@ -249,12 +249,12 @@ export function cancelWindow(windowId: number): void {
   const worker = workers.get(windowId)
   if (!worker) return
   const ctx = workerCtxMap.get(windowId)
-  worker.terminate()
   if (ctx) {
     const endedAt = Date.now()
-    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, error: 'Cancelled' })
-    ctx.sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, error: 'Cancelled' })
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
+    ctx.sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
   }
+  worker.terminate()
   workers.delete(windowId)
   workerCtxSetters.delete(windowId)
   workerCtxMap.delete(windowId)

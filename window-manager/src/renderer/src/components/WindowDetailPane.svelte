@@ -84,6 +84,10 @@
   let expandedTurnId = $state<string | null>(null)
   let turnEvents = $state<Map<string, LogEvent[]>>(new Map())
 
+  let offStarted: (() => void) | undefined
+  let offUpdated: (() => void) | undefined
+  let offEvent: (() => void) | undefined
+
   async function refreshDepStatuses(): Promise<void> {
     if (depContainers.length === 0) return
     try {
@@ -197,26 +201,21 @@
       }
     })
     if (!alive) return
-    const offStarted = window.api.onTurnStarted((t: unknown) => {
+    offStarted = window.api.onTurnStarted((t: unknown) => {
       const turn = t as TurnRecord
       if (turn.window_id === win.id) turns = [turn, ...turns]
     })
-    const offUpdated = window.api.onTurnUpdated((patch: unknown) => {
+    offUpdated = window.api.onTurnUpdated((patch: unknown) => {
       const p = patch as Partial<TurnRecord> & { id: string }
       turns = turns.map(t => t.id === p.id ? { ...t, ...p } : t)
     })
-    const offEvent = window.api.onTurnEvent((e: unknown) => {
+    offEvent = window.api.onTurnEvent((e: unknown) => {
       const ev = e as LogEvent
       if (expandedTurnId === ev.turnId) {
         const existing = turnEvents.get(ev.turnId) ?? []
         turnEvents = new Map(turnEvents).set(ev.turnId, [...existing, ev])
       }
     })
-    return () => {
-      offStarted()
-      offUpdated()
-      offEvent()
-    }
   })
   onDestroy(() => {
     if (armTimer) clearTimeout(armTimer)
@@ -227,6 +226,9 @@
     if (depLogsVisible && selectedDepContainerId) {
       window.api.stopDepLogs(selectedDepContainerId)
     }
+    offStarted?.()
+    offUpdated?.()
+    offEvent?.()
   })
 </script>
 
