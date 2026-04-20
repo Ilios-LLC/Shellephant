@@ -101,6 +101,10 @@
     view = 'settings'
   }
 
+  function handleRequestTraces(): void {
+    view = 'traces'
+  }
+
   function handleWizardCancel(): void {
     settingsRequiredFor = null
     view = 'default'
@@ -241,6 +245,7 @@
     onGroupCreated={handleGroupCreated}
     onProjectSettingsClick={handleProjectSettingsClick}
     onRequestMultiWindow={handleRequestMultiWindow}
+    onRequestTraces={handleRequestTraces}
   />
   <MainPane
     project={selectedProject}
