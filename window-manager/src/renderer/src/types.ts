@@ -77,7 +77,7 @@ export interface WindowProjectRecord {
 export interface AssistedMessage {
   id: number
   window_id: number
-  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user'
+  role: 'user' | 'assistant' | 'tool_result' | 'tool_call' | 'ping_user' | 'shellephant' | 'claude' | 'claude-action'
   content: string
   metadata: string | null
   created_at: string
@@ -142,18 +142,21 @@ export interface Api {
   // Assisted window API
   assistedSend: (windowId: number, message: string) => Promise<void>
   assistedCancel: (windowId: number) => Promise<void>
-  assistedResume: (windowId: number, message: string) => Promise<void>
   assistedHistory: (windowId: number) => Promise<AssistedMessage[]>
-  onAssistedStreamEvent: (callback: (windowId: number, event: TimelineEvent) => void) => void
-  offAssistedStreamEvent: () => void
   onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) => void
   offAssistedKimiDelta: () => void
-  onAssistedPingUser: (callback: (windowId: number, message: string) => void) => void
-  offAssistedPingUser: () => void
-  onAssistedToolCall: (callback: (windowId: number, toolName: string, message: string) => void) => void
-  offAssistedToolCall: () => void
   onAssistedTurnComplete: (callback: (windowId: number, stats: { inputTokens: number; outputTokens: number; costUsd: number } | null, error?: string) => void) => void
   offAssistedTurnComplete: () => void
+
+  // Claude direct API
+  claudeSend: (windowId: number, message: string) => Promise<void>
+  claudeCancel: (windowId: number) => Promise<void>
+  onClaudeDelta: (callback: (windowId: number, chunk: string) => void) => void
+  offClaudeDelta: () => void
+  onClaudeAction: (callback: (windowId: number, action: { actionType: string; summary: string; detail: string }) => void) => void
+  offClaudeAction: () => void
+  onClaudeTurnComplete: (callback: (windowId: number) => void) => void
+  offClaudeTurnComplete: () => void
 
   // Settings — Fireworks
   getFireworksKeyStatus: () => Promise<TokenStatus>

@@ -94,7 +94,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual', '')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, '')
     )
   })
 
@@ -105,7 +105,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' }, 'manual', '')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, { 1: 'develop' }, '')
     )
   })
 
@@ -117,7 +117,7 @@ describe('NewWindowWizard', () => {
     await waitFor(() => screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, 'manual', ''))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], false, {}, ''))
   })
 
   it('calls createWindow with withDeps=true when toggle is checked', async () => {
@@ -129,7 +129,7 @@ describe('NewWindowWizard', () => {
     await fireEvent.click(screen.getByRole('checkbox', { name: /start with dependencies/i }))
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}, 'manual', ''))
+    await waitFor(() => expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1], true, {}, ''))
   })
 })
 
@@ -159,7 +159,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'mywin' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {}, 'manual', '')
+      expect(mockCreateWindow).toHaveBeenCalledWith('mywin', [1, 3], false, {}, '')
     )
   })
 
@@ -179,7 +179,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {}, 'manual', '')
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, {}, '')
     )
   })
 
@@ -201,64 +201,7 @@ describe('multi-project mode', () => {
     await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'multi-win' } })
     await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
     await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' }, 'manual', '')
-    )
-  })
-})
-
-describe('window type toggle', () => {
-  it('renders Manual and Assisted radio options', async () => {
-    render(NewWindowWizard, baseProps())
-    await waitFor(() => {
-      const radios = screen.getAllByRole('radio')
-      expect(radios).toHaveLength(2)
-    })
-    expect(screen.getByLabelText('Assisted')).toBeDefined()
-  })
-
-  it('Assisted option is disabled when no fireworks key configured', async () => {
-    render(NewWindowWizard, baseProps())
-    await waitFor(() => screen.getByLabelText('Assisted'))
-    const assistedRadio = screen.getByLabelText('Assisted') as HTMLInputElement
-    expect(assistedRadio.disabled).toBe(true)
-    const assistedLabel = assistedRadio.closest('label') as HTMLElement
-    expect(assistedLabel.title).toBe('Set Fireworks API key in Settings')
-  })
-
-  it('calls getFireworksKeyStatus on mount', async () => {
-    const mockFwStatus = vi.fn().mockResolvedValue({ configured: false, hint: null })
-    vi.stubGlobal('api', {
-      listDependencies: mockListDeps,
-      createWindow: mockCreateWindow,
-      onWindowCreateProgress: mockOnProgress,
-      offWindowCreateProgress: mockOffProgress,
-      listRemoteBranches: mockListRemoteBranches,
-      getFireworksKeyStatus: mockFwStatus
-    })
-    render(NewWindowWizard, baseProps())
-    await waitFor(() => expect(mockFwStatus).toHaveBeenCalled())
-  })
-
-  it('passes assisted windowType to createWindow when Assisted selected', async () => {
-    vi.stubGlobal('api', {
-      listDependencies: mockListDeps,
-      createWindow: mockCreateWindow,
-      onWindowCreateProgress: mockOnProgress,
-      offWindowCreateProgress: mockOffProgress,
-      listRemoteBranches: mockListRemoteBranches,
-      getFireworksKeyStatus: vi.fn().mockResolvedValue({ configured: true, hint: '5678' })
-    })
-    render(NewWindowWizard, baseProps())
-    await waitFor(() => {
-      const radio = screen.getByLabelText('Assisted') as HTMLInputElement
-      expect(radio.disabled).toBe(false)
-    })
-    const assistedRadio = screen.getByLabelText('Assisted') as HTMLInputElement
-    await fireEvent.click(assistedRadio)
-    await fireEvent.input(screen.getByPlaceholderText(/dev-window/i), { target: { value: 'my-window' } })
-    await fireEvent.click(screen.getByRole('button', { name: /create window/i }))
-    await waitFor(() =>
-      expect(mockCreateWindow).toHaveBeenCalledWith('my-window', [1], false, {}, 'assisted', '')
+      expect(mockCreateWindow).toHaveBeenCalledWith('multi-win', [1, 2], false, { 2: 'develop' }, '')
     )
   })
 })

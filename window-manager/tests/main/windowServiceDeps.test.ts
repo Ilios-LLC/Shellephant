@@ -178,7 +178,7 @@ describe('createWindow with external network', () => {
     vi.mocked(getDocker).mockReturnValue(docker as never)
     vi.mocked(listDependencies).mockReturnValue([])
 
-    const win = await createWindow('win', pid, false, {}, () => {}, 'ext-net')
+    const win = await createWindow('win', pid, false, {}, () => {}, 'manual', 'ext-net')
 
     expect(docker.createNetwork).not.toHaveBeenCalled()
     expect(docker.getNetwork).toHaveBeenCalledWith('ext-net')

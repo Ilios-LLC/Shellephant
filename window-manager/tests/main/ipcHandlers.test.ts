@@ -68,6 +68,11 @@ vi.mock('../../src/main/docker', () => ({
   getDocker: () => ({ getContainer: mockGetContainer })
 }))
 
+vi.mock('../../src/main/claudeService', () => ({
+  sendToClaudeDirectly: vi.fn(),
+  cancelClaudeDirect: vi.fn()
+}))
+
 const mockDbGet = vi.fn()
 const mockDbAll = vi.fn()
 vi.mock('../../src/main/db', () => ({

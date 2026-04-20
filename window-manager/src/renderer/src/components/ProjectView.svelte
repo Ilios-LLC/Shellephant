@@ -197,7 +197,7 @@
       class="tab-btn"
       class:active={activeTab === 'kimi'}
       onclick={() => { activeTab = 'kimi' }}
-    >Kimi Prompt</button>
+    >Shellephant Prompt</button>
   </div>
 
   {#if activeTab === 'windows'}
@@ -260,10 +260,10 @@
   {:else}
   <section class="kimi-section">
     <div class="section-header">
-      <h3 class="section-title">Kimi System Prompt (per-project)</h3>
+      <h3 class="section-title">Shellephant System Prompt (per-project)</h3>
     </div>
     <p class="kimi-help">
-      Overrides the global Kimi system prompt for assisted windows attached to this project.
+      Overrides the global Shellephant system prompt for windows attached to this project.
       Leave blank to fall back to the global override (Settings) or the built-in default.
     </p>
     <div class="kimi-status">

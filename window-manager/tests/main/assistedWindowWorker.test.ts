@@ -24,7 +24,8 @@ vi.mock('openai', () => ({
   })
 }))
 
-import { resolveSystemPrompt, buildKimiTools, parseDockerOutput, runClaudeCode } from '../../src/main/assistedWindowWorker'
+import { resolveSystemPrompt, buildShellephantTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
+import { runClaudeCode } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
 
 describe('resolveSystemPrompt', () => {
@@ -44,12 +45,13 @@ describe('resolveSystemPrompt', () => {
   })
 })
 
-describe('buildKimiTools', () => {
-  it('returns array with run_claude_code and ping_user tools', () => {
-    const tools = buildKimiTools()
+describe('buildShellephantTools', () => {
+  it('returns only run_claude_code (no ping_user)', () => {
+    const tools = buildShellephantTools()
     const names = tools.map((t: { function: { name: string } }) => t.function.name)
     expect(names).toContain('run_claude_code')
-    expect(names).toContain('ping_user')
+    expect(names).not.toContain('ping_user')
+    expect(names).toHaveLength(1)
   })
 })
 
@@ -91,7 +93,7 @@ describe('runClaudeCode — streaming wire-up', () => {
     mockSpawn.mockReset()
   })
 
-  it('emits stream-event per SDK event, returns compact context + event log', async () => {
+  it('emits claude:event per SDK event, returns compact context + event log', async () => {
     const { child, emitStdout, emitStderr, close } = makeFakeChild()
     mockSpawn.mockReturnValue(child)
 
@@ -132,12 +134,12 @@ describe('runClaudeCode — streaming wire-up', () => {
     expect(output).not.toContain('session_id')
     expect(output).toContain('Done.')
 
-    // parentPort received one stream-event per typed event (session_init filtered out)
-    const streamEventCalls = mockParentPort.postMessage.mock.calls
-      .filter(c => (c[0] as { type: string }).type === 'stream-event')
-    expect(streamEventCalls).toHaveLength(5)
-    expect((streamEventCalls[0][0] as { event: { kind: string } }).event.kind).toBe('thinking')
-    expect((streamEventCalls[2][0] as { event: { kind: string } }).event.kind).toBe('tool_result')
+    // parentPort received one claude:event per typed event (session_init filtered out)
+    const claudeEventCalls = mockParentPort.postMessage.mock.calls
+      .filter(c => (c[0] as { type: string }).type === 'claude:event')
+    expect(claudeEventCalls).toHaveLength(5)
+    expect((claudeEventCalls[0][0] as { event: { kind: string } }).event.kind).toBe('thinking')
+    expect((claudeEventCalls[2][0] as { event: { kind: string } }).event.kind).toBe('tool_result')
   })
 
   it('does not emit stream-chunk (legacy channel removed)', async () => {
@@ -261,11 +263,11 @@ describe('kimiLoop — single run_claude_code per turn', () => {
 
     expect(mockSpawn).toHaveBeenCalledTimes(1)
 
-    const toolResultSaves = mockParentPort.postMessage.mock.calls
+    const claudeResultSaves = mockParentPort.postMessage.mock.calls
       .map(c => c[0] as { type: string; role?: string; content?: string })
-      .filter(m => m.type === 'save-message' && m.role === 'tool_result')
-    // One real tool_result from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
-    expect(toolResultSaves).toHaveLength(1)
+      .filter(m => m.type === 'save-message' && m.role === 'claude')
+    // One real claude-role save from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
+    expect(claudeResultSaves).toHaveLength(1)
   })
 
   it('seeds activeSessionId from initialSessionId so the first CC call resumes', async () => {

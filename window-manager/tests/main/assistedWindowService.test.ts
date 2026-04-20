@@ -55,7 +55,7 @@ vi.mock('../../src/main/focusState', () => ({
   isUserWatching: (...args: unknown[]) => mockIsUserWatching(...args)
 }))
 
-import { sendToWindow, cancelWindow, resumeWindow, loadLastSessionId, getWorkerCount, __resetWorkersForTests } from '../../src/main/assistedWindowService'
+import { sendToWindow, cancelWindow, loadLastSessionId, getWorkerCount, __resetWorkersForTests } from '../../src/main/assistedWindowService'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -159,19 +159,48 @@ describe('sendToWindow — session continuity', () => {
 
   it('maps DB roles into OpenAI-valid history roles', async () => {
     mockDbAll.mockReturnValueOnce([
-      { role: 'user', content: 'hi' },
-      { role: 'assistant', content: 'hello' },
-      { role: 'tool_call', content: 'do thing' },
-      { role: 'tool_result', content: 'done' },
-      { role: 'ping_user', content: 'pick one?' }
+      { role: 'user', content: 'hi', metadata: null },
+      { role: 'shellephant', content: 'hello', metadata: null },
+      { role: 'claude-action', content: '', metadata: JSON.stringify({ summary: 'src/foo.ts', actionType: 'Write' }) },
+      { role: 'claude', content: 'done', metadata: null },
     ])
     await sendToWindow(52, 'c52', 'next', null, vi.fn())
     const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
     const history = (sendCall![0] as { conversationHistory: { role: string; content: string }[] }).conversationHistory
-    expect(history.map(h => h.role)).toEqual(['user', 'assistant', 'assistant', 'user', 'assistant'])
-    expect(history[2].content).toContain('run_claude_code')
-    expect(history[3].content).toContain('CC output:')
-    expect(history[4].content).toContain('asked user:')
+    expect(history.map(h => h.role)).toEqual(['user', 'assistant', 'user'])
+    expect(history[2].content).toContain('src/foo.ts')
+    expect(history[2].content).toContain('done')
+  })
+
+  it('maps shellephant role to assistant in history', async () => {
+    mockDbAll.mockReturnValueOnce([
+      { role: 'shellephant', content: 'I will help', metadata: null }
+    ])
+    await sendToWindow(60, 'c60', 'next', null, vi.fn())
+    const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
+    const history = (sendCall![0] as { conversationHistory: { role: string }[] }).conversationHistory
+    expect(history[0].role).toBe('assistant')
+  })
+
+  it('collapses claude-action + claude rows into a single user history entry', async () => {
+    mockDbAll.mockReturnValueOnce([
+      { role: 'claude-action', content: '', metadata: JSON.stringify({ actionType: 'Write', summary: 'src/foo.ts' }) },
+      { role: 'claude', content: 'Done writing the file.', metadata: null }
+    ])
+    await sendToWindow(61, 'c61', 'next', null, vi.fn())
+    const sendCall = mockWorkerPostMessage.mock.calls.find(c => (c[0] as { type: string }).type === 'send')
+    const history = (sendCall![0] as { conversationHistory: { role: string; content: string }[] }).conversationHistory
+    expect(history).toHaveLength(1)
+    expect(history[0].role).toBe('user')
+    expect(history[0].content).toContain('src/foo.ts')
+    expect(history[0].content).toContain('Done writing the file.')
+  })
+
+  it('loads session_id from claude role rows', () => {
+    mockDbAll.mockReturnValueOnce([
+      { metadata: JSON.stringify({ session_id: 'sess-new', complete: true }) }
+    ])
+    expect(loadLastSessionId(99)).toBe('sess-new')
   })
 })
 
@@ -188,15 +217,6 @@ describe('cancelWindow', () => {
   })
 })
 
-describe('resumeWindow', () => {
-  it('posts resume message with windowId to worker', async () => {
-    await sendToWindow(5, 'c2', 'start', null, vi.fn())
-    resumeWindow(5, 'my reply')
-    expect(mockWorkerPostMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'resume', windowId: 5, message: 'my reply' })
-    )
-  })
-})
 
 describe('worker message routing', () => {
   it('turn-complete removes worker from map', async () => {
@@ -221,7 +241,7 @@ describe('worker message routing', () => {
     const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
     messageHandler({ type: 'turn-complete', windowId: 60, stats: null, assistantText: 'done — here are the results' })
     expect(mockNotification).toHaveBeenCalledWith(expect.objectContaining({
-      title: 'Kimi responded',
+      title: 'Shellephant responded',
       body: 'done — here are the results'
     }))
     expect(mockNotificationShow).toHaveBeenCalled()
@@ -252,15 +272,6 @@ describe('worker message routing', () => {
     expect(call.body.endsWith('…')).toBe(true)
   })
 
-  it('stream-event calls sendToRenderer with TimelineEvent payload', async () => {
-    const mockSend = vi.fn()
-    await sendToWindow(12, 'c12', 'msg', null, mockSend)
-    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
-    const event = { kind: 'assistant_text', text: 'hello', ts: 1 }
-    messageHandler({ type: 'stream-event', windowId: 12, event })
-    expect(mockSend).toHaveBeenCalledWith('assisted:stream-event', 12, event)
-  })
-
   it('worker error removes worker from map and sends turn-complete', async () => {
     const mockSend = vi.fn()
     await sendToWindow(13, 'c13', 'msg', null, mockSend)
@@ -276,5 +287,42 @@ describe('worker message routing', () => {
     const exitHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'exit')?.[1]
     exitHandler(1)  // non-zero exit
     expect(getWorkerCount()).toBe(0)
+  })
+})
+
+describe('worker message routing — new event types', () => {
+  it('claude:event with text_delta kind forwards as claude:delta to renderer', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(70, 'c70', 'msg', null, mockSend)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'claude:event', event: { kind: 'text_delta', text: 'hello', ts: 1, blockKey: 'k1' } })
+    expect(mockSend).toHaveBeenCalledWith('claude:delta', 70, 'hello')
+  })
+
+  it('claude:event with tool_use kind saves claude-action and sends claude:action', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(71, 'c71', 'msg', null, mockSend)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({
+      type: 'claude:event',
+      event: { kind: 'tool_use', id: 'tu1', name: 'Write', input: { file_path: 'src/a.ts' }, summary: 'src/a.ts', ts: 1 }
+    })
+    expect(mockDbRun).toHaveBeenCalled()
+    expect(mockSend).toHaveBeenCalledWith('claude:action', 71, expect.objectContaining({ actionType: 'Write', summary: 'src/a.ts' }))
+  })
+
+  it('claude:turn-complete forwards to renderer', async () => {
+    const mockSend = vi.fn()
+    await sendToWindow(72, 'c72', 'msg', null, mockSend)
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'claude:turn-complete', windowId: 72 })
+    expect(mockSend).toHaveBeenCalledWith('claude:turn-complete', 72)
+  })
+
+  it('turn-complete notification says Shellephant responded', async () => {
+    await sendToWindow(73, 'c73', 'msg', null, vi.fn())
+    const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
+    messageHandler({ type: 'turn-complete', windowId: 73, stats: null, assistantText: 'done' })
+    expect(mockNotification).toHaveBeenCalledWith(expect.objectContaining({ title: 'Shellephant responded' }))
   })
 })

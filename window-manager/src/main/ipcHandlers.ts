@@ -35,7 +35,8 @@ import {
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
-import { sendToWindow, cancelWindow, resumeWindow } from './assistedWindowService'
+import { sendToWindow, cancelWindow } from './assistedWindowService'
+import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -96,13 +97,8 @@ export function registerIpcHandlers(): void {
   // Window handlers
   ipcMain.handle(
     'window:create',
-    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, windowType: 'manual' | 'assisted' = 'manual', networkName = '') => {
-      if (windowType === 'assisted') {
-        if (!getFireworksKey()) {
-          throw new Error('Fireworks API key not configured. Set it in Settings.')
-        }
-      }
-      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), windowType, networkName)
+    async (event, name: string, projectIds: number[], withDeps = false, branchOverrides: Record<number, string> = {}, networkName = '') => {
+      return createWindow(name, projectIds, withDeps, branchOverrides, (step) => event.sender.send('window:create-progress', step), 'manual', networkName)
     }
   )
   ipcMain.handle('window:list', (_, projectId?: number) => listWindows(projectId))
@@ -346,13 +342,27 @@ export function registerIpcHandlers(): void {
     cancelWindow(windowId)
   })
 
-  ipcMain.handle('assisted:resume', (_, windowId: number, message: string) => {
-    resumeWindow(windowId, message)
-  })
-
   ipcMain.handle('assisted:history', (_, windowId: number) => {
     return getDb()
       .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
       .all(windowId)
+  })
+
+  ipcMain.handle('claude:send', async (event, windowId: number, message: string) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const row = getDb()
+      .prepare('SELECT container_id FROM windows WHERE id = ?')
+      .get(windowId) as { container_id: string } | undefined
+    if (!row) throw new Error(`Window ${windowId} not found`)
+
+    const sendToRenderer = (channel: string, ...args: unknown[]) => {
+      win?.webContents.send(channel, ...args)
+    }
+
+    await sendToClaudeDirectly(windowId, row.container_id, message, sendToRenderer)
+  })
+
+  ipcMain.handle('claude:cancel', (_, windowId: number) => {
+    cancelClaudeDirect(windowId)
   })
 }

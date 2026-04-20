@@ -363,6 +363,7 @@
     </section>
 
     <section class="field">
+      <label for="kimi-prompt">Shellephant System Prompt (global override)</label>
       <p class="field-heading">Phone Access</p>
       <div class="status-line">
         {#if phoneActive && phoneUrl}
