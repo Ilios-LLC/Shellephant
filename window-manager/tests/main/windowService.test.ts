@@ -62,6 +62,7 @@ import {
   listWindows,
   deleteWindow,
   reconcileWindows,
+  getWaitingInfoByContainerId,
   __resetStatusMapForTests
 } from '../../src/main/windowService'
 
@@ -606,6 +607,35 @@ describe('windowService', () => {
       const win = wins.find(w => w.name === 'multi')
       expect(win).toBeDefined()
       expect(win!.projects).toHaveLength(2)
+    })
+  })
+
+  describe('getWaitingInfoByContainerId', () => {
+    it('returns info for single-project window', async () => {
+      const projectId = seedProject('git@github.com:org/wait-repo.git', 'wait-proj')
+      const win = await createWindow('wait-win', projectId)
+      const info = getWaitingInfoByContainerId(win.container_id)
+      expect(info).not.toBeNull()
+      expect(info!.windowName).toBe('wait-win')
+      expect(info!.projectId).toBe(projectId)
+      expect(info!.projectName).toBe('wait-proj')
+      expect(info!.containerId).toBe(win.container_id)
+    })
+
+    it('returns info for multi-project window', async () => {
+      const p1 = seedProject('git@github.com:org/mp-a.git', 'mp-proj-a')
+      const p2 = seedProject('git@github.com:org/mp-b.git', 'mp-proj-b')
+      const win = await createWindow('mp-win', [p1, p2])
+      const info = getWaitingInfoByContainerId(win.container_id)
+      expect(info).not.toBeNull()
+      expect(info!.windowName).toBe('mp-win')
+      expect(info!.projectId).toBeTypeOf('number')
+      expect(info!.projectName).toBeTypeOf('string')
+      expect(info!.containerId).toBe(win.container_id)
+    })
+
+    it('returns null for unknown containerId', () => {
+      expect(getWaitingInfoByContainerId('no-such-container')).toBeNull()
     })
   })
 
