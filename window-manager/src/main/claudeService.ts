@@ -145,3 +145,12 @@ export function cancelClaudeDirect(windowId: number): void {
   activeTurnIds.delete(windowId)
   workers.delete(windowId)
 }
+
+export function terminateAllWorkers(): void {
+  for (const worker of workers.values()) {
+    worker.terminate()
+  }
+  workers.clear()
+  activeTurnIds.clear()
+  activeTurnCtx.clear()
+}
