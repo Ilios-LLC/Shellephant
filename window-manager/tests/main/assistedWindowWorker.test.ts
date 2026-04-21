@@ -1,41 +1,70 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-const { mockParentPort, mockSpawn, mockCreate } = vi.hoisted(() => ({
+const { mockParentPort, mockSpawn, mockStreamText, mockMcpTools, mockMcpClose } = vi.hoisted(() => ({
   mockParentPort: { postMessage: vi.fn(), on: vi.fn(), once: vi.fn() },
   mockSpawn: vi.fn(),
-  mockCreate: vi.fn()
+  mockStreamText: vi.fn(),
+  mockMcpTools: vi.fn().mockResolvedValue({}),
+  mockMcpClose: vi.fn().mockResolvedValue(undefined)
 }))
 
-// Mock worker_threads parentPort
 vi.mock('worker_threads', () => ({
   parentPort: mockParentPort,
   workerData: {}
 }))
 
-// Mock child_process for docker exec
 vi.mock('child_process', () => ({ spawn: mockSpawn }))
 
-// Mock openai. The SDK is `new OpenAI(...)`, so we return a constructor
-// (vi.fn with .mockImplementation using a `function` keyword, to be callable
-// with `new`).
-vi.mock('openai', () => ({
-  default: vi.fn().mockImplementation(function (this: Record<string, unknown>) {
-    this.chat = { completions: { create: mockCreate } }
-  })
+vi.mock('ai', () => ({
+  streamText: mockStreamText,
+  tool: vi.fn((def: unknown) => def),
+  jsonSchema: vi.fn((schema: unknown) => schema)
 }))
 
-// Mock claudeRunner so kimiLoop tests can override runClaudeCode per-test
+vi.mock('@ai-sdk/openai', () => ({
+  createOpenAI: vi.fn(() => vi.fn(() => 'mock-model'))
+}))
+
+vi.mock('../../src/main/mcpManager', () => ({
+  createMcpClient: vi.fn().mockResolvedValue({ tools: mockMcpTools, close: mockMcpClose }),
+  DEFAULT_MCP_SERVERS: [{ command: 'npx', args: ['@playwright/mcp@latest'] }]
+}))
+
 vi.mock('../../src/main/claudeRunner', async (importActual) => {
   const actual = await importActual<typeof import('../../src/main/claudeRunner')>()
   return { ...actual, runClaudeCode: vi.fn(actual.runClaudeCode) }
 })
 
-// Mock logWriter to prevent real file I/O during tests
 vi.mock('../../src/main/logWriter', () => ({ writeEvent: vi.fn() }))
 
-import { resolveSystemPrompt, buildShellephantTools, parseDockerOutput } from '../../src/main/assistedWindowWorker'
+import { resolveSystemPrompt, parseDockerOutput, __resetMcpForTests } from '../../src/main/assistedWindowWorker'
 import { runClaudeCode } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
+
+beforeEach(() => {
+  __resetMcpForTests()
+  mockMcpTools.mockResolvedValue({})
+})
+
+// Helper: builds a fake streamText result with a given sequence of fullStream parts.
+// After the stream is exhausted, usage resolves to { promptTokens: 10, completionTokens: 20 }.
+function makeStreamResult(parts: Array<{ type: string } & Record<string, unknown>>) {
+  return {
+    fullStream: {
+      [Symbol.asyncIterator]() {
+        let i = 0
+        return {
+          async next() {
+            if (i < parts.length) return { value: parts[i++], done: false as const }
+            return { value: undefined as unknown, done: true as const }
+          }
+        }
+      }
+    },
+    steps: Promise.resolve([{ text: parts.filter(p => p.type === 'text-delta').map(p => p.textDelta as string).join(''), toolCalls: [] }]),
+    usage: Promise.resolve({ promptTokens: 10, completionTokens: 20 })
+  }
+}
 
 describe('resolveSystemPrompt', () => {
   it('returns project prompt when set', () => {
@@ -51,16 +80,6 @@ describe('resolveSystemPrompt', () => {
   it('returns default prompt when both null', () => {
     const result = resolveSystemPrompt(null, null)
     expect(result).toContain('autonomous coding assistant')
-  })
-})
-
-describe('buildShellephantTools', () => {
-  it('returns only run_claude_code (no ping_user)', () => {
-    const tools = buildShellephantTools()
-    const names = tools.map((t: { function: { name: string } }) => t.function.name)
-    expect(names).toContain('run_claude_code')
-    expect(names).not.toContain('ping_user')
-    expect(names).toHaveLength(1)
   })
 })
 
@@ -192,175 +211,135 @@ describe('runClaudeCode — streaming wire-up', () => {
   })
 })
 
-function makeToolCallStream(toolCalls: { id: string; name: string; args: string }[]) {
-  // Emit one chunk per tool call (index 0..n-1), then a terminator. Matches the
-  // shape the processStreamChunk reader expects: delta.tool_calls[] with
-  // index/id/function.name/function.arguments.
-  const chunks = toolCalls.map((tc, i) => ({
-    choices: [{ delta: { tool_calls: [{ index: i, id: tc.id, function: { name: tc.name, arguments: tc.args } }] } }]
-  }))
-  return {
-    [Symbol.asyncIterator]() {
-      let i = 0
-      return {
-        async next() {
-          if (i < chunks.length) return { value: chunks[i++], done: false }
-          return { value: undefined, done: true }
-        }
-      }
-    }
-  }
-}
-
-function makeEmptyStream() {
-  return {
-    [Symbol.asyncIterator]() {
-      return { async next() { return { value: undefined, done: true } } }
-    }
-  }
-}
-
-describe('kimiLoop — single run_claude_code per turn', () => {
-  // Capture the handler registered at module import time, before any mockClear.
+describe('streamTurn', () => {
+  // Capture the message handler registered at module import time
   const messageHandlerRef: { current: ((msg: Record<string, unknown>) => Promise<void>) | null } = { current: null }
   const firstOnCall = mockParentPort.on.mock.calls.find(c => c[0] === 'message')
   if (firstOnCall) messageHandlerRef.current = firstOnCall[1] as (msg: Record<string, unknown>) => Promise<void>
 
   beforeEach(() => {
     mockParentPort.postMessage.mockClear()
-    mockSpawn.mockReset()
-    mockCreate.mockReset()
+    mockStreamText.mockReset()
+    mockMcpTools.mockResolvedValue({})
   })
 
-  it('runs only the first run_claude_code when two are batched; defers the rest', async () => {
-    // First chat.completions.create: return both tool_calls in one stream.
-    // Second call (the re-plan): empty stream so the loop exits cleanly.
-    mockCreate
-      .mockResolvedValueOnce(makeToolCallStream([
-        { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ session_id: null, message: 'first' }) },
-        { id: 'tc2', name: 'run_claude_code', args: JSON.stringify({ session_id: null, message: 'second' }) }
-      ]))
-      .mockResolvedValueOnce(makeEmptyStream())
-
-    // Only the FIRST tool call should actually spawn docker exec.
-    const { child, emitStdout, close } = makeFakeChild()
-    mockSpawn.mockReturnValueOnce(child)
-    setTimeout(() => {
-      emitStdout(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'hi' }] } }) + '\n')
-      emitStdout(JSON.stringify({ type: 'session_final', session_id: 'sess-A' }) + '\n')
-      close(0)
-    }, 0)
-
+  async function runTurn(overrides: Partial<{
+    windowId: number; containerId: string; message: string;
+    initialSessionId: string | null; systemPrompt: string; fireworksKey: string;
+    turnId: string; logPath: string
+  }> = {}) {
     const handler = messageHandlerRef.current
     expect(handler).toBeDefined()
-
     await handler!({
       type: 'send',
-      windowId: 99,
-      containerId: 'c-test',
-      message: 'do two things',
-      conversationHistory: [],
-      initialSessionId: null,
-      systemPrompt: 'sys',
-      fireworksKey: 'fw'
+      windowId: 1, containerId: 'c1', message: 'do it',
+      conversationHistory: [], initialSessionId: null,
+      systemPrompt: 'sys', fireworksKey: 'fw-key',
+      turnId: 'turn-1', logPath: '/tmp/test.jsonl',
+      ...overrides
     })
+  }
+
+  it('posts kimi-delta for each text-delta part in fullStream', async () => {
+    mockStreamText.mockReturnValueOnce(makeStreamResult([
+      { type: 'text-delta', textDelta: 'Hello' },
+      { type: 'text-delta', textDelta: ' world' }
+    ]))
+
+    await runTurn()
+
+    const deltas = mockParentPort.postMessage.mock.calls
+      .filter(c => (c[0] as { type: string }).type === 'kimi-delta')
+      .map(c => (c[0] as { delta: string }).delta)
+    expect(deltas).toEqual(['Hello', ' world'])
+  })
+
+  it('posts tool-call for run_claude_code tool-call parts', async () => {
+    mockStreamText.mockReturnValueOnce(makeStreamResult([
+      { type: 'tool-call', toolName: 'run_claude_code', args: { message: 'check the tests' } }
+    ]))
+
+    await runTurn()
+
+    const toolCallMsgs = mockParentPort.postMessage.mock.calls
+      .filter(c => (c[0] as { type: string }).type === 'tool-call')
+    expect(toolCallMsgs).toHaveLength(1)
+    expect(toolCallMsgs[0][0]).toMatchObject({
+      type: 'tool-call',
+      toolName: 'run_claude_code',
+      message: 'check the tests'
+    })
+  })
+
+  it('posts turn-complete with stats after stream finishes', async () => {
+    mockStreamText.mockReturnValueOnce(makeStreamResult([
+      { type: 'text-delta', textDelta: 'Done.' }
+    ]))
+
+    await runTurn()
 
     const turnComplete = mockParentPort.postMessage.mock.calls
-      .map(c => c[0] as { type: string; error?: string })
-      .find(m => m.type === 'turn-complete')
-    if (turnComplete?.error) throw new Error('kimiLoop threw: ' + turnComplete.error)
-
-    expect(mockSpawn).toHaveBeenCalledTimes(1)
-
-    const claudeResultSaves = mockParentPort.postMessage.mock.calls
-      .map(c => c[0] as { type: string; role?: string; content?: string })
-      .filter(m => m.type === 'save-message' && m.role === 'claude-to-shellephant')
-    // One real claude-to-shellephant-role save from the CC run, plus NO save for deferred (we only emit a synthetic tool message in the loop, not a save-message).
-    expect(claudeResultSaves).toHaveLength(1)
-
-    const claudeToShellephantEvents = mockParentPort.postMessage.mock.calls
-      .map(c => c[0] as { type: string })
-      .filter(m => m.type === 'claude-to-shellephant:event')
-    expect(claudeToShellephantEvents.length).toBeGreaterThan(0)
+      .find(c => (c[0] as { type: string }).type === 'turn-complete')
+    expect(turnComplete).toBeDefined()
+    expect(turnComplete![0]).toMatchObject({
+      type: 'turn-complete',
+      stats: { inputTokens: 10, outputTokens: 20 }
+    })
   })
 
-  it('saves claude-to-shellephant message with prose text, not raw context format', async () => {
-    mockCreate
-      .mockResolvedValueOnce(makeToolCallStream([
-        { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ message: 'read the file' }) }
-      ]))
-      .mockResolvedValueOnce(makeEmptyStream())
-
-    const { child, emitStdout, close } = makeFakeChild()
-    mockSpawn.mockReturnValueOnce(child)
-    setTimeout(() => {
-      // Emit tool_use + tool_result + prose text — context format would include
-      // "tool_use: Read(a.ts)" and "tool_result: file content", but assistantText
-      // should only be the prose response.
-      emitStdout(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'tu1', name: 'Read', input: { file_path: 'a.ts' } }] } }) + '\n')
-      emitStdout(JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'tu1', content: 'file content' }] } }) + '\n')
-      emitStdout(JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'Done, I read the file.' }] } }) + '\n')
-      emitStdout(JSON.stringify({ type: 'session_final', session_id: 'sess-B' }) + '\n')
-      close(0)
-    }, 0)
-
-    const handler = messageHandlerRef.current
-    expect(handler).toBeDefined()
-
-    await handler!({
-      type: 'send',
-      windowId: 101,
-      containerId: 'c-test',
-      message: 'read the file',
-      conversationHistory: [],
-      initialSessionId: null,
-      systemPrompt: 'sys',
-      fireworksKey: 'fw'
+  it('includes MCP tools in streamText call when MCP client initializes successfully', async () => {
+    mockMcpTools.mockResolvedValueOnce({
+      screenshot: { execute: vi.fn() },
+      click: { execute: vi.fn() }
     })
+    mockStreamText.mockReturnValueOnce(makeStreamResult([]))
 
-    const claudeResultSaves = mockParentPort.postMessage.mock.calls
-      .map(c => c[0] as { type: string; role?: string; content?: string })
-      .filter(m => m.type === 'save-message' && m.role === 'claude-to-shellephant')
-    expect(claudeResultSaves).toHaveLength(1)
+    await runTurn()
 
-    const content = claudeResultSaves[0].content ?? ''
-    // Should be clean prose, not context-format tool_use/tool_result lines
-    expect(content).toBe('Done, I read the file.')
-    expect(content).not.toContain('tool_use:')
-    expect(content).not.toContain('tool_result:')
+    const streamTextCall = mockStreamText.mock.calls[0][0] as { tools: Record<string, unknown> }
+    expect(streamTextCall.tools).toHaveProperty('run_claude_code')
+    expect(streamTextCall.tools).toHaveProperty('screenshot')
+    expect(streamTextCall.tools).toHaveProperty('click')
   })
 
-  it('seeds activeSessionId from initialSessionId so the first CC call resumes', async () => {
-    mockCreate
-      .mockResolvedValueOnce(makeToolCallStream([
-        { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ session_id: null, message: 'continue' }) }
-      ]))
-      .mockResolvedValueOnce(makeEmptyStream())
+  it('proceeds with only run_claude_code when MCP init returns null', async () => {
+    const { createMcpClient } = await import('../../src/main/mcpManager')
+    vi.mocked(createMcpClient).mockResolvedValueOnce(null)
+    __resetMcpForTests()  // force re-init next turn
 
-    const { child, emitStdout, close } = makeFakeChild()
-    mockSpawn.mockReturnValueOnce(child)
-    setTimeout(() => {
-      emitStdout(JSON.stringify({ type: 'session_final', session_id: 'sess-prior' }) + '\n')
-      close(0)
-    }, 0)
+    mockStreamText.mockReturnValueOnce(makeStreamResult([]))
 
-    const handler = messageHandlerRef.current
-    expect(handler).toBeDefined()
+    await runTurn()
 
-    await handler({
-      type: 'send',
-      windowId: 100,
-      containerId: 'c-test',
-      message: 'resume please',
-      conversationHistory: [],
-      initialSessionId: 'sess-prior',
-      systemPrompt: 'sys',
-      fireworksKey: 'fw'
+    const streamTextCall = mockStreamText.mock.calls[0][0] as { tools: Record<string, unknown> }
+    expect(streamTextCall.tools).toHaveProperty('run_claude_code')
+    expect(Object.keys(streamTextCall.tools)).toHaveLength(1)
+  })
+
+  it('run_claude_code execute updates sessionRef so second call uses new session', async () => {
+    // runClaudeCode is called when run_claude_code execute runs.
+    // We capture the tools from streamText, call execute twice, and verify
+    // that the second call receives the session returned by the first.
+    vi.mocked(runClaudeCode).mockClear()
+    vi.mocked(runClaudeCode)
+      .mockResolvedValueOnce({ output: 'result-1', assistantText: '', events: [], newSessionId: 'sess-1' })
+      .mockResolvedValueOnce({ output: 'result-2', assistantText: '', events: [], newSessionId: 'sess-2' })
+
+    let capturedTools: Record<string, { execute: (args: { message: string }) => Promise<string> }> = {}
+    mockStreamText.mockImplementationOnce((opts: { tools: typeof capturedTools }) => {
+      capturedTools = opts.tools
+      return makeStreamResult([])
     })
 
-    // The docker exec args must include the prior session id (3rd positional arg after `exec <container> node <script>`).
-    const spawnArgs = mockSpawn.mock.calls[0][1] as string[]
-    expect(spawnArgs).toContain('sess-prior')
+    await runTurn({ initialSessionId: 'sess-0' })
+
+    // Simulate two sequential tool executions in the same turn
+    await capturedTools.run_claude_code.execute({ message: 'first' })
+    await capturedTools.run_claude_code.execute({ message: 'second' })
+
+    const calls = vi.mocked(runClaudeCode).mock.calls
+    expect(calls[0][1]).toBe('sess-0')   // first call uses initial session
+    expect(calls[1][1]).toBe('sess-1')   // second call uses session from first result
   })
 })
 
@@ -371,39 +350,41 @@ describe('turn observability', () => {
 
   beforeEach(() => {
     mockParentPort.postMessage.mockClear()
-    mockCreate.mockReset()
+    mockStreamText.mockReset()
   })
 
   it('posts log-event with exec_start when runClaudeCode fires onExecEvent', async () => {
-    // Use an empty stream so kimiLoop exits after the tool call
-    mockCreate.mockResolvedValueOnce(makeToolCallStream([
-      { id: 'tc1', name: 'run_claude_code', args: JSON.stringify({ message: 'do the thing' }) }
-    ])).mockResolvedValueOnce(makeEmptyStream())
-
     vi.mocked(runClaudeCode).mockImplementationOnce(async (_cid, _sid, _msg, opts) => {
       opts?.onExecEvent?.('exec_start', { containerId: 'c1', command: 'docker exec', ts: 1000 })
       return { output: 'done', assistantText: '', events: [], newSessionId: null }
     })
 
-    const handler = obsHandlerRef.current
+    let capturedTools: Record<string, { execute: (args: { message: string }) => Promise<string> }> = {}
+    mockStreamText.mockImplementationOnce((opts: { tools: typeof capturedTools }) => {
+      capturedTools = opts.tools
+      return makeStreamResult([])
+    })
+
+    const handler = mockParentPort.on.mock.calls.find(c => c[0] === 'message')?.[1] as
+      ((msg: Record<string, unknown>) => Promise<void>) | undefined
     expect(handler).toBeDefined()
 
     await handler!({
       type: 'send',
-      windowId: 1,
-      containerId: 'c1',
-      message: 'do the thing',
-      conversationHistory: [],
-      initialSessionId: null,
-      systemPrompt: 'you are helpful',
-      fireworksKey: 'fw-test',
-      turnId: 'turn-test',
-      logPath: '/tmp/test.jsonl'
+      windowId: 1, containerId: 'c1', message: 'do the thing',
+      conversationHistory: [], initialSessionId: null,
+      systemPrompt: 'you are helpful', fireworksKey: 'fw-test',
+      turnId: 'turn-test', logPath: '/tmp/test.jsonl'
     })
 
-    const logEvents = mockParentPort.postMessage.mock.calls.filter((c: [{ type: string }]) => c[0]?.type === 'log-event')
-    expect(logEvents.length).toBeGreaterThan(0)
-    const execStartEvent = logEvents.find((c: [{ event: { eventType: string } }]) => c[0].event.eventType === 'exec_start')
+    // Execute the run_claude_code tool to trigger onExecEvent
+    await capturedTools.run_claude_code.execute({ message: 'do the thing' })
+
+    const logEvents = mockParentPort.postMessage.mock.calls
+      .filter((c: [{ type: string }]) => c[0]?.type === 'log-event')
+    const execStartEvent = logEvents.find(
+      (c: [{ event: { eventType: string } }]) => c[0].event.eventType === 'exec_start'
+    )
     expect(execStartEvent).toBeDefined()
     expect(execStartEvent![0].event.turnId).toBe('turn-test')
   })
