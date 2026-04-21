@@ -448,13 +448,18 @@ export interface WaitingWindowInfo {
 export function getWaitingInfoByContainerId(containerId: string): WaitingWindowInfo | null {
   const row = getDb()
     .prepare(
-      `SELECT w.id AS windowId, w.name AS windowName, p.id AS projectId, p.name AS projectName
-       FROM windows w JOIN projects p ON p.id = w.project_id
+      `SELECT w.id AS windowId, w.name AS windowName,
+              COALESCE(p.id, p2.id) AS projectId,
+              COALESCE(p.name, p2.name) AS projectName
+       FROM windows w
+       LEFT JOIN projects p ON p.id = w.project_id
+       LEFT JOIN window_projects wp ON wp.window_id = w.id AND p.id IS NULL
+       LEFT JOIN projects p2 ON p2.id = wp.project_id
        WHERE w.container_id = ? AND w.deleted_at IS NULL
        LIMIT 1`
     )
     .get(containerId) as Omit<WaitingWindowInfo, 'containerId'> | undefined
-  if (!row) return null
+  if (!row || row.projectId == null) return null
   return { containerId, ...row }
 }
 
