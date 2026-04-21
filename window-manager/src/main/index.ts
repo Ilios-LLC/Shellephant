@@ -1,13 +1,15 @@
 import { app, BrowserWindow } from 'electron'
 import path from 'path'
 import { initDb } from './db'
-import { initLogWriter } from './logWriter'
+import { initLogWriter, markOrphanedTurns } from './logWriter'
 import { registerIpcHandlers } from './ipcHandlers'
 import { reconcileWindows } from './windowService'
 import { startWaitingPoller } from './waitingPoller'
 import { getGitHubPat } from './settingsService'
 import { getIdentity } from './githubIdentity'
 import { applyGitIdentity } from './gitOps'
+import { terminateAllWorkers } from './claudeService'
+import { terminateAllAssistedWorkers } from './assistedWindowService'
 
 if (process.env['DEVCONTAINER']) {
   app.commandLine.appendSwitch('no-sandbox')
@@ -38,6 +40,7 @@ app.whenReady().then(async () => {
   const dbPath = path.join(app.getPath('userData'), 'windows.db')
   initDb(dbPath)
   initLogWriter(app.getPath('logs'))
+  markOrphanedTurns()
   startWaitingPoller()
 
   try {
@@ -65,4 +68,12 @@ app.whenReady().then(async () => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', (e) => {
+  e.preventDefault()
+  terminateAllWorkers()
+  terminateAllAssistedWorkers()
+  markOrphanedTurns()
+  app.exit(0)
 })
