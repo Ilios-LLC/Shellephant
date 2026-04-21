@@ -146,6 +146,11 @@ export function cancelClaudeDirect(windowId: number): void {
   workers.delete(windowId)
 }
 
+/**
+ * Bulk-terminates all active Claude worker threads and clears all state maps.
+ * Does NOT update turn DB records — caller must invoke `markOrphanedTurns()`
+ * afterward to transition any remaining `running` turns to `orphaned`.
+ */
 export function terminateAllWorkers(): void {
   for (const worker of workers.values()) {
     worker.terminate()
