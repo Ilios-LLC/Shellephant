@@ -164,6 +164,7 @@
   }
 
   onMount(() => {
+    waitingWindows.remove(win.container_id)
     window.api.onTerminalData((containerId: string, sessionType: string, data: string) => {
       if (containerId !== win.container_id) return
       if (sessionType === 'terminal') term?.write(data)

@@ -178,6 +178,7 @@
   }
 
   async function handleWaitingWindowSelect(entry: WaitingEntry): Promise<void> {
+    waitingWindows.remove(entry.containerId)
     selectedProjectId = entry.projectId
     selectedWindowId = null
     view = 'default'
