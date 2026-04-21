@@ -1,3 +1,4 @@
+import path from 'path'
 import { experimental_createMCPClient } from 'ai'
 import { Experimental_StdioMCPTransport } from 'ai/mcp-stdio'
 import type { ToolSet } from 'ai'
@@ -13,8 +14,12 @@ export type McpClient = {
   close(): Promise<void>
 }
 
+// Resolve via package entry point then navigate to cli.js — avoids @latest network
+// fetches and honours the pinned @playwright/mcp version in package.json.
+const playwrightMcpCli = path.resolve(require.resolve('@playwright/mcp'), '..', 'cli.js')
+
 export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
-  { command: 'npx', args: ['@playwright/mcp@latest'] }
+  { command: 'node', args: [playwrightMcpCli] }
 ]
 
 export async function createMcpClient(servers: McpServerConfig[]): Promise<McpClient | null> {

@@ -281,6 +281,7 @@ export function cancelWindow(windowId: number): void {
  */
 export function terminateAllAssistedWorkers(): void {
   for (const worker of workers.values()) {
+    worker.postMessage({ type: 'cancel' })
     worker.terminate()
   }
   workers.clear()
