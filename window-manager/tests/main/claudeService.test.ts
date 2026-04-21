@@ -74,7 +74,7 @@ vi.mock('../../src/main/logWriter', () => ({
   getLogFilePath: mockGetLogFilePath
 }))
 
-import { sendToClaudeDirectly, cancelClaudeDirect, getDirectWorkerCount, __resetDirectWorkersForTests } from '../../src/main/claudeService'
+import { sendToClaudeDirectly, cancelClaudeDirect, getDirectWorkerCount, terminateAllWorkers, __resetDirectWorkersForTests } from '../../src/main/claudeService'
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -194,6 +194,25 @@ describe('cancelClaudeDirect', () => {
     await sendToClaudeDirectly(20, 'c20', 'msg', vi.fn())
     cancelClaudeDirect(20)
     expect(mockWorkerTerminate).toHaveBeenCalledOnce()
+    expect(getDirectWorkerCount()).toBe(0)
+  })
+})
+
+describe('terminateAllWorkers', () => {
+  it('terminates all active workers and clears maps', async () => {
+    const mockSendToRenderer = vi.fn()
+    // Spawn a worker by sending a message
+    const p = sendToClaudeDirectly(1, 'c1', 'hello', mockSendToRenderer)
+    expect(getDirectWorkerCount()).toBe(1)
+
+    terminateAllWorkers()
+
+    expect(getDirectWorkerCount()).toBe(0)
+    await p.catch(() => {/* worker terminated */})
+  })
+
+  it('is a no-op when no workers active', () => {
+    expect(() => terminateAllWorkers()).not.toThrow()
     expect(getDirectWorkerCount()).toBe(0)
   })
 })

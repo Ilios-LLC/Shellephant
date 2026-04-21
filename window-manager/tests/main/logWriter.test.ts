@@ -15,11 +15,14 @@ import {
   writeEvent,
   insertTurn,
   updateTurn,
+  markOrphanedTurns,
+  getOrphanedTurns,
   readEventsForTurn,
   rotateLogs,
   __resetForTests,
   type LogEvent,
-  type TurnRecord
+  type TurnRecord,
+  type OrphanedTurnRecord
 } from '../../src/main/logWriter'
 
 let tmpDir: string
@@ -108,6 +111,51 @@ describe('insertTurn / updateTurn', () => {
     vi.mocked(getDb).mockReturnValue({ prepare: mockPrepare } as any)
     updateTurn('turn-1', {})
     expect(mockPrepare).not.toHaveBeenCalled()
+  })
+})
+
+describe('markOrphanedTurns', () => {
+  it('updates all running turns to orphaned', () => {
+    const mockRun = vi.fn()
+    const mockPrepare = vi.fn(() => ({ run: mockRun }))
+    vi.mocked(getDb).mockReturnValue({ prepare: mockPrepare } as any)
+
+    markOrphanedTurns()
+
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'orphaned'")
+    )
+    expect(mockPrepare).toHaveBeenCalledWith(
+      expect.stringContaining("WHERE status = 'running'")
+    )
+    expect(mockRun).toHaveBeenCalled()
+  })
+})
+
+describe('getOrphanedTurns', () => {
+  it('queries orphaned turns for window ordered by started_at ASC', () => {
+    const expected = [
+      { id: 'turn-1', started_at: 1000, turn_type: 'human-claude' },
+      { id: 'turn-2', started_at: 2000, turn_type: 'shellephant-claude' }
+    ]
+    const mockAll = vi.fn().mockReturnValue(expected)
+    const mockPrepare = vi.fn(() => ({ all: mockAll }))
+    vi.mocked(getDb).mockReturnValue({ prepare: mockPrepare } as any)
+
+    const result = getOrphanedTurns(42)
+
+    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'orphaned'"))
+    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('ORDER BY started_at ASC'))
+    expect(mockAll).toHaveBeenCalledWith(42)
+    expect(result).toEqual(expected)
+  })
+
+  it('returns empty array when no orphaned turns', () => {
+    const mockAll = vi.fn().mockReturnValue([])
+    const mockPrepare = vi.fn(() => ({ all: mockAll }))
+    vi.mocked(getDb).mockReturnValue({ prepare: mockPrepare } as any)
+
+    expect(getOrphanedTurns(1)).toEqual([])
   })
 })
 

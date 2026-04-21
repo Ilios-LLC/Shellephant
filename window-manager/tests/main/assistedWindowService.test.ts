@@ -83,7 +83,7 @@ vi.mock('../../src/main/logWriter', () => ({
   getLogFilePath: mockGetLogFilePath
 }))
 
-import { sendToWindow, cancelWindow, loadLastSessionId, getWorkerCount, __resetWorkersForTests } from '../../src/main/assistedWindowService'
+import { sendToWindow, cancelWindow, loadLastSessionId, getWorkerCount, terminateAllAssistedWorkers, __resetWorkersForTests } from '../../src/main/assistedWindowService'
 
 const mockSendToRenderer = vi.fn()
 
@@ -260,6 +260,22 @@ describe('cancelWindow', () => {
 
   it('does nothing if no worker for window', () => {
     expect(() => cancelWindow(999)).not.toThrow()
+  })
+})
+
+describe('terminateAllAssistedWorkers', () => {
+  it('terminates all active workers and clears maps', async () => {
+    await sendToWindow(1, 'c1', 'hello', null, mockSendToRenderer)
+    expect(getWorkerCount()).toBe(1)
+
+    terminateAllAssistedWorkers()
+
+    expect(getWorkerCount()).toBe(0)
+  })
+
+  it('is a no-op when no workers active', () => {
+    expect(() => terminateAllAssistedWorkers()).not.toThrow()
+    expect(getWorkerCount()).toBe(0)
   })
 })
 

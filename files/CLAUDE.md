@@ -240,8 +240,9 @@ Svelte 5 runes-mode chat UI for assisted windows. Hosts both Claude direct and S
 - `send()` routes to `window.api.claudeSend` or `window.api.assistedSend` based on `currentRecipient`.
 - `handleCancel()` routes to `window.api.claudeCancel` or `window.api.assistedCancel`.
 - `claude-action` messages rendered as collapsed toggle buttons; `getActionLabel` shows `actionType — summary`; `getActionDetail` shows `detail` in `<pre>` when expanded.
+- Orphaned turns: `assistedHistory` now returns `{ messages, orphanedTurns }` or a plain array (legacy). When orphaned turns exist, `orphanedEntries: OrphanedEntry[]` state renders amber warning bubbles with a "Re-send last message" button. `resendOrphaned(entry)` removes the bubble, sets `input` to the last user message, and calls `send()`.
 - No `pingActive`, no `handlePingReply`, no `assistedResume`.
-- Tests live in `window-manager/tests/renderer/AssistedPanel.test.ts` (17 tests).
+- Tests live in `window-manager/tests/renderer/AssistedPanel.test.ts` (31 tests).
 
 ### window-manager/src/renderer/src/components/SettingsView.svelte
 Svelte 5 runes-mode settings form for credentials.

@@ -366,4 +366,63 @@ describe('AssistedPanel', () => {
     await fireEvent.keyDown(textarea, { key: 'Enter' })
     await waitFor(() => expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'do something', 'plan'))
   })
+
+  describe('orphaned turn bubble', () => {
+    it('renders interrupted bubble when history has orphaned turns', async () => {
+      mockApi.assistedHistory.mockResolvedValue({
+        messages: [
+          { id: 1, role: 'user', content: 'do the thing', metadata: null }
+        ],
+        orphanedTurns: [
+          { id: 'turn-abc', started_at: Date.now() + 1, turn_type: 'human-claude' }
+        ]
+      })
+
+      render(AssistedPanel, defaultProps)
+      await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+      expect(screen.getByText(/turn interrupted/i)).toBeDefined()
+      expect(screen.getByRole('button', { name: /re-send/i })).toBeDefined()
+    })
+
+    it('does not render interrupted bubble when no orphaned turns', async () => {
+      mockApi.assistedHistory.mockResolvedValue({
+        messages: [],
+        orphanedTurns: []
+      })
+
+      render(AssistedPanel, defaultProps)
+      await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+      expect(screen.queryByText(/turn interrupted/i)).toBeNull()
+    })
+
+    it('re-send button sends last user message and removes bubble', async () => {
+      mockApi.assistedHistory.mockResolvedValue({
+        messages: [
+          { id: 1, role: 'user', content: 'original message', metadata: null }
+        ],
+        orphanedTurns: [
+          { id: 'turn-abc', started_at: Date.now() + 1, turn_type: 'human-claude' }
+        ]
+      })
+
+      render(AssistedPanel, defaultProps)
+      await waitFor(() => screen.getByRole('button', { name: /re-send/i }))
+
+      await fireEvent.click(screen.getByRole('button', { name: /re-send/i }))
+
+      expect(mockApi.claudeSend).toHaveBeenCalledWith(1, 'original message', 'bypassPermissions')
+      await waitFor(() => expect(screen.queryByText(/turn interrupted/i)).toBeNull())
+    })
+
+    it('handles legacy history shape (plain array) without crashing', async () => {
+      mockApi.assistedHistory.mockResolvedValue([])
+
+      render(AssistedPanel, defaultProps)
+      await waitFor(() => expect(mockApi.assistedHistory).toHaveBeenCalled())
+
+      expect(screen.queryByText(/turn interrupted/i)).toBeNull()
+    })
+  })
 })
