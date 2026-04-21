@@ -192,12 +192,12 @@
       const liveItems = messages.filter(m => !historyItems.some(h => h.id === m.id))
       messages = [...historyItems, ...liveItems]
 
+      const lastUserMsg = [...historyRows]
+        .filter(m => m.role === 'user')
+        .pop()
       orphanedEntries = orphanedTurns.map(turn => {
-        const lastUserMsg = [...historyRows]
-          .filter(m => m.role === 'user')
-          .pop()
         return {
-          id: -(Math.floor(Math.random() * 1e9)),
+          id: -nextId(),
           role: 'orphaned' as const,
           content: '',
           metadata: null,
@@ -248,8 +248,8 @@
   }
 
   function resendOrphaned(entry: OrphanedEntry): void {
+    if (!entry.lastUserMessage || running) return
     orphanedEntries = orphanedEntries.filter(e => e.id !== entry.id)
-    if (!entry.lastUserMessage) return
     input = entry.lastUserMessage
     void send()
   }
@@ -350,6 +350,7 @@
             type="button"
             class="resend-btn"
             aria-label="Re-send last message"
+            disabled={running}
             onclick={() => resendOrphaned(entry)}
           >
             Re-send last message
