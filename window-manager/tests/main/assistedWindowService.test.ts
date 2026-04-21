@@ -265,7 +265,6 @@ describe('cancelWindow', () => {
 
 describe('terminateAllAssistedWorkers', () => {
   it('terminates all active workers and clears maps', async () => {
-    const mockSendToRenderer = vi.fn()
     await sendToWindow(1, 'c1', 'hello', null, mockSendToRenderer)
     expect(getWorkerCount()).toBe(1)
 
