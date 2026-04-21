@@ -20,7 +20,17 @@
     expanded?: boolean
   }
 
+  interface OrphanedEntry {
+    id: number
+    role: 'orphaned'
+    content: string
+    metadata: string | null
+    lastUserMessage: string
+    turnType: string
+  }
+
   let messages = $state<DisplayMessage[]>([])
+  let orphanedEntries = $state<OrphanedEntry[]>([])
   let input = $state('')
   let running = $state(false)
   let lastStats = $state<{ inputTokens: number; outputTokens: number; costUsd: number } | null>(null)
@@ -164,16 +174,37 @@
     })
 
     void (async () => {
-      const history = await window.api.assistedHistory(windowId)
+      const raw = await window.api.assistedHistory(windowId) as
+        | { messages: Array<{ id: number; role: string; content: string; metadata: string | null }>; orphanedTurns: Array<{ id: string; started_at: number; turn_type: string }> }
+        | Array<{ id: number; role: string; content: string; metadata: string | null }>
+
       if (!mountActive) return
+
+      const historyRows = Array.isArray(raw) ? raw : raw.messages
+      const orphanedTurns = Array.isArray(raw) ? [] : raw.orphanedTurns
+
       const historyItems: DisplayMessage[] = []
-      for (const m of history as Array<{ id: number; role: string; content: string; metadata: string | null }>) {
+      for (const m of historyRows) {
         const role = mapLegacyRole(m.role)
         if (!role) continue
         historyItems.push({ id: m.id, role, content: m.content, metadata: m.metadata, expanded: false })
       }
       const liveItems = messages.filter(m => !historyItems.some(h => h.id === m.id))
       messages = [...historyItems, ...liveItems]
+
+      orphanedEntries = orphanedTurns.map(turn => {
+        const lastUserMsg = [...historyRows]
+          .filter(m => m.role === 'user')
+          .pop()
+        return {
+          id: -(Math.floor(Math.random() * 1e9)),
+          role: 'orphaned' as const,
+          content: '',
+          metadata: null,
+          lastUserMessage: lastUserMsg?.content ?? '',
+          turnType: turn.turn_type
+        }
+      })
     })()
   })
 
@@ -214,6 +245,13 @@
     }
     running = false
     messages = messages.map(m => ({ ...m, streaming: false }))
+  }
+
+  function resendOrphaned(entry: OrphanedEntry): void {
+    orphanedEntries = orphanedEntries.filter(e => e.id !== entry.id)
+    if (!entry.lastUserMessage) return
+    input = entry.lastUserMessage
+    void send()
   }
 
   function handleKey(e: KeyboardEvent): void {
@@ -303,6 +341,21 @@
           {/if}
         </div>
       {/if}
+    {/each}
+    {#each orphanedEntries as entry (entry.id)}
+      <div class="msg orphaned-turn">
+        <span class="orphaned-label">⚠ Turn interrupted (app closed mid-run)</span>
+        {#if entry.lastUserMessage}
+          <button
+            type="button"
+            class="resend-btn"
+            aria-label="Re-send last message"
+            onclick={() => resendOrphaned(entry)}
+          >
+            Re-send last message
+          </button>
+        {/if}
+      </div>
     {/each}
   </div>
 
@@ -571,5 +624,40 @@
   .cancel-btn:hover {
     background: var(--danger);
     color: white;
+  }
+
+  .orphaned-turn {
+    align-self: stretch;
+    max-width: 100%;
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+  }
+
+  .orphaned-label {
+    color: rgb(245, 158, 11);
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
+  }
+
+  .resend-btn {
+    background: transparent;
+    border: 1px solid rgba(245, 158, 11, 0.6);
+    border-radius: 4px;
+    color: rgb(245, 158, 11);
+    cursor: pointer;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.5rem;
+    font-family: var(--font-ui);
+  }
+
+  .resend-btn:hover {
+    background: rgba(245, 158, 11, 0.15);
   }
 </style>
