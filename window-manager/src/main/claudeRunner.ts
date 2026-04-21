@@ -4,6 +4,8 @@ import { StreamFilterBuffer } from './assistedStreamFilter'
 import type { TimelineEvent } from '../shared/timelineEvent'
 import type { PermissionMode } from '../shared/permissionMode'
 
+export const MAX_OUTPUT_CHARS = 200_000  // 200 KB rolling cap — prevents RangeError on long runs
+
 export async function runClaudeCode(
   containerId: string,
   sessionId: string | null,
@@ -25,7 +27,7 @@ export async function runClaudeCode(
     const child = spawn('docker', ['exec', containerId, 'node', '/usr/local/bin/cw-claude-sdk.js', sidArg, message, permissionMode])
 
     const filter = new StreamFilterBuffer()
-    const contextParts: string[] = []
+    let output = ''
     const assistantTextParts: string[] = []
     const eventsLog: TimelineEvent[] = []
     let stderr = ''
@@ -33,7 +35,10 @@ export async function runClaudeCode(
     let streamSessionId: string | null = null
 
     function processDrained(drained: { contextChunks: string[]; events: TimelineEvent[]; sessionId: string | null }) {
-      contextParts.push(...drained.contextChunks)
+      for (const chunk of drained.contextChunks) {
+        output += (output ? '\n' : '') + chunk
+        if (output.length > MAX_OUTPUT_CHARS) output = output.slice(-MAX_OUTPUT_CHARS)
+      }
       if (drained.sessionId) streamSessionId = drained.sessionId
       for (const event of drained.events) {
         eventsLog.push(event)
@@ -49,6 +54,7 @@ export async function runClaudeCode(
 
     child.stderr.on('data', (chunk: Buffer) => {
       stderr += chunk.toString()
+      if (stderr.length > 10_000) stderr = stderr.slice(-10_000)
     })
 
     child.on('close', (code) => {
@@ -64,10 +70,10 @@ export async function runClaudeCode(
       onExecEvent?.('exec_end', {
         exitCode: code,
         durationMs,
-        stdoutSnippet: contextParts.join('\n').slice(0, 200)
+        stdoutSnippet: output.slice(0, 200)
       })
       resolve({
-        output: contextParts.join('\n'),
+        output,
         assistantText: assistantTextParts.join('\n\n'),
         events: eventsLog,
         newSessionId: streamSessionId
