@@ -21,12 +21,20 @@ export function getTailscaleIp(): string | null {
   return null
 }
 
+function resolveSessionType(
+  urlSessionType: string | undefined,
+  containerId: string
+): 'claude' | 'terminal' {
+  if (urlSessionType === 'claude' || urlSessionType === 'terminal') return urlSessionType
+  const windowType = getWindowTypeByContainerId(containerId)
+  return windowType === 'assisted' ? 'terminal' : 'claude'
+}
+
 function handleWsConnection(ws: WebSocket, req: http.IncomingMessage): void {
-  const match = req.url?.match(/^\/ws\/([^/]+)$/)
+  const match = req.url?.match(/^\/ws\/([^/]+)(?:\/(claude|terminal))?$/)
   if (!match) { ws.close(); return }
   const containerId = match[1]
-  const windowType = getWindowTypeByContainerId(containerId)
-  const sessionType = windowType === 'assisted' ? 'terminal' : 'claude'
+  const sessionType = resolveSessionType(match[2], containerId)
   const session = getSession(containerId, sessionType)
   if (session) {
     const onData = session.pty.onData(d => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
