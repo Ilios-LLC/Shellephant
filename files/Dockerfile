@@ -80,6 +80,20 @@ RUN ARCH=$(dpkg --print-architecture) && \
     wget -q "https://github.com/vi/websocat/releases/download/v${WEBSOCAT_VERSION}/websocat.${WSARCH}-unknown-linux-musl" -O /usr/local/bin/websocat && \
     chmod +x /usr/local/bin/websocat
 
+# Install mprocs (run multiple dev processes in parallel with per-proc output)
+ARG MPROCS_VERSION=0.9.2
+RUN ARCH=$(dpkg --print-architecture) && \
+    case "$ARCH" in \
+      amd64) MPARCH=x86_64 ;; \
+      arm64) MPARCH=aarch64 ;; \
+      *) echo "unsupported arch $ARCH" && exit 1 ;; \
+    esac && \
+    wget -q "https://github.com/pvolok/mprocs/releases/download/v${MPROCS_VERSION}/mprocs-${MPROCS_VERSION}-linux-${MPARCH}-musl.tar.gz" -O /tmp/mprocs.tar.gz && \
+    tar -xzf /tmp/mprocs.tar.gz -C /tmp && \
+    mv /tmp/mprocs /usr/local/bin/mprocs && \
+    chmod +x /usr/local/bin/mprocs && \
+    rm /tmp/mprocs.tar.gz
+
 # Install Docker CLI + compose plugin (assumes host socket mounted at /var/run/docker.sock;
 # no daemon runs inside the container)
 RUN install -m 0755 -d /etc/apt/keyrings && \
