@@ -20,7 +20,7 @@ vi.mock('../../src/main/assistedStreamFilter', () => ({
   })
 }))
 
-import { runClaudeCode } from '../../src/main/claudeRunner'
+import { runClaudeCode, MAX_OUTPUT_CHARS } from '../../src/main/claudeRunner'
 import { EventEmitter } from 'events'
 
 function makeFakeChild() {
@@ -109,6 +109,69 @@ describe('runClaudeCode', () => {
     expect(mockSpawn).toHaveBeenCalledWith('docker', [
       'exec', 'c1', 'node', '/usr/local/bin/cw-claude-sdk.js', 'new', 'msg', 'bypassPermissions'
     ])
+  })
+
+  it('caps output at MAX_OUTPUT_CHARS when stdout exceeds limit', async () => {
+    const { StreamFilterBuffer } = await import('../../src/main/assistedStreamFilter')
+    const bigChunk = 'A'.repeat(MAX_OUTPUT_CHARS + 5000)
+    const mockBuffer = {
+      push: vi.fn().mockReturnValue({ contextChunks: [bigChunk], events: [], sessionId: null }),
+      flush: vi.fn().mockReturnValue({ contextChunks: [], events: [], sessionId: null })
+    };
+    (StreamFilterBuffer as ReturnType<typeof vi.fn>).mockImplementationOnce(function (this: typeof mockBuffer) {
+      this.push = mockBuffer.push
+      this.flush = mockBuffer.flush
+    })
+    const { child, emitStdout, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg')
+    emitStdout('data')
+    close(0)
+    const result = await promise
+    expect(result.output.length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS)
+  })
+
+  it('keeps most recent data when output rolls over cap', async () => {
+    const { StreamFilterBuffer } = await import('../../src/main/assistedStreamFilter')
+    const mockBuffer = {
+      push: vi.fn()
+        .mockReturnValueOnce({ contextChunks: ['SENTINEL_FIRST'], events: [], sessionId: null })
+        .mockReturnValue({ contextChunks: ['B'.repeat(MAX_OUTPUT_CHARS)], events: [], sessionId: null }),
+      flush: vi.fn().mockReturnValue({ contextChunks: [], events: [], sessionId: null })
+    };
+    (StreamFilterBuffer as ReturnType<typeof vi.fn>).mockImplementationOnce(function (this: typeof mockBuffer) {
+      this.push = mockBuffer.push
+      this.flush = mockBuffer.flush
+    })
+    const { child, emitStdout, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg')
+    emitStdout('first')
+    emitStdout('second')
+    close(0)
+    const result = await promise
+    expect(result.output).not.toContain('SENTINEL_FIRST')
+    expect(result.output.length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS)
+  })
+
+  it('does not throw on very large output (3x cap)', async () => {
+    const { StreamFilterBuffer } = await import('../../src/main/assistedStreamFilter')
+    const massiveChunk = 'C'.repeat(MAX_OUTPUT_CHARS * 3)
+    const mockBuffer = {
+      push: vi.fn().mockReturnValue({ contextChunks: [massiveChunk], events: [], sessionId: null }),
+      flush: vi.fn().mockReturnValue({ contextChunks: [], events: [], sessionId: null })
+    };
+    (StreamFilterBuffer as ReturnType<typeof vi.fn>).mockImplementationOnce(function (this: typeof mockBuffer) {
+      this.push = mockBuffer.push
+      this.flush = mockBuffer.flush
+    })
+    const { child, emitStdout, close } = makeFakeChild()
+    mockSpawn.mockReturnValue(child)
+    const promise = runClaudeCode('c1', null, 'msg')
+    emitStdout('data')
+    close(0)
+    const result = await promise
+    expect(result.output.length).toBeLessThanOrEqual(MAX_OUTPUT_CHARS)
   })
 
   it('uses custom eventType when provided', async () => {
