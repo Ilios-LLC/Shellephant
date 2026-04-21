@@ -38,7 +38,7 @@ import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
 import { sendToWindow, cancelWindow } from './assistedWindowService'
 import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
-import { readEventsForTurn } from './logWriter'
+import { readEventsForTurn, getOrphanedTurns } from './logWriter'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -365,9 +365,11 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('assisted:history', (_, windowId: number) => {
-    return getDb()
+    const messages = getDb()
       .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
       .all(windowId)
+    const orphanedTurns = getOrphanedTurns(windowId)
+    return { messages, orphanedTurns }
   })
 
   ipcMain.handle('claude:send', async (event, windowId: number, message: string, permissionMode?: PermissionMode) => {

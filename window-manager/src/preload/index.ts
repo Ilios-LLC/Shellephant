@@ -158,6 +158,7 @@ contextBridge.exposeInMainWorld('api', {
   assistedSend: (windowId: number, message: string) =>
     ipcRenderer.invoke('assisted:send', windowId, message),
   assistedCancel: (windowId: number) => ipcRenderer.invoke('assisted:cancel', windowId),
+  // Returns { messages: AssistedMessage[], orphanedTurns: Array<{ id: string; started_at: number; turn_type: string }> }
   assistedHistory: (windowId: number) => ipcRenderer.invoke('assisted:history', windowId),
   onAssistedKimiDelta: (callback: (windowId: number, delta: string) => void) =>
     ipcRenderer.on('assisted:kimi-delta', (_, windowId, delta) => callback(windowId, delta)),
