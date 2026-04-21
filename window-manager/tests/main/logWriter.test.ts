@@ -145,6 +145,7 @@ describe('getOrphanedTurns', () => {
     const result = getOrphanedTurns(42)
 
     expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining("status = 'orphaned'"))
+    expect(mockPrepare).toHaveBeenCalledWith(expect.stringContaining('ORDER BY started_at ASC'))
     expect(mockAll).toHaveBeenCalledWith(42)
     expect(result).toEqual(expected)
   })
