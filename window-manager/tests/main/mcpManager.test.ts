@@ -73,4 +73,10 @@ describe('createMcpClient', () => {
     const client = await createMcpClient([{ command: 'npx', args: ['@playwright/mcp@latest'] }])
     expect(client).toBeNull()
   })
+
+  it('returns null for empty servers array', async () => {
+    const client = await createMcpClient([])
+    expect(client).toBeNull()
+    expect(mockCreateMcpClient).not.toHaveBeenCalled()
+  })
 })

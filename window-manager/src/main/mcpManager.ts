@@ -20,9 +20,9 @@ export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
 export async function createMcpClient(servers: McpServerConfig[]): Promise<McpClient | null> {
   if (servers.length === 0) return null
 
-  try {
-    const clients: Array<{ tools(): Promise<ToolSet>; close(): Promise<void> }> = []
+  const clients: Array<{ tools(): Promise<ToolSet>; close(): Promise<void> }> = []
 
+  try {
     for (const server of servers) {
       const transport = new Experimental_StdioMCPTransport({
         command: server.command,
@@ -36,6 +36,12 @@ export async function createMcpClient(servers: McpServerConfig[]): Promise<McpCl
     return {
       tools: async () => {
         const toolSets = await Promise.all(clients.map(c => c.tools()))
+        const allKeys = toolSets.flatMap(ts => Object.keys(ts))
+        const seen = new Set<string>()
+        for (const key of allKeys) {
+          if (seen.has(key)) console.warn(`[mcpManager] tool name collision: "${key}" — last server wins`)
+          seen.add(key)
+        }
         return Object.assign({}, ...toolSets) as ToolSet
       },
       close: async () => {
@@ -44,6 +50,7 @@ export async function createMcpClient(servers: McpServerConfig[]): Promise<McpCl
     }
   } catch (err) {
     console.error('[mcpManager] init failed:', err instanceof Error ? err.message : String(err))
+    await Promise.allSettled(clients.map(c => c.close()))
     return null
   }
 }
