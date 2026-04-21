@@ -251,9 +251,10 @@ describe('sendToWindow — session continuity', () => {
 })
 
 describe('cancelWindow', () => {
-  it('terminates the worker and removes from map', async () => {
+  it('sends cancel message to worker before terminating', async () => {
     await sendToWindow(4, 'container-ghi', 'start', null, vi.fn())
     cancelWindow(4)
+    expect(mockWorkerPostMessage).toHaveBeenCalledWith({ type: 'cancel' })
     expect(mockWorkerTerminate).toHaveBeenCalledOnce()
     expect(getWorkerCount()).toBe(0)
   })

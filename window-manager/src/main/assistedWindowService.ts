@@ -267,6 +267,7 @@ export function cancelWindow(windowId: number): void {
     updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
     ctx.sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
   }
+  worker.postMessage({ type: 'cancel' })
   worker.terminate()
   workers.delete(windowId)
   workerCtxSetters.delete(windowId)
