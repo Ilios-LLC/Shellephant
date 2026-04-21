@@ -260,3 +260,17 @@ export function cancelWindow(windowId: number): void {
   workerCtxMap.delete(windowId)
 }
 
+/**
+ * Bulk-terminates all active Shellephant worker threads and clears all state maps.
+ * Does NOT update turn DB records — caller must invoke `markOrphanedTurns()`
+ * afterward to transition any remaining `running` turns to `orphaned`.
+ */
+export function terminateAllAssistedWorkers(): void {
+  for (const worker of workers.values()) {
+    worker.terminate()
+  }
+  workers.clear()
+  workerCtxSetters.clear()
+  workerCtxMap.clear()
+}
+
