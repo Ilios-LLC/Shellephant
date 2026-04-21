@@ -18,7 +18,16 @@ import {
   setFireworksKey,
   clearFireworksKey,
   getKimiSystemPrompt,
-  setKimiSystemPrompt
+  setKimiSystemPrompt,
+  getPhoneEndpoint,
+  setPhoneEndpoint,
+  clearPhoneEndpoint,
+  getTelegramStatus,
+  setTelegramBotToken,
+  clearTelegramBotToken,
+  setTelegramChatId,
+  clearTelegramChatId,
+  setTelegramEnabled
 } from './settingsService'
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
@@ -36,9 +45,10 @@ import {
 import { startDepLogs, stopDepLogs } from './depLogsService'
 import { getDepContainersStatus } from './containerStatusService'
 import { startPhoneServer, stopPhoneServer, getPhoneServerStatus } from './phoneServer'
-import { sendToWindow, cancelWindow } from './assistedWindowService'
+import { sendToWindow, cancelWindow, getAssistedHistory } from './assistedWindowService'
 import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
-import { readEventsForTurn, getOrphanedTurns } from './logWriter'
+import { readEventsForTurn } from './logWriter'
+import * as eventBroker from './assistedEventBroker'
 
 interface WindowGitContext {
   container: ReturnType<ReturnType<typeof getDocker>['getContainer']>
@@ -252,6 +262,36 @@ export function registerIpcHandlers(): void {
     clearFireworksKey()
     return getFireworksKeyStatus()
   })
+  ipcMain.handle('settings:get-telegram-status', () => getTelegramStatus())
+  ipcMain.handle('settings:set-telegram-bot-token', (_, token: string) => {
+    setTelegramBotToken(token)
+    return getTelegramStatus()
+  })
+  ipcMain.handle('settings:clear-telegram-bot-token', () => {
+    clearTelegramBotToken()
+    return getTelegramStatus()
+  })
+  ipcMain.handle('settings:set-telegram-chat-id', (_, chatId: string) => {
+    setTelegramChatId(chatId)
+    return getTelegramStatus()
+  })
+  ipcMain.handle('settings:clear-telegram-chat-id', () => {
+    clearTelegramChatId()
+    return getTelegramStatus()
+  })
+  ipcMain.handle('settings:set-telegram-enabled', (_, enabled: boolean) => {
+    setTelegramEnabled(enabled)
+    return getTelegramStatus()
+  })
+  ipcMain.handle('settings:get-phone-endpoint', () => getPhoneEndpoint())
+  ipcMain.handle('settings:set-phone-endpoint', (_, endpoint: string) => {
+    setPhoneEndpoint(endpoint)
+    return getPhoneEndpoint()
+  })
+  ipcMain.handle('settings:clear-phone-endpoint', () => {
+    clearPhoneEndpoint()
+    return getPhoneEndpoint()
+  })
   ipcMain.handle('settings:get-kimi-system-prompt', () => getKimiSystemPrompt())
   ipcMain.handle('settings:set-kimi-system-prompt', (_, prompt: string) => {
     setKimiSystemPrompt(prompt)
@@ -355,6 +395,7 @@ export function registerIpcHandlers(): void {
 
     const sendToRenderer = (channel: string, ...args: unknown[]) => {
       win?.webContents.send(channel, ...args)
+      eventBroker.publish(windowId, channel, args)
     }
 
     await sendToWindow(windowId, row.container_id, message, row.project_id, sendToRenderer)
@@ -364,13 +405,7 @@ export function registerIpcHandlers(): void {
     cancelWindow(windowId)
   })
 
-  ipcMain.handle('assisted:history', (_, windowId: number) => {
-    const messages = getDb()
-      .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
-      .all(windowId)
-    const orphanedTurns = getOrphanedTurns(windowId)
-    return { messages, orphanedTurns }
-  })
+  ipcMain.handle('assisted:history', (_, windowId: number) => getAssistedHistory(windowId))
 
   ipcMain.handle('claude:send', async (event, windowId: number, message: string, permissionMode?: PermissionMode) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -381,6 +416,7 @@ export function registerIpcHandlers(): void {
 
     const sendToRenderer = (channel: string, ...args: unknown[]) => {
       win?.webContents.send(channel, ...args)
+      eventBroker.publish(windowId, channel, args)
     }
 
     await sendToClaudeDirectly(windowId, row.container_id, message, sendToRenderer, permissionMode)

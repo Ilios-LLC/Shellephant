@@ -1,6 +1,7 @@
 import { BrowserWindow, Notification } from 'electron'
 import { isUserWatching } from './focusState'
 import { getWaitingInfoByContainerId } from './windowService'
+import { sendTelegramAlert } from './telegramService'
 
 // Dedupe window: suppress repeat notifications for the same container within
 // this period. Prevents double-firing when the Stop hook triggers twice.
@@ -29,4 +30,5 @@ export function dispatchWaiting(containerId: string): void {
     title: 'Claude is waiting',
     body: info.windowName
   }).show()
+  void sendTelegramAlert(info.windowName)
 }

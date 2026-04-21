@@ -7,6 +7,10 @@ const PAT_KEY = 'github_pat'
 const CLAUDE_KEY = 'claude_oauth_token'
 const FIREWORKS_KEY = 'fireworks_api_key'
 const KIMI_PROMPT_KEY = 'kimi_system_prompt'
+const TELEGRAM_TOKEN_KEY = 'telegram_bot_token'
+const TELEGRAM_CHAT_ID_KEY = 'telegram_chat_id'
+const TELEGRAM_ENABLED_KEY = 'telegram_enabled'
+const PHONE_ENDPOINT_KEY = 'phone_endpoint'
 
 export interface TokenStatus {
   configured: boolean
@@ -128,6 +132,75 @@ export function setFireworksKey(key: string): void {
 
 export function clearFireworksKey(): void {
   deleteRow(FIREWORKS_KEY)
+}
+
+export function getTelegramBotToken(): string | null {
+  return getSecret(TELEGRAM_TOKEN_KEY)
+}
+
+export function getTelegramBotTokenStatus(): TokenStatus {
+  return statusFor(TELEGRAM_TOKEN_KEY)
+}
+
+export function setTelegramBotToken(token: string): void {
+  setSecret(TELEGRAM_TOKEN_KEY, token)
+}
+
+export function clearTelegramBotToken(): void {
+  deleteRow(TELEGRAM_TOKEN_KEY)
+}
+
+export function getTelegramChatId(): string | null {
+  return getPlainSetting(TELEGRAM_CHAT_ID_KEY)
+}
+
+export function setTelegramChatId(chatId: string): void {
+  const trimmed = chatId.trim()
+  if (!trimmed) throw new Error('Chat ID must not be empty')
+  setPlainSetting(TELEGRAM_CHAT_ID_KEY, trimmed)
+}
+
+export function clearTelegramChatId(): void {
+  deleteRow(TELEGRAM_CHAT_ID_KEY)
+}
+
+export function getTelegramEnabled(): boolean {
+  return getPlainSetting(TELEGRAM_ENABLED_KEY) === '1'
+}
+
+export function setTelegramEnabled(enabled: boolean): void {
+  setPlainSetting(TELEGRAM_ENABLED_KEY, enabled ? '1' : '0')
+}
+
+export interface TelegramStatus {
+  token: TokenStatus
+  chatId: string | null
+  enabled: boolean
+}
+
+export function getTelegramStatus(): TelegramStatus {
+  return {
+    token: getTelegramBotTokenStatus(),
+    chatId: getTelegramChatId(),
+    enabled: getTelegramEnabled()
+  }
+}
+
+export function getPhoneEndpoint(): string | null {
+  return getPlainSetting(PHONE_ENDPOINT_KEY)
+}
+
+export function setPhoneEndpoint(endpoint: string): void {
+  const trimmed = endpoint.trim()
+  if (!trimmed) {
+    deleteRow(PHONE_ENDPOINT_KEY)
+    return
+  }
+  setPlainSetting(PHONE_ENDPOINT_KEY, trimmed)
+}
+
+export function clearPhoneEndpoint(): void {
+  deleteRow(PHONE_ENDPOINT_KEY)
 }
 
 export function getKimiSystemPrompt(): string | null {

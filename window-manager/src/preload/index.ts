@@ -61,6 +61,25 @@ contextBridge.exposeInMainWorld('api', {
   setFireworksKey: (key: string) => ipcRenderer.invoke('settings:set-fireworks-key', key),
   clearFireworksKey: () => ipcRenderer.invoke('settings:clear-fireworks-key'),
 
+  // Telegram alerts
+  getTelegramStatus: () => ipcRenderer.invoke('settings:get-telegram-status'),
+  setTelegramBotToken: (token: string) =>
+    ipcRenderer.invoke('settings:set-telegram-bot-token', token),
+  clearTelegramBotToken: () => ipcRenderer.invoke('settings:clear-telegram-bot-token'),
+  setTelegramChatId: (chatId: string) =>
+    ipcRenderer.invoke('settings:set-telegram-chat-id', chatId),
+  clearTelegramChatId: () => ipcRenderer.invoke('settings:clear-telegram-chat-id'),
+  setTelegramEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('settings:set-telegram-enabled', enabled),
+
+  // Phone endpoint override
+  getPhoneEndpoint: (): Promise<string | null> =>
+    ipcRenderer.invoke('settings:get-phone-endpoint'),
+  setPhoneEndpoint: (endpoint: string): Promise<string | null> =>
+    ipcRenderer.invoke('settings:set-phone-endpoint', endpoint),
+  clearPhoneEndpoint: (): Promise<string | null> =>
+    ipcRenderer.invoke('settings:clear-phone-endpoint'),
+
   // Kimi system prompt
   getKimiSystemPrompt: () => ipcRenderer.invoke('settings:get-kimi-system-prompt'),
   setKimiSystemPrompt: (prompt: string) => ipcRenderer.invoke('settings:set-kimi-system-prompt', prompt),

@@ -6,6 +6,7 @@ import { getDb } from './db'
 import { loadLastSessionId } from './assistedWindowService'
 import { isUserWatching } from './focusState'
 import { getWaitingInfoByContainerId } from './windowService'
+import { sendTelegramAlert } from './telegramService'
 import { insertTurn, updateTurn, getLogFilePath } from './logWriter'
 import type { TurnRecord } from './logWriter'
 import type { PermissionMode } from '../shared/permissionMode'
@@ -90,9 +91,10 @@ export async function sendToClaudeDirectly(
           if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
             const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
             new Notification({ title: 'Claude responded', body }).show()
-            if (win && !win.isDestroyed()) {
-              const info = getWaitingInfoByContainerId(containerId)
-              if (info) win.webContents.send('terminal:waiting', info)
+            const info = getWaitingInfoByContainerId(containerId)
+            if (info) {
+              if (win && !win.isDestroyed()) win.webContents.send('terminal:waiting', info)
+              void sendTelegramAlert(info.windowName)
             }
           }
         }

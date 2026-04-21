@@ -240,3 +240,111 @@ describe('Kimi system prompt', () => {
     expect(mockEncryptInstance).not.toHaveBeenCalled()
   })
 })
+
+describe('Phone endpoint override', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+    vi.clearAllMocks()
+    mockIsAvailable.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('returns null initially', async () => {
+    const { getPhoneEndpoint } = await import('../../src/main/settingsService')
+    expect(getPhoneEndpoint()).toBeNull()
+  })
+
+  it('stores trimmed plain text without encryption', async () => {
+    const { setPhoneEndpoint, getPhoneEndpoint } = await import('../../src/main/settingsService')
+    setPhoneEndpoint('  host.tailnet.ts.net  ')
+    expect(getPhoneEndpoint()).toBe('host.tailnet.ts.net')
+    expect(mockEncryptInstance).not.toHaveBeenCalled()
+  })
+
+  it('empty value deletes the stored override', async () => {
+    const { setPhoneEndpoint, getPhoneEndpoint } = await import('../../src/main/settingsService')
+    setPhoneEndpoint('host.tailnet.ts.net')
+    setPhoneEndpoint('   ')
+    expect(getPhoneEndpoint()).toBeNull()
+  })
+
+  it('clearPhoneEndpoint removes the stored override', async () => {
+    const { setPhoneEndpoint, clearPhoneEndpoint, getPhoneEndpoint } = await import(
+      '../../src/main/settingsService'
+    )
+    setPhoneEndpoint('host.tailnet.ts.net')
+    clearPhoneEndpoint()
+    expect(getPhoneEndpoint()).toBeNull()
+  })
+})
+
+describe('Telegram settings', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+    vi.clearAllMocks()
+    mockIsAvailable.mockReturnValue(true)
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('getTelegramStatus returns empty defaults initially', async () => {
+    const { getTelegramStatus } = await import('../../src/main/settingsService')
+    expect(getTelegramStatus()).toEqual({
+      token: { configured: false, hint: null },
+      chatId: null,
+      enabled: false
+    })
+  })
+
+  it('bot token is encrypted via safeStorage', async () => {
+    const { setTelegramBotToken, getTelegramBotToken, getTelegramBotTokenStatus } =
+      await import('../../src/main/settingsService')
+    setTelegramBotToken('123456:ABCDEF_testtoken')
+    expect(mockEncryptInstance).toHaveBeenCalledWith('123456:ABCDEF_testtoken')
+    expect(getTelegramBotToken()).toBe('123456:ABCDEF_testtoken')
+    expect(getTelegramBotTokenStatus()).toEqual({ configured: true, hint: 'oken' })
+  })
+
+  it('chat ID is stored plain (not encrypted)', async () => {
+    const { setTelegramChatId, getTelegramChatId } = await import('../../src/main/settingsService')
+    setTelegramChatId('789012345')
+    expect(mockEncryptInstance).not.toHaveBeenCalled()
+    expect(getTelegramChatId()).toBe('789012345')
+  })
+
+  it('setTelegramChatId rejects empty', async () => {
+    const { setTelegramChatId } = await import('../../src/main/settingsService')
+    expect(() => setTelegramChatId('   ')).toThrow(/must not be empty/i)
+  })
+
+  it('enabled flag round-trips', async () => {
+    const { setTelegramEnabled, getTelegramEnabled } = await import('../../src/main/settingsService')
+    expect(getTelegramEnabled()).toBe(false)
+    setTelegramEnabled(true)
+    expect(getTelegramEnabled()).toBe(true)
+    setTelegramEnabled(false)
+    expect(getTelegramEnabled()).toBe(false)
+  })
+
+  it('clear helpers remove their rows', async () => {
+    const {
+      setTelegramBotToken,
+      clearTelegramBotToken,
+      setTelegramChatId,
+      clearTelegramChatId,
+      getTelegramStatus
+    } = await import('../../src/main/settingsService')
+    setTelegramBotToken('123:abc')
+    setTelegramChatId('42')
+    clearTelegramBotToken()
+    clearTelegramChatId()
+    const status = getTelegramStatus()
+    expect(status.token.configured).toBe(false)
+    expect(status.chatId).toBeNull()
+  })
+})

@@ -47,6 +47,12 @@ export interface TokenStatus {
   hint: string | null
 }
 
+export interface TelegramStatus {
+  token: TokenStatus
+  chatId: string | null
+  enabled: boolean
+}
+
 export interface ProjectDependency {
   id: number
   project_id: number
@@ -162,6 +168,19 @@ export interface Api {
   getFireworksKeyStatus: () => Promise<TokenStatus>
   setFireworksKey: (key: string) => Promise<TokenStatus>
   clearFireworksKey: () => Promise<TokenStatus>
+
+  // Settings — Telegram alerts
+  getTelegramStatus: () => Promise<TelegramStatus>
+  setTelegramBotToken: (token: string) => Promise<TelegramStatus>
+  clearTelegramBotToken: () => Promise<TelegramStatus>
+  setTelegramChatId: (chatId: string) => Promise<TelegramStatus>
+  clearTelegramChatId: () => Promise<TelegramStatus>
+  setTelegramEnabled: (enabled: boolean) => Promise<TelegramStatus>
+
+  // Settings — Phone endpoint override
+  getPhoneEndpoint: () => Promise<string | null>
+  setPhoneEndpoint: (endpoint: string) => Promise<string | null>
+  clearPhoneEndpoint: () => Promise<string | null>
 
   // Settings — Kimi system prompt
   getKimiSystemPrompt: () => Promise<string | null>

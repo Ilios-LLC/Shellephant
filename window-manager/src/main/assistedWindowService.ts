@@ -6,11 +6,23 @@ import { getFireworksKey, getKimiSystemPrompt } from './settingsService'
 import { getDb } from './db'
 import { isUserWatching } from './focusState'
 import { getWaitingInfoByContainerId } from './windowService'
+import { sendTelegramAlert } from './telegramService'
 import { resolveKimiSystemPrompt } from '../shared/defaultKimiPrompt'
 import type { ChatHistoryEntry } from '../shared/chatHistory'
 import { mapDbRowToHistoryEntry } from '../shared/chatHistory'
-import { insertTurn, updateTurn, getLogFilePath } from './logWriter'
+import { insertTurn, updateTurn, getLogFilePath, getOrphanedTurns } from './logWriter'
 import type { TurnRecord } from './logWriter'
+
+export function getAssistedHistory(windowId: number): {
+  messages: Array<{ id: number; role: string; content: string; metadata: string | null }>
+  orphanedTurns: Array<{ id: string; started_at: number; turn_type: string }>
+} {
+  const messages = getDb()
+    .prepare('SELECT * FROM assisted_messages WHERE window_id = ? ORDER BY created_at ASC')
+    .all(windowId) as Array<{ id: number; role: string; content: string; metadata: string | null }>
+  const orphanedTurns = getOrphanedTurns(windowId)
+  return { messages, orphanedTurns }
+}
 
 const workers = new Map<number, Worker>()
 const workerCtxSetters = new Map<number, (ctx: SendCtx) => void>()
@@ -129,9 +141,10 @@ function handleTurnComplete(msg: Record<string, unknown>, ctx: SendCtx): void {
     if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
       const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
       new Notification({ title: 'Shellephant responded', body }).show()
-      if (win && !win.isDestroyed()) {
-        const info = getWaitingInfoByContainerId(containerId)
-        if (info) win.webContents.send('terminal:waiting', info)
+      const info = getWaitingInfoByContainerId(containerId)
+      if (info) {
+        if (win && !win.isDestroyed()) win.webContents.send('terminal:waiting', info)
+        void sendTelegramAlert(info.windowName)
       }
     }
   }

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
-  import type { TokenStatus } from '../types'
+  import type { TokenStatus, TelegramStatus } from '../types'
   import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../types'
 
   export type SettingsRequirement = null | 'project' | 'window' | 'multi-window'
@@ -42,6 +42,10 @@
   let phoneActive = $state(false)
   let phoneUrl = $state<string | null>(null)
   let phoneError = $state<string | null>(null)
+  let phoneEndpointStored = $state<string | null>(null)
+  let phoneEndpointInput = $state('')
+  let phoneEndpointBusy = $state(false)
+  let phoneEndpointError = $state('')
 
   let kimiPromptInput = $state('')
   let kimiPromptLoaded = $state(false)
@@ -49,16 +53,70 @@
   let kimiError = $state('')
   let kimiSaved = $state(false)
 
+  const emptyTelegramStatus: TelegramStatus = {
+    token: { configured: false, hint: null },
+    chatId: null,
+    enabled: false
+  }
+  let telegramStatus = $state<TelegramStatus>(emptyTelegramStatus)
+  let telegramTokenInput = $state('')
+  let telegramChatIdInput = $state('')
+  let telegramBusy = $state(false)
+  let telegramError = $state('')
+  let telegramReady = $derived(
+    telegramStatus.token.configured && !!telegramStatus.chatId
+  )
+
   onMount(async () => {
-    const [stored, phoneStatus] = await Promise.all([
+    const [stored, phoneStatus, telegram, endpoint] = await Promise.all([
       window.api.getKimiSystemPrompt().catch(() => null),
-      window.api.getPhoneServerStatus().catch(() => ({ active: false, url: undefined }))
+      window.api.getPhoneServerStatus().catch(() => ({ active: false, url: undefined })),
+      window.api.getTelegramStatus().catch(() => emptyTelegramStatus),
+      window.api.getPhoneEndpoint().catch(() => null)
     ])
     kimiPromptInput = stored ?? ''
     kimiPromptLoaded = true
     phoneActive = phoneStatus.active
     phoneUrl = phoneStatus.url ?? null
+    telegramStatus = telegram
+    phoneEndpointStored = endpoint
   })
+
+  async function savePhoneEndpoint(): Promise<void> {
+    const trimmed = phoneEndpointInput.trim()
+    if (phoneEndpointBusy) return
+    phoneEndpointBusy = true
+    phoneEndpointError = ''
+    try {
+      phoneEndpointStored = await window.api.setPhoneEndpoint(trimmed)
+      phoneEndpointInput = ''
+      if (phoneActive) {
+        const status = await window.api.getPhoneServerStatus()
+        phoneUrl = status.url ?? null
+      }
+    } catch (err) {
+      phoneEndpointError = err instanceof Error ? err.message : String(err)
+    } finally {
+      phoneEndpointBusy = false
+    }
+  }
+
+  async function clearPhoneEndpoint(): Promise<void> {
+    if (phoneEndpointBusy) return
+    phoneEndpointBusy = true
+    phoneEndpointError = ''
+    try {
+      phoneEndpointStored = await window.api.clearPhoneEndpoint()
+      if (phoneActive) {
+        const status = await window.api.getPhoneServerStatus()
+        phoneUrl = status.url ?? null
+      }
+    } catch (err) {
+      phoneEndpointError = err instanceof Error ? err.message : String(err)
+    } finally {
+      phoneEndpointBusy = false
+    }
+  }
 
   async function togglePhone(): Promise<void> {
     phoneError = null
@@ -208,6 +266,75 @@
       kimiError = err instanceof Error ? err.message : String(err)
     } finally {
       kimiBusy = false
+    }
+  }
+
+  async function saveTelegramToken(): Promise<void> {
+    const trimmed = telegramTokenInput.trim()
+    if (!trimmed || telegramBusy) return
+    telegramBusy = true
+    telegramError = ''
+    try {
+      telegramStatus = await window.api.setTelegramBotToken(trimmed)
+      telegramTokenInput = ''
+    } catch (err) {
+      telegramError = err instanceof Error ? err.message : String(err)
+    } finally {
+      telegramBusy = false
+    }
+  }
+
+  async function clearTelegramToken(): Promise<void> {
+    if (telegramBusy) return
+    telegramBusy = true
+    telegramError = ''
+    try {
+      telegramStatus = await window.api.clearTelegramBotToken()
+    } catch (err) {
+      telegramError = err instanceof Error ? err.message : String(err)
+    } finally {
+      telegramBusy = false
+    }
+  }
+
+  async function saveTelegramChatId(): Promise<void> {
+    const trimmed = telegramChatIdInput.trim()
+    if (!trimmed || telegramBusy) return
+    telegramBusy = true
+    telegramError = ''
+    try {
+      telegramStatus = await window.api.setTelegramChatId(trimmed)
+      telegramChatIdInput = ''
+    } catch (err) {
+      telegramError = err instanceof Error ? err.message : String(err)
+    } finally {
+      telegramBusy = false
+    }
+  }
+
+  async function clearTelegramChatId(): Promise<void> {
+    if (telegramBusy) return
+    telegramBusy = true
+    telegramError = ''
+    try {
+      telegramStatus = await window.api.clearTelegramChatId()
+    } catch (err) {
+      telegramError = err instanceof Error ? err.message : String(err)
+    } finally {
+      telegramBusy = false
+    }
+  }
+
+  async function toggleTelegramEnabled(): Promise<void> {
+    if (telegramBusy) return
+    telegramBusy = true
+    telegramError = ''
+    try {
+      telegramStatus = await window.api.setTelegramEnabled(!telegramStatus.enabled)
+    } catch (err) {
+      telegramError = err instanceof Error ? err.message : String(err)
+    } finally {
+      telegramBusy = false
     }
   }
 
@@ -392,6 +519,149 @@
       </div>
       {#if phoneError}
         <p class="error">{phoneError}</p>
+      {/if}
+
+      <label for="phone-endpoint" style="margin-top: 0.75rem">Endpoint Override</label>
+      <p class="help">
+        Optional. Display a custom hostname instead of the raw Tailscale IP — e.g.
+        <code>matts-macbook-pro-2.tailec1c2e.ts.net</code> (survives IP changes), or
+        <code>https://host</code> if you front the server with <code>tailscale serve</code>. Bind is
+        unchanged — still Tailnet-only.
+      </p>
+      <div class="status-line">
+        {#if phoneEndpointStored}
+          <span class="status configured">{phoneEndpointStored}</span>
+        {:else}
+          <span class="status unconfigured">Using detected Tailscale IP</span>
+        {/if}
+      </div>
+      <input
+        id="phone-endpoint"
+        type="text"
+        autocomplete="off"
+        placeholder={phoneEndpointStored
+          ? 'Enter a new value to replace'
+          : 'host.tailnet.ts.net or https://host'}
+        bind:value={phoneEndpointInput}
+        disabled={phoneEndpointBusy}
+      />
+      <div class="row-actions">
+        {#if phoneEndpointStored}
+          <button
+            type="button"
+            class="clear"
+            onclick={clearPhoneEndpoint}
+            disabled={phoneEndpointBusy}
+          >
+            {phoneEndpointBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="submit"
+          onclick={savePhoneEndpoint}
+          disabled={!phoneEndpointInput.trim() || phoneEndpointBusy}
+        >
+          {phoneEndpointBusy ? 'Saving…' : 'Save Endpoint'}
+        </button>
+      </div>
+      {#if phoneEndpointError}
+        <p class="error">{phoneEndpointError}</p>
+      {/if}
+    </section>
+
+    <section class="field">
+      <p class="field-heading">Telegram Alerts</p>
+      <p class="help">
+        Optional. When enabled, also pings your phone via a Telegram bot whenever a
+        window needs attention. Create a bot with @BotFather to get the token, and
+        get your chat ID from @userinfobot.
+      </p>
+
+      <label for="telegram-token">Bot Token</label>
+      <div class="status-line">
+        {#if telegramStatus.token.configured}
+          <span class="status configured"
+            >Configured{telegramStatus.token.hint ? ` • ends in ${telegramStatus.token.hint}` : ''}</span
+          >
+        {:else}
+          <span class="status unconfigured">Not configured</span>
+        {/if}
+      </div>
+      <input
+        id="telegram-token"
+        type="password"
+        autocomplete="off"
+        placeholder={telegramStatus.token.configured
+          ? 'Enter a new token to replace'
+          : '123456:ABC-DEF...'}
+        bind:value={telegramTokenInput}
+        disabled={telegramBusy}
+      />
+      <div class="row-actions">
+        {#if telegramStatus.token.configured}
+          <button type="button" class="clear" onclick={clearTelegramToken} disabled={telegramBusy}>
+            {telegramBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="submit"
+          onclick={saveTelegramToken}
+          disabled={!telegramTokenInput.trim() || telegramBusy}
+        >
+          {telegramBusy ? 'Saving…' : 'Save Bot Token'}
+        </button>
+      </div>
+
+      <label for="telegram-chat-id" style="margin-top: 0.75rem">Chat ID</label>
+      <div class="status-line">
+        {#if telegramStatus.chatId}
+          <span class="status configured">Configured • {telegramStatus.chatId}</span>
+        {:else}
+          <span class="status unconfigured">Not configured</span>
+        {/if}
+      </div>
+      <input
+        id="telegram-chat-id"
+        type="text"
+        autocomplete="off"
+        placeholder={telegramStatus.chatId ? 'Enter a new chat ID to replace' : '123456789'}
+        bind:value={telegramChatIdInput}
+        disabled={telegramBusy}
+      />
+      <div class="row-actions">
+        {#if telegramStatus.chatId}
+          <button type="button" class="clear" onclick={clearTelegramChatId} disabled={telegramBusy}>
+            {telegramBusy ? '…' : 'Clear'}
+          </button>
+        {/if}
+        <button
+          type="button"
+          class="submit"
+          onclick={saveTelegramChatId}
+          disabled={!telegramChatIdInput.trim() || telegramBusy}
+        >
+          {telegramBusy ? 'Saving…' : 'Save Chat ID'}
+        </button>
+      </div>
+
+      <label
+        class="toggle-row"
+        style="margin-top: 0.75rem"
+        title={telegramReady ? '' : 'Save a bot token and chat ID first'}
+      >
+        <input
+          type="checkbox"
+          checked={telegramStatus.enabled}
+          disabled={!telegramReady || telegramBusy}
+          onchange={toggleTelegramEnabled}
+        />
+        <span>Enable Telegram alerts</span>
+      </label>
+
+      {#if telegramError}
+        <p class="error">{telegramError}</p>
       {/if}
     </section>
 
@@ -647,6 +917,23 @@
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 0.5rem;
+  }
+
+  .toggle-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.82rem;
+    color: var(--fg-1);
+    cursor: pointer;
+    text-transform: none;
+    letter-spacing: normal;
+    font-weight: 400;
+  }
+
+  .toggle-row input[type='checkbox'] {
+    width: auto;
+    margin: 0;
   }
 
   .phone-url-btn {
