@@ -27,12 +27,18 @@ export type TurnRecord = {
   id: string
   window_id: number
   turn_type: 'human-claude' | 'shellephant-claude'
-  status: 'running' | 'success' | 'error'
+  status: 'running' | 'success' | 'error' | 'orphaned'
   started_at: number
   ended_at?: number
   duration_ms?: number
   error?: string
   log_file?: string
+}
+
+export type OrphanedTurnRecord = {
+  id: string
+  started_at: number
+  turn_type: string
 }
 
 export function writeEvent(logPath: string, event: LogEvent): void {
@@ -67,6 +73,22 @@ export function updateTurn(id: string, patch: Partial<TurnRecord>): void {
   getDb()
     .prepare(`UPDATE turns SET ${setClauses.join(', ')} WHERE id = ?`)
     .run(...params)
+}
+
+export function markOrphanedTurns(): void {
+  getDb()
+    .prepare("UPDATE turns SET status = 'orphaned' WHERE status = 'running'")
+    .run()
+}
+
+export function getOrphanedTurns(windowId: number): OrphanedTurnRecord[] {
+  return getDb()
+    .prepare(
+      `SELECT id, started_at, turn_type FROM turns
+       WHERE window_id = ? AND status = 'orphaned'
+       ORDER BY started_at ASC`
+    )
+    .all(windowId) as OrphanedTurnRecord[]
 }
 
 export function readEventsForTurn(logPath: string, turnId: string): LogEvent[] {
