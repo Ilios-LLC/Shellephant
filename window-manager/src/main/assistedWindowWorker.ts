@@ -156,6 +156,7 @@ async function streamTurn(data: StreamTurnData): Promise<void> {
     if (part.type === 'text-delta') {
       parentPort?.postMessage({ type: 'kimi-delta', windowId, delta: part.textDelta })
     } else if (part.type === 'tool-call' && part.toolName === 'run_claude_code') {
+      // Fires before execute() runs — UI-only notification; execution follows via tool.execute
       parentPort?.postMessage({
         type: 'tool-call', windowId,
         toolName: 'run_claude_code',
