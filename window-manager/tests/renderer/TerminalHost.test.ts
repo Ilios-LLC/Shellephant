@@ -181,7 +181,12 @@ describe('TerminalHost', () => {
       stopPhoneServer: vi.fn().mockResolvedValue(undefined),
       listWindowDeps: vi.fn().mockResolvedValue([]),
       onDepLogsData: vi.fn(),
-      offDepLogsData: vi.fn()
+      offDepLogsData: vi.fn(),
+      listTurns: vi.fn().mockResolvedValue([]),
+      getTurnEvents: vi.fn().mockResolvedValue([]),
+      onTurnStarted: vi.fn().mockReturnValue(vi.fn()),
+      onTurnUpdated: vi.fn().mockReturnValue(vi.fn()),
+      onTurnEvent: vi.fn().mockReturnValue(vi.fn())
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(
@@ -602,7 +607,12 @@ describe('multi-project TerminalHost', () => {
       stopPhoneServer: vi.fn().mockResolvedValue(undefined),
       listWindowDeps: vi.fn().mockResolvedValue([]),
       onDepLogsData: vi.fn(),
-      offDepLogsData: vi.fn()
+      offDepLogsData: vi.fn(),
+      listTurns: vi.fn().mockResolvedValue([]),
+      getTurnEvents: vi.fn().mockResolvedValue([]),
+      onTurnStarted: vi.fn().mockReturnValue(vi.fn()),
+      onTurnUpdated: vi.fn().mockReturnValue(vi.fn()),
+      onTurnEvent: vi.fn().mockReturnValue(vi.fn())
     }
     vi.stubGlobal('api', mockApi)
     vi.stubGlobal(

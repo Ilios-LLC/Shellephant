@@ -4,13 +4,26 @@ const { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker } =
   const mockWorkerOn = vi.fn()
   const mockWorkerPostMessage = vi.fn()
   const mockWorkerTerminate = vi.fn()
+  const instances: Array<{
+    on: ReturnType<typeof vi.fn>
+    postMessage: ReturnType<typeof vi.fn>
+    terminate: ReturnType<typeof vi.fn>
+    emit: (event: string, ...args: unknown[]) => void
+  }> = []
   function MockWorkerCtor(this: Record<string, unknown>) {
     this.on = mockWorkerOn
     this.postMessage = mockWorkerPostMessage
     this.terminate = mockWorkerTerminate
+    const self = this as typeof instances[number]
+    self.emit = function (event: string, ...args: unknown[]) {
+      mockWorkerOn.mock.calls
+        .filter(([e]: [string]) => e === event)
+        .forEach(([, handler]: [string, (...a: unknown[]) => void]) => handler(...args))
+    }
+    instances.push(self)
   }
   const MockWorker = vi.fn().mockImplementation(MockWorkerCtor)
-  return { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker }
+  return { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker: Object.assign(MockWorker, { instances }) }
 })
 
 vi.mock('worker_threads', () => ({ Worker: MockWorker }))
@@ -44,7 +57,10 @@ const { mockNotification, mockNotificationShow, mockIsUserWatching, mockGetFocus
 }))
 
 vi.mock('electron', () => ({
-  BrowserWindow: { getFocusedWindow: () => mockGetFocusedWindow() },
+  BrowserWindow: {
+    getFocusedWindow: () => mockGetFocusedWindow(),
+    getAllWindows: () => [mockGetFocusedWindow()]
+  },
   Notification: vi.fn().mockImplementation(function (this: Record<string, unknown>, opts: unknown) {
     mockNotification(opts)
     this.show = mockNotificationShow
@@ -55,7 +71,21 @@ vi.mock('../../src/main/focusState', () => ({
   isUserWatching: (...args: unknown[]) => mockIsUserWatching(...args)
 }))
 
+const { mockInsertTurn, mockUpdateTurn, mockGetLogFilePath } = vi.hoisted(() => ({
+  mockInsertTurn: vi.fn(),
+  mockUpdateTurn: vi.fn(),
+  mockGetLogFilePath: vi.fn(() => '/tmp/test-2026-04-20.jsonl')
+}))
+
+vi.mock('../../src/main/logWriter', () => ({
+  insertTurn: mockInsertTurn,
+  updateTurn: mockUpdateTurn,
+  getLogFilePath: mockGetLogFilePath
+}))
+
 import { sendToWindow, cancelWindow, loadLastSessionId, getWorkerCount, __resetWorkersForTests } from '../../src/main/assistedWindowService'
+
+const mockSendToRenderer = vi.fn()
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -63,6 +93,8 @@ beforeEach(() => {
   mockGetFocusedWindow.mockReturnValue({ isDestroyed: () => false })
   mockDbGet.mockReturnValue(null)
   mockDbAll.mockReturnValue([])
+  mockGetLogFilePath.mockReturnValue('/tmp/test-2026-04-20.jsonl')
+  MockWorker.instances.length = 0
   __resetWorkersForTests()
 })
 
@@ -347,5 +379,42 @@ describe('worker message routing — new event types', () => {
     const messageHandler = mockWorkerOn.mock.calls.find(([e]) => e === 'message')?.[1]
     messageHandler({ type: 'turn-complete', windowId: 73, stats: null, assistantText: 'done' })
     expect(mockNotification).toHaveBeenCalledWith(expect.objectContaining({ title: 'Shellephant responded' }))
+  })
+})
+
+describe('turn observability', () => {
+  it('passes turnId and logPath in worker postMessage', async () => {
+    await sendToWindow(1, 'container-1', 'hello', null, mockSendToRenderer)
+    const sendCall = MockWorker.instances[0]?.postMessage.mock.calls
+      .find((c: [{ type: string }]) => c[0]?.type === 'send')
+    expect(sendCall![0].turnId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(typeof sendCall![0].logPath).toBe('string')
+  })
+
+  it('calls insertTurn with shellephant-claude type', async () => {
+    await sendToWindow(1, 'container-1', 'hello', null, mockSendToRenderer)
+    expect(mockInsertTurn).toHaveBeenCalledWith(
+      expect.objectContaining({ turn_type: 'shellephant-claude', status: 'running', window_id: 1 })
+    )
+  })
+
+  it('calls updateTurn with success on turn-complete', async () => {
+    await sendToWindow(1, 'container-1', 'hello', null, mockSendToRenderer)
+    const worker = MockWorker.instances[0]
+    worker.emit('message', { type: 'turn-complete', windowId: 1, stats: null })
+    expect(mockUpdateTurn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'success' })
+    )
+  })
+
+  it('calls updateTurn with error on worker error', async () => {
+    await sendToWindow(1, 'container-1', 'hello', null, mockSendToRenderer)
+    const worker = MockWorker.instances[0]
+    worker.emit('error', new Error('worker crashed'))
+    expect(mockUpdateTurn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'error', error: 'worker crashed' })
+    )
   })
 })

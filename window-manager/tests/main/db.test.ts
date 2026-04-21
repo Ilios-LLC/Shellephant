@@ -534,6 +534,37 @@ describe('assisted_messages table', () => {
   })
 })
 
+describe('turns table', () => {
+  beforeEach(() => {
+    initDb(':memory:')
+  })
+
+  afterEach(() => {
+    closeDb()
+  })
+
+  it('has correct columns', () => {
+    const db = getDb()
+    const cols = (db.pragma('table_info(turns)') as { name: string }[]).map(c => c.name)
+    expect(cols).toContain('id')
+    expect(cols).toContain('window_id')
+    expect(cols).toContain('turn_type')
+    expect(cols).toContain('status')
+    expect(cols).toContain('started_at')
+    expect(cols).toContain('ended_at')
+    expect(cols).toContain('duration_ms')
+    expect(cols).toContain('error')
+    expect(cols).toContain('log_file')
+  })
+
+  it('status defaults to running', () => {
+    const db = getDb()
+    db.exec(`INSERT INTO turns (id, window_id, turn_type, started_at) VALUES ('t1', 0, 'human-claude', 1000)`)
+    const row = db.prepare('SELECT status FROM turns WHERE id = ?').get('t1') as { status: string }
+    expect(row.status).toBe('running')
+  })
+})
+
 describe('db — window_projects', () => {
   afterEach(() => closeDb())
 

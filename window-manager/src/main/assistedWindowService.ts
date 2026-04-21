@@ -1,5 +1,6 @@
 import { Worker } from 'worker_threads'
 import path from 'path'
+import { randomUUID } from 'crypto'
 import { BrowserWindow, Notification } from 'electron'
 import { getFireworksKey, getKimiSystemPrompt } from './settingsService'
 import { getDb } from './db'
@@ -8,8 +9,12 @@ import { getWaitingInfoByContainerId } from './windowService'
 import { resolveKimiSystemPrompt } from '../shared/defaultKimiPrompt'
 import type { ChatHistoryEntry } from '../shared/chatHistory'
 import { mapDbRowToHistoryEntry } from '../shared/chatHistory'
+import { insertTurn, updateTurn, getLogFilePath } from './logWriter'
+import type { TurnRecord } from './logWriter'
 
 const workers = new Map<number, Worker>()
+const workerCtxSetters = new Map<number, (ctx: SendCtx) => void>()
+const workerCtxMap = new Map<number, SendCtx>()
 
 export function getWorkerCount(): number {
   return workers.size
@@ -17,6 +22,8 @@ export function getWorkerCount(): number {
 
 export function __resetWorkersForTests(): void {
   workers.clear()
+  workerCtxSetters.clear()
+  workerCtxMap.clear()
 }
 
 function getWorkerPath(): string {
@@ -100,6 +107,98 @@ function resolveProjectSystemPrompt(projectId: number | null): string | null {
   return row?.kimi_system_prompt ?? null
 }
 
+type SendCtx = {
+  windowId: number; containerId: string; turnId: string;
+  startedAt: number; sendToRenderer: (channel: string, ...args: unknown[]) => void
+}
+
+function handleTurnComplete(msg: Record<string, unknown>, ctx: SendCtx): void {
+  const { windowId, containerId, turnId, startedAt, sendToRenderer } = ctx
+  const endedAt = Date.now()
+  const status = (msg.error ? 'error' : 'success') as 'error' | 'success'
+  const patch: Partial<TurnRecord> = {
+    status, ended_at: endedAt, duration_ms: endedAt - startedAt,
+    ...(msg.error ? { error: typeof msg.error === 'string' ? msg.error : String(msg.error) } : {})
+  }
+  updateTurn(turnId, patch)
+  sendToRenderer('logs:turn-updated', { id: turnId, ...patch })
+  sendToRenderer('assisted:turn-complete', windowId, msg.stats, msg.error)
+  const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
+  if (assistantText) {
+    const win = BrowserWindow.getAllWindows()[0]
+    if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
+      const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
+      new Notification({ title: 'Shellephant responded', body }).show()
+      if (win && !win.isDestroyed()) {
+        const info = getWaitingInfoByContainerId(containerId)
+        if (info) win.webContents.send('terminal:waiting', info)
+      }
+    }
+  }
+  workers.delete(windowId)
+  workerCtxSetters.delete(windowId)
+  workerCtxMap.delete(windowId)
+}
+
+function spawnWorker(
+  initialCtx: SendCtx,
+  sendToRenderer: (channel: string, ...args: unknown[]) => void
+): { worker: Worker; setCtx: (ctx: SendCtx) => void } {
+  let ctx = initialCtx
+  const { windowId } = ctx
+
+  const worker = new Worker(getWorkerPath())
+
+  worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
+    if (msg.type === 'log-event') {
+      sendToRenderer('logs:turn-event', msg.event)
+    } else if (msg.type === 'save-message') {
+      saveMessage(windowId, msg.role as string, msg.content as string, msg.metadata as string | null)
+    } else if (msg.type === 'claude-to-shellephant:event') {
+      const ev = msg.event as { kind: string; text?: string; name?: string; summary?: string; input?: unknown }
+      if (ev.kind === 'text_delta') {
+        sendToRenderer('claude-to-shellephant:delta', windowId, ev.text)
+      } else if (ev.kind === 'tool_use') {
+        const detail = JSON.stringify(ev.input)
+        saveMessage(windowId, 'claude-to-shellephant-action', '', JSON.stringify({ actionType: ev.name, summary: ev.summary, detail }))
+        sendToRenderer('claude-to-shellephant:action', windowId, { actionType: ev.name, summary: ev.summary, detail })
+      }
+    } else if (msg.type === 'claude-to-shellephant:turn-complete') {
+      sendToRenderer('claude-to-shellephant:turn-complete', windowId)
+    } else if (msg.type === 'tool-call') {
+      sendToRenderer('shellephant:to-claude', windowId, msg.message)
+    } else if (msg.type === 'kimi-delta') {
+      sendToRenderer('assisted:kimi-delta', windowId, msg.delta)
+    } else if (msg.type === 'turn-complete') {
+      handleTurnComplete(msg, ctx)
+    }
+  })
+
+  worker.on('error', (err) => {
+    const endedAt = Date.now()
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: err.message })
+    sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: err.message })
+    sendToRenderer('assisted:turn-complete', windowId, null, err.message)
+    workers.delete(windowId)
+    workerCtxSetters.delete(windowId)
+    workerCtxMap.delete(windowId)
+  })
+
+  worker.on('exit', (code) => {
+    if (code !== 0 && workers.has(windowId)) {
+      const endedAt = Date.now()
+      updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: `Worker exited with code ${code}` })
+      sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: `Worker exited with code ${code}` })
+      sendToRenderer('assisted:turn-complete', windowId, null, `Worker exited with code ${code}`)
+      workers.delete(windowId)
+      workerCtxSetters.delete(windowId)
+      workerCtxMap.delete(windowId)
+    }
+  })
+
+  return { worker, setCtx: (newCtx: SendCtx) => { ctx = newCtx } }
+}
+
 export async function sendToWindow(
   windowId: number,
   containerId: string,
@@ -115,79 +214,49 @@ export async function sendToWindow(
   const history = loadHistory(windowId)
   const initialSessionId = loadLastSessionId(windowId)
 
+  const turnId = randomUUID()
+  const logPath = getLogFilePath()
+  const startedAt = Date.now()
+
+  const turnRecord: TurnRecord = {
+    id: turnId, window_id: windowId, turn_type: 'shellephant-claude',
+    status: 'running', started_at: startedAt, log_file: logPath
+  }
+  insertTurn(turnRecord)
+  sendToRenderer('logs:turn-started', turnRecord)
+
+  const ctx: SendCtx = { windowId, containerId, turnId, startedAt, sendToRenderer }
   let worker = workers.get(windowId)
   if (!worker) {
-    worker = new Worker(getWorkerPath())
-
-    worker.on('message', (msg: { type: string } & Record<string, unknown>) => {
-      if (msg.type === 'save-message') {
-        saveMessage(windowId, msg.role as string, msg.content as string, msg.metadata as string | null)
-      } else if (msg.type === 'claude-to-shellephant:event') {
-        const ev = msg.event as { kind: string; text?: string; name?: string; summary?: string; input?: unknown }
-        if (ev.kind === 'text_delta') {
-          sendToRenderer('claude-to-shellephant:delta', windowId, ev.text)
-        } else if (ev.kind === 'tool_use') {
-          const detail = JSON.stringify(ev.input)
-          saveMessage(windowId, 'claude-to-shellephant-action', '', JSON.stringify({ actionType: ev.name, summary: ev.summary, detail }))
-          sendToRenderer('claude-to-shellephant:action', windowId, { actionType: ev.name, summary: ev.summary, detail })
-        }
-      } else if (msg.type === 'claude-to-shellephant:turn-complete') {
-        sendToRenderer('claude-to-shellephant:turn-complete', windowId)
-      } else if (msg.type === 'tool-call') {
-        sendToRenderer('shellephant:to-claude', windowId, msg.message)
-      } else if (msg.type === 'kimi-delta') {
-        sendToRenderer('assisted:kimi-delta', windowId, msg.delta)
-      } else if (msg.type === 'turn-complete') {
-        sendToRenderer('assisted:turn-complete', windowId, msg.stats, msg.error)
-        // Notify when Shellephant finishes a turn with a user-facing message.
-        // No text → tool-only turn → no alert. Silent when user is watching.
-        const assistantText = typeof msg.assistantText === 'string' ? msg.assistantText : ''
-        if (assistantText) {
-          const win = BrowserWindow.getAllWindows()[0]
-          if (!win || win.isDestroyed() || !isUserWatching(containerId, win)) {
-            const body = assistantText.length > 200 ? assistantText.slice(0, 200) + '…' : assistantText
-            new Notification({ title: 'Shellephant responded', body }).show()
-            if (win && !win.isDestroyed()) {
-              const info = getWaitingInfoByContainerId(containerId)
-              if (info) win.webContents.send('terminal:waiting', info)
-            }
-          }
-        }
-        workers.delete(windowId)
-      }
-    })
-
-    worker.on('error', (err) => {
-      sendToRenderer('assisted:turn-complete', windowId, null, err.message)
-      workers.delete(windowId)
-    })
-
-    worker.on('exit', (code) => {
-      if (code !== 0 && workers.has(windowId)) {
-        sendToRenderer('assisted:turn-complete', windowId, null, `Worker exited with code ${code}`)
-        workers.delete(windowId)
-      }
-    })
-
+    const spawned = spawnWorker(ctx, sendToRenderer)
+    worker = spawned.worker
     workers.set(windowId, worker)
+    workerCtxSetters.set(windowId, spawned.setCtx)
+  } else {
+    workerCtxSetters.get(windowId)?.(ctx)
   }
+  workerCtxMap.set(windowId, ctx)
 
   worker.postMessage({
-    type: 'send',
-    windowId,
-    containerId,
-    message,
-    conversationHistory: history,
-    initialSessionId,
+    type: 'send', windowId, containerId, message,
+    conversationHistory: history, initialSessionId,
     systemPrompt: resolveKimiSystemPrompt(projectPrompt, globalPrompt),
-    fireworksKey
+    fireworksKey, turnId, logPath
   })
 }
 
 export function cancelWindow(windowId: number): void {
   const worker = workers.get(windowId)
   if (!worker) return
+  const ctx = workerCtxMap.get(windowId)
+  if (ctx) {
+    const endedAt = Date.now()
+    updateTurn(ctx.turnId, { status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
+    ctx.sendToRenderer('logs:turn-updated', { id: ctx.turnId, status: 'error', ended_at: endedAt, duration_ms: endedAt - ctx.startedAt, error: 'cancelled' })
+  }
   worker.terminate()
   workers.delete(windowId)
+  workerCtxSetters.delete(windowId)
+  workerCtxMap.delete(windowId)
 }
 

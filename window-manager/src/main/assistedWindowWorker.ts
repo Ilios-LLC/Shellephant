@@ -3,6 +3,7 @@ import OpenAI from 'openai'
 import type { TimelineEvent } from '../shared/timelineEvent'
 import { DEFAULT_KIMI_SYSTEM_PROMPT } from '../shared/defaultKimiPrompt'
 import { runClaudeCode } from './claudeRunner'
+import { writeEvent, type LogEvent } from './logWriter'
 
 export function resolveSystemPrompt(
   projectPrompt: string | null,
@@ -36,6 +37,18 @@ export function parseDockerOutput(stdout: string, stderr: string): { outputLines
   return { outputLines, sessionId }
 }
 
+function makeEmitter(
+  turnId: string,
+  logPath: string,
+  windowId: number
+): (eventType: string, payload?: Record<string, unknown>) => void {
+  return function emitEvent(eventType: string, payload?: Record<string, unknown>): void {
+    const event: LogEvent = { turnId, windowId, eventType, ts: Date.now(), payload }
+    writeEvent(logPath, event)
+    parentPort?.postMessage({ type: 'log-event', event })
+  }
+}
+
 type KimiLoopData = {
   windowId: number
   containerId: string
@@ -44,6 +57,8 @@ type KimiLoopData = {
   initialSessionId?: string | null
   systemPrompt: string
   fireworksKey: string
+  turnId: string
+  logPath: string
 }
 
 type ToolCallAccum = { id: string; name: string; arguments: string }
@@ -52,7 +67,9 @@ async function handleRunClaudeCode(
   windowId: number,
   containerId: string,
   tc: ToolCallAccum,
-  activeSessionId: string | null
+  activeSessionId: string | null,
+  turnId: string,
+  logPath: string
 ): Promise<{ toolResult: string; newActiveSessionId: string | null }> {
   // The tool schema no longer exposes session_id. Session state is owned by
   // this worker — seeded from DB at turn start, updated in-place as CC emits
@@ -67,8 +84,13 @@ async function handleRunClaudeCode(
   let events: TimelineEvent[] = []
   let newActiveSessionId = activeSessionId
 
+  const emitEvent = makeEmitter(turnId, logPath, windowId)
+
   try {
-    const result = await runClaudeCode(containerId, activeSessionId, args.message, { eventType: 'claude-to-shellephant:event' })
+    const result = await runClaudeCode(containerId, activeSessionId, args.message, {
+      eventType: 'claude-to-shellephant:event',
+      onExecEvent: (type, payload) => emitEvent(type, payload)
+    })
     output = result.output
     assistantText = result.assistantText
     events = result.events
@@ -132,7 +154,11 @@ async function processStreamChunk(
 }
 
 async function kimiLoop(data: KimiLoopData): Promise<void> {
-  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey } = data
+  const { windowId, containerId, message, conversationHistory, initialSessionId, systemPrompt, fireworksKey, turnId, logPath } = data
+
+  const emitEvent = makeEmitter(turnId, logPath, windowId)
+
+  emitEvent('turn_start')
 
   const client = new OpenAI({ apiKey: fireworksKey, baseURL: 'https://api.fireworks.ai/inference/v1' })
 
@@ -194,7 +220,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
         if (ranClaudeCodeThisTurn) {
           toolResult = 'Deferred — only one run_claude_code allowed per turn. Re-plan after reading the previous response, then call run_claude_code again.'
         } else {
-          const res = await handleRunClaudeCode(windowId, containerId, tc, activeSessionId)
+          const res = await handleRunClaudeCode(windowId, containerId, tc, activeSessionId, turnId, logPath)
           toolResult = res.toolResult
           activeSessionId = res.newActiveSessionId
           ranClaudeCodeThisTurn = true
@@ -208,6 +234,7 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
   }
 
   const costUsd = (tokenRef.input * 0.000001) + (tokenRef.output * 0.000003)
+  emitEvent('turn_end')
   parentPort?.postMessage({
     type: 'turn-complete', windowId,
     stats: { inputTokens: tokenRef.input, outputTokens: tokenRef.output, costUsd },
@@ -217,12 +244,22 @@ async function kimiLoop(data: KimiLoopData): Promise<void> {
 
 parentPort?.on('message', async (msg: { type: string } & Record<string, unknown>) => {
   if (msg.type === 'send') {
+    const data = msg as unknown as KimiLoopData
     try {
-      await kimiLoop(msg as unknown as KimiLoopData)
+      await kimiLoop(data)
     } catch (err) {
+      if (data.turnId && data.logPath) {
+        const event: LogEvent = {
+          turnId: data.turnId, windowId: data.windowId,
+          eventType: 'error', ts: Date.now(),
+          payload: { error: err instanceof Error ? err.message : String(err) }
+        }
+        writeEvent(data.logPath, event)
+        parentPort?.postMessage({ type: 'log-event', event })
+      }
       parentPort?.postMessage({
         type: 'turn-complete',
-        windowId: (msg as { windowId: number }).windowId,
+        windowId: data.windowId,
         stats: null,
         error: err instanceof Error ? err.message : String(err)
       })

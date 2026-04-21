@@ -204,6 +204,43 @@ export interface Api {
 
   // Shell
   openExternal: (url: string) => Promise<void>
+
+  // Observability / Logs
+  listTurns: (filter?: {
+    windowId?: number
+    status?: string
+    turnType?: string
+    limit?: number
+    offset?: number
+  }) => Promise<TurnRecord[]>
+
+  getTurnEvents: (turnId: string) => Promise<LogEvent[]>
+
+  onTurnStarted: (cb: (turn: unknown) => void) => () => void
+
+  onTurnUpdated: (cb: (patch: unknown) => void) => () => void
+
+  onTurnEvent: (cb: (event: unknown) => void) => () => void
+}
+
+export interface TurnRecord {
+  id: string
+  window_id: number
+  turn_type: 'human-claude' | 'shellephant-claude'
+  status: 'running' | 'success' | 'error'
+  started_at: number
+  ended_at?: number
+  duration_ms?: number
+  error?: string
+  log_file?: string
+}
+
+export interface LogEvent {
+  turnId: string
+  windowId: number
+  eventType: string
+  ts: number
+  payload?: Record<string, unknown>
 }
 
 declare global {

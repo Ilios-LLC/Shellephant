@@ -6,8 +6,9 @@
   import NewProjectWizard from './NewProjectWizard.svelte'
   import NewWindowWizard from './NewWindowWizard.svelte'
   import SettingsView, { type SettingsRequirement } from './SettingsView.svelte'
+  import TraceExplorer from './TraceExplorer.svelte'
 
-  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'new-multi-window' | 'settings'
+  export type MainPaneView = 'default' | 'new-project' | 'new-window' | 'new-multi-window' | 'settings' | 'traces'
 
   interface Props {
     project: ProjectRecord | null
@@ -65,7 +66,9 @@
 </script>
 
 <main class="main-pane">
-  {#if view === 'settings'}
+  {#if view === 'traces'}
+    <TraceExplorer />
+  {:else if view === 'settings'}
     <SettingsView
       {patStatus}
       {claudeStatus}

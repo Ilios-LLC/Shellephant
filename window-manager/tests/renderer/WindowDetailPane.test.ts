@@ -15,6 +15,7 @@ vi.mock('../../src/renderer/src/lib/panelLayout', () => ({
 }))
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import userEvent from '@testing-library/user-event'
 import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/svelte'
 import { tick } from 'svelte'
 import WindowDetailPane from '../../src/renderer/src/components/WindowDetailPane.svelte'
@@ -62,7 +63,12 @@ beforeEach(() => {
     stopDepLogs: mockStopDepLogs,
     onDepLogsData: mockOnDepLogsData,
     offDepLogsData: mockOffDepLogsData,
-    getDepContainersStatus: mockGetDepContainersStatus
+    getDepContainersStatus: mockGetDepContainersStatus,
+    listTurns: vi.fn().mockResolvedValue([]),
+    getTurnEvents: vi.fn().mockResolvedValue([]),
+    onTurnStarted: vi.fn().mockReturnValue(vi.fn()),
+    onTurnUpdated: vi.fn().mockReturnValue(vi.fn()),
+    onTurnEvent: vi.fn().mockReturnValue(vi.fn())
   }
 })
 afterEach(() => {
@@ -486,5 +492,52 @@ describe('WindowDetailPane', () => {
     expect(screen.getByRole('button', { name: /^claude$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^terminal$/i })).toBeDefined()
     expect(screen.getByRole('button', { name: /^editor$/i })).toBeDefined()
+  })
+
+  describe('traces pane', () => {
+    it('renders Traces toggle button', async () => {
+      render(WindowDetailPane, { props: { win, project } })
+      expect(screen.getByRole('button', { name: /traces/i })).toBeInTheDocument()
+    })
+
+    it('traces pane hidden by default', async () => {
+      render(WindowDetailPane, { props: { win, project } })
+      expect(screen.queryByTestId('traces-pane')).not.toBeInTheDocument()
+    })
+
+    it('clicking Traces shows traces pane', async () => {
+      render(WindowDetailPane, { props: { win, project } })
+      await fireEvent.click(screen.getByRole('button', { name: /traces/i }))
+      await tick()
+      await tick()
+      expect(screen.getByTestId('traces-pane')).toBeInTheDocument()
+    })
+
+    it('clicking Traces again hides the pane', async () => {
+      render(WindowDetailPane, { props: { win, project } })
+      const btn = screen.getByRole('button', { name: /traces/i })
+      await fireEvent.click(btn)
+      await tick()
+      await tick()
+      await fireEvent.click(btn)
+      await tick()
+      await tick()
+      expect(screen.queryByTestId('traces-pane')).not.toBeInTheDocument()
+    })
+
+    it('shows turn rows when turns loaded', async () => {
+      vi.mocked(window.api.listTurns).mockResolvedValue([
+        { id: 't1', window_id: 1, turn_type: 'human-claude', status: 'success',
+          started_at: Date.now() - 2000, ended_at: Date.now(), duration_ms: 2000, log_file: '/tmp/x.jsonl' }
+      ] as any)
+      render(WindowDetailPane, { props: { win, project } })
+      await fireEvent.click(screen.getByRole('button', { name: /traces/i }))
+      // flush the loadTurns() promise chain
+      await tick()
+      await tick()
+      await tick()
+      expect(screen.getByText('human→claude')).toBeInTheDocument()
+      expect(screen.getByText('2000ms')).toBeInTheDocument()
+    })
   })
 })

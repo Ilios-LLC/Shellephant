@@ -4,13 +4,26 @@ const { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker } =
   const mockWorkerOn = vi.fn()
   const mockWorkerPostMessage = vi.fn()
   const mockWorkerTerminate = vi.fn()
+  const instances: Array<{
+    on: ReturnType<typeof vi.fn>
+    postMessage: ReturnType<typeof vi.fn>
+    terminate: ReturnType<typeof vi.fn>
+    emit: (event: string, ...args: unknown[]) => void
+  }> = []
   function MockWorkerCtor(this: Record<string, unknown>) {
     this.on = mockWorkerOn
     this.postMessage = mockWorkerPostMessage
     this.terminate = mockWorkerTerminate
+    const self = this as typeof instances[number]
+    self.emit = function (event: string, ...args: unknown[]) {
+      mockWorkerOn.mock.calls
+        .filter(([e]: [string]) => e === event)
+        .forEach(([, handler]: [string, (...a: unknown[]) => void]) => handler(...args))
+    }
+    instances.push(self)
   }
   const MockWorker = vi.fn().mockImplementation(MockWorkerCtor)
-  return { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker }
+  return { mockWorkerOn, mockWorkerPostMessage, mockWorkerTerminate, MockWorker: Object.assign(MockWorker, { instances }) }
 })
 
 vi.mock('worker_threads', () => ({ Worker: MockWorker }))
@@ -35,7 +48,10 @@ const { mockNotification, mockNotificationShow, mockIsUserWatching, mockGetFocus
 }))
 
 vi.mock('electron', () => ({
-  BrowserWindow: { getFocusedWindow: () => mockGetFocusedWindow() },
+  BrowserWindow: {
+    getFocusedWindow: () => mockGetFocusedWindow(),
+    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: vi.fn() } }]
+  },
   Notification: vi.fn().mockImplementation(function (this: Record<string, unknown>, opts: unknown) {
     mockNotification(opts)
     this.show = mockNotificationShow
@@ -46,6 +62,18 @@ vi.mock('../../src/main/focusState', () => ({
   isUserWatching: (...args: unknown[]) => mockIsUserWatching(...args)
 }))
 
+const { mockInsertTurn, mockUpdateTurn, mockGetLogFilePath } = vi.hoisted(() => ({
+  mockInsertTurn: vi.fn(),
+  mockUpdateTurn: vi.fn(),
+  mockGetLogFilePath: vi.fn(() => '/tmp/test-2026-04-20.jsonl')
+}))
+
+vi.mock('../../src/main/logWriter', () => ({
+  insertTurn: mockInsertTurn,
+  updateTurn: mockUpdateTurn,
+  getLogFilePath: mockGetLogFilePath
+}))
+
 import { sendToClaudeDirectly, cancelClaudeDirect, getDirectWorkerCount, __resetDirectWorkersForTests } from '../../src/main/claudeService'
 
 beforeEach(() => {
@@ -53,6 +81,8 @@ beforeEach(() => {
   mockDbAll.mockReturnValue([])
   mockIsUserWatching.mockReturnValue(false)
   mockGetFocusedWindow.mockReturnValue({ isDestroyed: () => false })
+  mockGetLogFilePath.mockReturnValue('/tmp/test-2026-04-20.jsonl')
+  MockWorker.instances.length = 0
   __resetDirectWorkersForTests()
 })
 
@@ -165,5 +195,73 @@ describe('cancelClaudeDirect', () => {
     cancelClaudeDirect(20)
     expect(mockWorkerTerminate).toHaveBeenCalledOnce()
     expect(getDirectWorkerCount()).toBe(0)
+  })
+})
+
+describe('turn observability', () => {
+  let mockSendToRenderer: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    mockSendToRenderer = vi.fn()
+  })
+
+  it('generates turnId and passes it in worker postMessage', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+
+    const postCalls = MockWorker.instances[0]?.postMessage.mock.calls ?? []
+    const sendCall = postCalls.find((c: [{ type: string }]) => c[0]?.type === 'send')
+    expect(sendCall).toBeDefined()
+    expect(typeof sendCall![0].turnId).toBe('string')
+    expect(sendCall![0].turnId).toMatch(/^[0-9a-f-]{36}$/)
+    expect(typeof sendCall![0].logPath).toBe('string')
+  })
+
+  it('calls insertTurn when turn starts', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+    expect(mockInsertTurn).toHaveBeenCalledWith(
+      expect.objectContaining({
+        turn_type: 'human-claude',
+        status: 'running',
+        window_id: 1
+      })
+    )
+  })
+
+  it('calls updateTurn with success when turn-complete received without error', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+    const worker = MockWorker.instances[0]
+    worker.emit('message', { type: 'turn-complete', windowId: 1 })
+    expect(mockUpdateTurn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'success' })
+    )
+  })
+
+  it('calls updateTurn with error when turn-complete has error field', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+    const worker = MockWorker.instances[0]
+    worker.emit('message', { type: 'turn-complete', windowId: 1, error: 'docker failed' })
+    expect(mockUpdateTurn).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ status: 'error', error: 'docker failed' })
+    )
+  })
+
+  it('sends logs:turn-started to renderer', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+    expect(mockSendToRenderer).toHaveBeenCalledWith(
+      'logs:turn-started',
+      expect.objectContaining({ turn_type: 'human-claude', window_id: 1 })
+    )
+  })
+
+  it('sends logs:turn-updated to renderer on completion', async () => {
+    await sendToClaudeDirectly(1, 'container-1', 'hello', mockSendToRenderer)
+    const worker = MockWorker.instances[0]
+    worker.emit('message', { type: 'turn-complete', windowId: 1 })
+    expect(mockSendToRenderer).toHaveBeenCalledWith(
+      'logs:turn-updated',
+      expect.objectContaining({ status: 'success' })
+    )
   })
 })

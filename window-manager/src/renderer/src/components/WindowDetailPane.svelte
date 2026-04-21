@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
-  import type { ProjectRecord, WindowRecord, WindowDependencyContainer, ContainerStatus } from '../types'
+  import type { ProjectRecord, WindowRecord, WindowDependencyContainer, ContainerStatus, TurnRecord, LogEvent } from '../types'
   import type { ConversationSummary } from '../lib/conversationSummary'
   import { panelLayout, togglePanel } from '../lib/panelLayout'
 
@@ -64,10 +64,6 @@
     onDelete?.()
   }
 
-  onDestroy(() => {
-    if (armTimer) clearTimeout(armTimer)
-  })
-
   let branch = $state('…')
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let timer: ReturnType<typeof setInterval> | undefined
@@ -82,6 +78,15 @@
 
   let depStatuses = $state<Record<string, ContainerStatus>>({})
   let statusTimer: ReturnType<typeof setInterval> | undefined
+
+  let showTraces = $state(false)
+  let turns = $state<TurnRecord[]>([])
+  let expandedTurnId = $state<string | null>(null)
+  let turnEvents = $state<Map<string, LogEvent[]>>(new Map())
+
+  let offStarted: (() => void) | undefined
+  let offUpdated: (() => void) | undefined
+  let offEvent: (() => void) | undefined
 
   async function refreshDepStatuses(): Promise<void> {
     if (depContainers.length === 0) return
@@ -110,6 +115,27 @@
   }
 
   let parsedPorts: [string, string][] = $derived(parsePortsJson(win.ports))
+
+  async function loadTurns(): Promise<void> {
+    try {
+      turns = await window.api.listTurns({ windowId: win.id, limit: 20 })
+    } catch {
+      // keep last-known turns on error
+    }
+  }
+
+  async function expandTurn(turnId: string): Promise<void> {
+    if (expandedTurnId === turnId) { expandedTurnId = null; return }
+    expandedTurnId = turnId
+    if (!turnEvents.has(turnId)) {
+      try {
+        const events = await window.api.getTurnEvents(turnId)
+        turnEvents = new Map(turnEvents).set(turnId, events)
+      } catch {
+        expandedTurnId = null
+      }
+    }
+  }
 
   async function refreshBranch(): Promise<void> {
     if (isMulti) return
@@ -174,8 +200,25 @@
         if (depLogEl) depLogEl.scrollTop = depLogEl.scrollHeight
       }
     })
+    if (!alive) return
+    offStarted = window.api.onTurnStarted((t: unknown) => {
+      const turn = t as TurnRecord
+      if (turn.window_id === win.id) turns = [turn, ...turns]
+    })
+    offUpdated = window.api.onTurnUpdated((patch: unknown) => {
+      const p = patch as Partial<TurnRecord> & { id: string }
+      turns = turns.map(t => t.id === p.id ? { ...t, ...p } : t)
+    })
+    offEvent = window.api.onTurnEvent((e: unknown) => {
+      const ev = e as LogEvent
+      if (expandedTurnId === ev.turnId) {
+        const existing = turnEvents.get(ev.turnId) ?? []
+        turnEvents = new Map(turnEvents).set(ev.turnId, [...existing, ev])
+      }
+    })
   })
   onDestroy(() => {
+    if (armTimer) clearTimeout(armTimer)
     alive = false
     if (timer) clearInterval(timer)
     if (statusTimer) clearInterval(statusTimer)
@@ -183,6 +226,9 @@
     if (depLogsVisible && selectedDepContainerId) {
       window.api.stopDepLogs(selectedDepContainerId)
     }
+    offStarted?.()
+    offUpdated?.()
+    offEvent?.()
   })
 </script>
 
@@ -207,6 +253,14 @@
         onclick={toggleDepLogs}
       >Dep Logs</button>
     {/if}
+    <button
+      type="button"
+      class="toggle-btn"
+      class:active={showTraces}
+      aria-pressed={showTraces}
+      aria-label="Traces"
+      onclick={() => { showTraces = !showTraces; if (showTraces) loadTurns() }}
+    >Traces</button>
   </div>
   {#if depLogsVisible}
     <div class="dep-logs-section" role="region" aria-label="dep logs">
@@ -283,6 +337,44 @@
         {#each summary.bullets as b}<li>{b}</li>{/each}
       </ul>
     </div>
+  {/if}
+  {#if showTraces}
+  <div data-testid="traces-pane" class="traces-pane">
+    {#if turns.length === 0}
+      <p class="no-turns">No turns yet.</p>
+    {:else}
+      {#each turns as turn (turn.id)}
+        <div class="turn-row" role="button" tabindex="0"
+          onclick={() => expandTurn(turn.id)}
+          onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') expandTurn(turn.id) }}>
+          <span class="turn-type">{turn.turn_type === 'human-claude' ? 'human→claude' : 'shellephant→claude'}</span>
+          <span class="turn-status {turn.status}">{turn.status}</span>
+          {#if turn.duration_ms != null}
+            <span class="turn-duration">{turn.duration_ms}ms</span>
+          {:else}
+            <span class="turn-duration">—</span>
+          {/if}
+          <span class="turn-ts">{new Date(turn.started_at).toLocaleTimeString()}</span>
+        </div>
+        {#if expandedTurnId === turn.id}
+          <div class="turn-events">
+            {#each turnEvents.get(turn.id) ?? [] as ev (ev.ts + ev.eventType)}
+              <div class="event-row {ev.eventType.includes('error') ? 'error' : ''}">
+                <span class="ev-type">{ev.eventType}</span>
+                <span class="ev-ts">{new Date(ev.ts).toLocaleTimeString()}</span>
+                {#if ev.payload?.error}
+                  <span class="ev-error">{ev.payload.error}</span>
+                {/if}
+                {#if ev.payload?.durationMs != null}
+                  <span class="ev-dur">{ev.payload.durationMs}ms</span>
+                {/if}
+              </div>
+            {/each}
+          </div>
+        {/if}
+      {/each}
+    {/if}
+  </div>
   {/if}
 </footer>
 
@@ -460,5 +552,74 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .traces-pane {
+    border-top: 1px solid var(--border);
+    padding-top: 0.35rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .no-turns {
+    font-size: 0.75rem;
+    color: var(--fg-3);
+    margin: 0;
+  }
+  .turn-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    font-size: 0.75rem;
+    padding: 0.15rem 0.2rem;
+    cursor: pointer;
+    border-radius: 3px;
+  }
+  .turn-row:hover {
+    background: var(--bg-2);
+  }
+  .turn-row:focus-visible {
+    outline: 2px solid var(--accent, #7ed321);
+    outline-offset: -1px;
+  }
+  .turn-type {
+    font-family: var(--font-mono);
+    color: var(--fg-1);
+  }
+  .turn-status {
+    font-size: 0.72rem;
+    padding: 0 0.3rem;
+    border-radius: 3px;
+  }
+  .turn-status.success { color: var(--success, #4ade80); }
+  .turn-status.error   { color: var(--danger, #f87171); }
+  .turn-status.running { color: var(--warning, #facc15); }
+  .turn-duration {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--fg-2);
+  }
+  .turn-ts {
+    font-size: 0.7rem;
+    color: var(--fg-3);
+    margin-left: auto;
+  }
+  .turn-events {
+    padding-left: 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.05rem;
+  }
+  .event-row {
+    display: flex;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    color: var(--fg-2);
+  }
+  .event-row.error { color: var(--danger, #f87171); }
+  .ev-type { font-family: var(--font-mono); }
+  .ev-ts { color: var(--fg-3); }
+  .ev-error { color: var(--danger, #f87171); }
+  .ev-dur { font-family: var(--font-mono); color: var(--fg-2); }
 
 </style>
