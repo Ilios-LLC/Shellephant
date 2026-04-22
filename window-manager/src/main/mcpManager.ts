@@ -19,7 +19,7 @@ export type McpClient = {
 const playwrightMcpCli = path.resolve(require.resolve('@playwright/mcp'), '..', 'cli.js')
 
 export const DEFAULT_MCP_SERVERS: McpServerConfig[] = [
-  { command: 'node', args: [playwrightMcpCli] }
+  { command: 'node', args: [playwrightMcpCli, '--isolated'] }
 ]
 
 export async function createMcpClient(servers: McpServerConfig[]): Promise<McpClient | null> {
