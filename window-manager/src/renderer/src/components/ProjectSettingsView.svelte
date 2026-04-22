@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import type { ProjectRecord, PortMapping } from '../types'
+  import { parseEnvFile, serializeEnvFile } from '../lib/envFormat'
 
   interface EnvRow {
     id: number
@@ -29,6 +30,7 @@
   let portRows = $state<PortRow[]>([])
   let busy = $state(false)
   let error = $state('')
+  let fileInputEl = $state<HTMLInputElement | null>(null)
   let networks = $state<{ id: string; name: string }[]>([])
   let networksLoading = $state(false)
   let selectedNetwork = $state('')
@@ -120,6 +122,58 @@
     return out
   }
 
+  function handleImportClick(): void {
+    fileInputEl?.click()
+  }
+
+  function handleFileChange(e: Event): void {
+    const file = (e.target as HTMLInputElement).files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      try {
+        const text = ev.target?.result as string
+        const parsed = parseEnvFile(text)
+        const incoming = Object.entries(parsed).map(([key, value]) => ({
+          id: nextId++,
+          key,
+          value
+        }))
+        // Merge: replace existing keys, append new ones
+        const merged = [...rows]
+        for (const inc of incoming) {
+          const idx = merged.findIndex((r) => r.key === inc.key)
+          if (idx >= 0) {
+            merged[idx] = { ...merged[idx], value: inc.value }
+          } else {
+            merged.push(inc)
+          }
+        }
+        rows = merged
+      } catch (err) {
+        error = err instanceof Error ? err.message : String(err)
+      }
+      // Reset so same file can be re-imported
+      if (fileInputEl) fileInputEl.value = ''
+    }
+    reader.readAsText(file)
+  }
+
+  function handleExport(): void {
+    const vars: Record<string, string> = {}
+    for (const row of rows) {
+      if (row.key.trim()) vars[row.key.trim()] = row.value
+    }
+    const content = serializeEnvFile(vars)
+    const blob = new Blob([content], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${project.name}.env`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function save(): Promise<void> {
     if (busy) return
     busy = true
@@ -149,6 +203,14 @@
 
     <section class="section">
       <div class="section-title">Environment Variables</div>
+      <input
+        bind:this={fileInputEl}
+        type="file"
+        accept=".env,text/plain"
+        aria-label="import env file"
+        style="display:none"
+        onchange={handleFileChange}
+      />
       <div class="env-table">
         {#each rows as row, i (row.id)}
           <div class="env-row">
@@ -177,9 +239,17 @@
           </div>
         {/each}
       </div>
-      <button type="button" class="add-btn" onclick={addRow} disabled={busy}>
-        + Add Variable
-      </button>
+      <div class="env-actions">
+        <button type="button" class="add-btn" onclick={addRow} disabled={busy}>
+          + Add Variable
+        </button>
+        <button type="button" class="add-btn" onclick={handleImportClick} disabled={busy} aria-label="import .env">
+          ↑ Import .env
+        </button>
+        <button type="button" class="add-btn" onclick={handleExport} disabled={busy || rows.length === 0} aria-label="export .env">
+          ↓ Export .env
+        </button>
+      </div>
     </section>
 
     <section class="section">
@@ -366,8 +436,14 @@
     border-color: var(--danger);
   }
 
+  .env-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+    margin-top: 0.15rem;
+  }
+
   .add-btn {
-    align-self: flex-start;
     background: transparent;
     border: 1px solid var(--border);
     border-radius: 4px;
@@ -376,7 +452,6 @@
     font-size: 0.82rem;
     padding: 0.3rem 0.65rem;
     cursor: pointer;
-    margin-top: 0.15rem;
   }
 
   .add-btn:hover:not(:disabled) {

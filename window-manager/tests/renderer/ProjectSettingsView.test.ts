@@ -216,6 +216,64 @@ describe('ProjectSettingsView', () => {
     })
   })
 
+  describe('Import / Export .env', () => {
+    it('renders Import .env and Export .env buttons', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /import \.env/i })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /export \.env/i })).toBeInTheDocument()
+      })
+    })
+
+    it('Export .env button is disabled when no rows exist', async () => {
+      render(ProjectSettingsView, baseProps())
+      await waitFor(() => {
+        const btn = screen.getByRole('button', { name: /export \.env/i }) as HTMLButtonElement
+        expect(btn.disabled).toBe(true)
+      })
+    })
+
+    it('Export .env button is enabled when rows exist', async () => {
+      mockGetProject.mockResolvedValue(projectWithVars)
+      render(ProjectSettingsView, baseProps({ project: projectWithVars }))
+      await waitFor(() => {
+        const btn = screen.getByRole('button', { name: /export \.env/i }) as HTMLButtonElement
+        expect(btn.disabled).toBe(false)
+      })
+    })
+
+    it('importing a .env file merges new keys and replaces existing ones', async () => {
+      // Start with FOO=bar, BAZ=qux
+      mockGetProject.mockResolvedValue(projectWithVars)
+      render(ProjectSettingsView, baseProps({ project: projectWithVars }))
+      await waitFor(() => screen.getByDisplayValue('FOO'))
+
+      // Simulate file input change with a .env file that updates FOO and adds NEW
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileContent = 'FOO=updated\nNEW=value\n'
+      const file = new File([fileContent], '.env', { type: 'text/plain' })
+
+      // Mock FileReader as a class (vi.stubGlobal requires constructor-compatible value)
+      class MockFileReader {
+        onload: ((ev: ProgressEvent) => void) | null = null
+        readAsText(_f: File): void {
+          this.onload?.({ target: { result: fileContent } } as unknown as ProgressEvent)
+        }
+      }
+      vi.stubGlobal('FileReader', MockFileReader)
+
+      await fireEvent.change(fileInput, { target: { files: [file] } })
+
+      await waitFor(() => {
+        expect(screen.getByDisplayValue('updated')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('NEW')).toBeInTheDocument()
+        expect(screen.getByDisplayValue('BAZ')).toBeInTheDocument()
+      })
+
+      vi.unstubAllGlobals()
+    })
+  })
+
   describe('Default Bridge Network section', () => {
     it('renders the network section heading', async () => {
       render(ProjectSettingsView, baseProps())
