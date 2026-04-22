@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  build:base:
+    desc: Build the base cc image from files/Dockerfile
+    cmds:
+      - docker build -t cc -f files/Dockerfile files
+
+  build:local:
+    desc: Layer files/Dockerfile.local on top of cc (requires build:base first)
+    preconditions:
+      - sh: test -f files/Dockerfile.local
+        msg: files/Dockerfile.local not found. Create it (see files/Dockerfile.local template).
+    cmds:
+      - docker build -t cc -f files/Dockerfile.local files
+
+  build:
+    desc: Build base, then layer local if Dockerfile.local exists
+    cmds:
+      - task: build:base
+      - cmd: '[ -f files/Dockerfile.local ] && task build:local || echo "No files/Dockerfile.local; skipping local layer."'

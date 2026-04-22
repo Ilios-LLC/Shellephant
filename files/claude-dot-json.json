@@ -9,6 +9,10 @@
   "mcpServers": {
     "playwright": {
       "command": "/usr/local/share/npm-global/bin/playwright-mcp"
+    },
+    "tailwind-plus": {
+      "command": "npx",
+      "args": ["mcp-for-tailwind"]
     }
   },
   "projects": {
@@ -16,7 +20,7 @@
       "hasTrustDialogAccepted": true,
       "hasCompletedProjectOnboarding": true,
       "projectOnboardingSeenCount": 1,
-      "enabledMcpjsonServers": ["playwright"],
+      "enabledMcpjsonServers": ["playwright", "tailwind-plus"],
       "enableAllProjectMcpServers": true
     }
   }
