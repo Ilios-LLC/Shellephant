@@ -2,6 +2,7 @@
   import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, ProjectGroupRecord, TokenStatus, WindowRecord } from './types'
   import { waitingWindows, type WaitingEntry } from './lib/waitingWindows'
+  import { chatFocusSignal } from './lib/chatFocusSignal'
   import { pushToast } from './lib/toasts'
   import Sidebar from './components/Sidebar.svelte'
   import MainPane, { type MainPaneView } from './components/MainPane.svelte'
@@ -184,6 +185,7 @@
     view = 'default'
     windows = await window.api.listWindows(entry.projectId)
     selectedWindowId = entry.windowId
+    chatFocusSignal.set(entry.windowId)
   }
 
   function handleGroupSelect(id: number | 'ungrouped'): void {

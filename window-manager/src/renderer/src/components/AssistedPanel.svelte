@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import type { PermissionMode } from '../../../shared/permissionMode'
+  import { chatFocusSignal } from '../lib/chatFocusSignal'
 
   interface Props {
     windowId: number
@@ -286,7 +287,15 @@
   }
 
   let messagesEl = $state<HTMLDivElement | null>(null)
+  let textareaEl = $state<HTMLTextAreaElement | null>(null)
   let stickToBottom = $state(true)
+
+  $effect(() => {
+    if ($chatFocusSignal === windowId && textareaEl) {
+      chatFocusSignal.set(null)
+      textareaEl.focus()
+    }
+  })
   const NEAR_BOTTOM_PX = 40
 
   function onMessagesScroll(): void {
@@ -399,6 +408,7 @@
   <div class="input-row">
     <textarea
       placeholder={currentRecipient === 'claude' ? 'Ask Claude…' : 'Ask Shellephant…'}
+      bind:this={textareaEl}
       bind:value={input}
       disabled={running}
       onkeydown={handleKey}
