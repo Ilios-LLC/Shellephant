@@ -42,6 +42,7 @@
   let commitOpen = $state(false)
   let commitBusy = $state(false)
   let pushBusy = $state(false)
+  let pullMainBusy = $state(false)
   let deleteBusy = $state(false)
   let gitStatus = $state<{ isDirty: boolean; added: number; deleted: number } | null>(null)
   let commitProjectId = $state(null as number | null)
@@ -144,6 +145,48 @@
     } catch (err) {
       pushToast({ level: 'error', title: 'Delete failed', body: (err as Error).message })
       deleteBusy = false
+    }
+  }
+
+  async function runPullMain(): Promise<void> {
+    pullMainBusy = true
+    try {
+      const res = await window.api.pullMain(win.id)
+      if (res.ok) {
+        pushToast({ level: 'success', title: 'Pulled main', body: res.stdout || undefined })
+      } else {
+        const hasConflicts = /CONFLICT/i.test(res.stdout)
+        pushToast({
+          level: 'error',
+          title: hasConflicts ? 'Merge conflicts — fix in Claude' : 'Pull main failed',
+          body: res.stdout || undefined
+        })
+      }
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Pull main error', body: (err as Error).message })
+    } finally {
+      pullMainBusy = false
+    }
+  }
+
+  async function runPullMainProject(projectId: number, _clonePath: string): Promise<void> {
+    pullMainBusy = true
+    try {
+      const res = await window.api.pullMainProject(win.id, projectId)
+      if (res.ok) {
+        pushToast({ level: 'success', title: 'Pulled main', body: res.stdout || undefined })
+      } else {
+        const hasConflicts = /CONFLICT/i.test(res.stdout)
+        pushToast({
+          level: 'error',
+          title: hasConflicts ? 'Merge conflicts — fix in Claude' : 'Pull main failed',
+          body: res.stdout || undefined
+        })
+      }
+    } catch (err) {
+      pushToast({ level: 'error', title: 'Pull main error', body: (err as Error).message })
+    } finally {
+      pullMainBusy = false
     }
   }
 
@@ -267,11 +310,13 @@
     onPush={runPush}
     onDelete={runDelete}
     onGitStatus={(s) => (gitStatus = s)}
-    commitDisabled={commitBusy || pushBusy || deleteBusy || (gitStatus !== null && !gitStatus.isDirty)}
-    pushDisabled={commitBusy || pushBusy || deleteBusy}
+    commitDisabled={commitBusy || pushBusy || pullMainBusy || deleteBusy || (gitStatus !== null && !gitStatus.isDirty)}
+    pushDisabled={commitBusy || pushBusy || pullMainBusy || deleteBusy}
     deleteDisabled={deleteBusy}
     onCommitProject={(projectId, _clonePath) => { commitProjectId = projectId; commitOpen = true }}
     onPushProject={runPushProject}
+    onPullMain={runPullMain}
+    onPullMainProject={runPullMainProject}
   />
   {#if commitOpen}
     <CommitModal

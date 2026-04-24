@@ -135,10 +135,11 @@ Exports: `createWindow`, `deleteWindow`, `listWindows`, `reconcileWindows`, `get
 - Tests: `window-manager/tests/main/windowService.test.ts` (53 tests, original), `window-manager/tests/main/windowServiceDeps.test.ts` (4 tests, dep-specific), `window-manager/tests/main/windowServiceBranch.test.ts` (4 tests, branchOverrides-specific).
 
 ### window-manager/src/main/gitOps.ts
-Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `listRemoteBranches`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`.
+Exports: `listContainerDir`, `readContainerFile`, `writeFileInContainer`, `execInContainer`, `remoteBranchExists`, `listRemoteBranches`, `cloneInContainer`, `checkoutSlug`, `getCurrentBranch`, `stageAndCommit`, `push`, `pullMain`.
 - `readContainerFile(container, filePath)` — runs `cat` via `execInContainer`, returns stdout string.
 - `writeFileInContainer(container, filePath, content)` — runs `tee` with `AttachStdin: true, Tty: false`, pipes content via `hijack: true` stdin stream.
 - `listRemoteBranches(sshUrl, pat)` — runs `git ls-remote --symref` on host, returns `{ defaultBranch, branches }` (sorted, default first). Scrubs PAT from errors. Used by `git:list-branches` IPC handler.
+- `pullMain(container, clonePath)` — runs `git fetch origin` then `git merge origin/main --no-edit`; short-circuits on fetch failure. Returns `GitResult`; ok=false + conflict output when merge conflicts exist so Claude can fix them.
 - Tests live in `window-manager/tests/main/gitOps.test.ts`.
 
 ### window-manager/src/renderer/src/components/FileTree.svelte
@@ -206,14 +207,15 @@ Thin vertical drag handle (4px) between adjacent visible panels in TerminalHost.
 
 ### window-manager/src/renderer/src/components/WindowDetailPane.svelte
 Footer pane showing window info, panel toggle buttons, and per-window traces. Svelte 5 runes mode.
-- Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`
+- Props: `win: WindowRecord`, `project: ProjectRecord`, `onCommit`, `onPush`, `onDelete`, `commitDisabled`, `pushDisabled`, `deleteDisabled`, `summary?: ConversationSummary`, `onGitStatus`, `onPullMain?`, `onPullMainProject?`
 - Toggle row: Claude/Terminal/Editor buttons derived from `$panelLayout` store; `aria-pressed` reflects visibility; `disabled` when it is the sole visible panel; `onclick` calls `togglePanel(id)`. Claude button is filtered out for assisted windows (`win.window_type === 'assisted'`).
 - Traces button: toggles `showTraces` state; on show, calls `window.api.listTurns({ windowId, limit: 20 })`. Renders `data-testid="traces-pane"` with turn rows (type, status, duration, timestamp). Click turn row calls `expandTurn(turnId)` which loads events via `window.api.getTurnEvents`.
 - Real-time subscriptions via `window.api.onTurnStarted`, `onTurnUpdated`, `onTurnEvent`; cleaned up via returned unsubscribe fns in `onMount` return.
 - `panelVisible` derived object and `visibleCount` derived count computed from `$panelLayout.panels`.
 - Polls `window.api.getCurrentBranch` and `window.api.getGitStatus` on mount + every 5s.
 - Two-click delete pattern (arms 3s timeout, second click fires `onDelete`).
-- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (44 tests).
+- `onPullMain?` / `onPullMainProject?` — optional props; when provided, renders "Pull Main" button (single-project in actions row; per-project in multi-project rows). Calls `git fetch origin && git merge origin/main --no-edit` to surface conflicts for Claude to fix.
+- Tests live in `window-manager/tests/renderer/WindowDetailPane.test.ts` (49 tests).
 
 ### window-manager/src/renderer/src/components/TerminalHost.svelte
 Top-level window component hosting claude/terminal/editor panels in a split-pane layout. Svelte 5 runes mode.
@@ -228,7 +230,8 @@ Top-level window component hosting claude/terminal/editor panels in a split-pane
 - `onTerminalData` and `onTerminalSummary` listeners always registered (for both window types).
 - `onDestroy` only calls `closeTerminal(... 'claude')` for manual windows.
 - xterm options: `scrollback: 5000`, `scrollSensitivity: 3`, `fastScrollSensitivity: 10`, `fastScrollModifier: 'shift'`. `.terminal-inner` has no padding — padding on the xterm container causes FitAddon to miscalculate dimensions (measures padded clientHeight but xterm renders in content box), clipping rows.
-- Contains `WindowDetailPane` (footer), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
+- Contains `WindowDetailPane` (footer with Commit/Push/Pull Main buttons), `CommitModal` (conditional), `EditorPane` (rendered inside editor panel).
+- `runPullMain` / `runPullMainProject` — fetch+merge origin/main; toasts success or conflict warning ("Merge conflicts — fix in Claude") based on output.
 - Tests live in `window-manager/tests/renderer/TerminalHost.test.ts` (24 tests). Mocks `panelLayout` store via `writable`, `ResizeHandle.svelte` and `AssistedPanel.svelte` via stubs.
 
 ### window-manager/src/renderer/src/components/AssistedPanel.svelte

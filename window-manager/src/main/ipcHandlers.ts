@@ -32,7 +32,7 @@ import {
 import { getDb } from './db'
 import { buildPrUrl } from './gitUrl'
 import { getDocker, listBridgeNetworks } from './docker'
-import { getCurrentBranch, stageAndCommit, push as gitPush, listContainerDir, readContainerFile, writeFileInContainer, createFileInContainer, createDirInContainer, deleteInContainer, renameInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
+import { getCurrentBranch, stageAndCommit, push as gitPush, pullMain as gitPullMain, listContainerDir, readContainerFile, writeFileInContainer, createFileInContainer, createDirInContainer, deleteInContainer, renameInContainer, getGitStatus, execInContainer, listRemoteBranches } from './gitOps'
 import { getIdentity } from './githubIdentity'
 import { scrubPat } from './scrub'
 import {
@@ -223,6 +223,16 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('git:status-project', async (_, windowId: number, projectId: number) => {
     const ctx = resolveWindowProjectGitContext(windowId, projectId)
     return getGitStatus(ctx.container, ctx.clonePath)
+  })
+
+  ipcMain.handle('git:pull-main', async (_, windowId: number) => {
+    const ctx = resolveWindowGitContext(windowId)
+    return gitPullMain(ctx.container, ctx.clonePath)
+  })
+
+  ipcMain.handle('git:pull-main-project', async (_, windowId: number, projectId: number) => {
+    const ctx = resolveWindowProjectGitContext(windowId, projectId)
+    return gitPullMain(ctx.container, ctx.clonePath)
   })
 
   ipcMain.handle('git:list-branches', async (_, gitUrl: string) => {

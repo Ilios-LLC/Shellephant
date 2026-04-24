@@ -11,7 +11,8 @@ import {
   cloneInContainer,
   checkoutSlug,
   getCurrentBranch,
-  listRemoteBranches
+  listRemoteBranches,
+  pullMain
 } from '../../src/main/gitOps'
 
 function makeContainer() {
@@ -694,6 +695,67 @@ describe('writeFileInContainer', () => {
     // @ts-expect-error mock
     await expect(writeFileInContainer(container, '/workspace/r/file.ts', 'content'))
       .rejects.toThrow(/writeFileInContainer failed/)
+  })
+})
+
+describe('pullMain', () => {
+  function makeTwoCallContainer(
+    fetchExitCode: number,
+    mergeExitCode: number,
+    mergeStdout = ''
+  ) {
+    let callCount = 0
+    const responses = [
+      { exitCode: fetchExitCode, stdout: '' },
+      { exitCode: mergeExitCode, stdout: mergeStdout }
+    ]
+    const exec = vi.fn().mockImplementation(async () => {
+      const resp = responses[callCount++] ?? { exitCode: 0, stdout: '' }
+      return {
+        start: vi.fn().mockResolvedValue({
+          on(event: string, cb: (data?: Buffer) => void) {
+            if (event === 'data' && resp.stdout) setImmediate(() => cb(Buffer.from(resp.stdout)))
+            if (event === 'end') setImmediate(() => cb())
+            return this
+          }
+        }),
+        inspect: vi.fn().mockResolvedValue({ ExitCode: resp.exitCode })
+      }
+    })
+    return { id: 'c', exec }
+  }
+
+  it('issues git fetch origin then git merge origin/main --no-edit', async () => {
+    const container = makeTwoCallContainer(0, 0)
+    // @ts-expect-error mock
+    await pullMain(container, '/workspace/r')
+    const cmds = container.exec.mock.calls.map((c: [{ Cmd: string[] }]) => c[0].Cmd)
+    expect(cmds[0]).toEqual(['git', '-C', '/workspace/r', 'fetch', 'origin'])
+    expect(cmds[1]).toEqual(['git', '-C', '/workspace/r', 'merge', 'origin/main', '--no-edit'])
+  })
+
+  it('returns ok=true when both commands succeed', async () => {
+    const container = makeTwoCallContainer(0, 0)
+    // @ts-expect-error mock
+    const res = await pullMain(container, '/workspace/r')
+    expect(res.ok).toBe(true)
+  })
+
+  it('short-circuits and returns fetch result when fetch fails', async () => {
+    const container = makeTwoCallContainer(1, 0)
+    // @ts-expect-error mock
+    const res = await pullMain(container, '/workspace/r')
+    expect(res.ok).toBe(false)
+    expect(container.exec).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns ok=false with conflict output when merge has conflicts', async () => {
+    const conflictOutput = 'CONFLICT (content): Merge conflict in src/app.ts\nAutomatic merge failed'
+    const container = makeTwoCallContainer(0, 1, conflictOutput)
+    // @ts-expect-error mock
+    const res = await pullMain(container, '/workspace/r')
+    expect(res.ok).toBe(false)
+    expect(res.stdout).toMatch(/CONFLICT/)
   })
 })
 
