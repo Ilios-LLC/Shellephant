@@ -227,7 +227,11 @@
   // Keep main in sync with the container the user is currently viewing, so
   // the waiting-notification logic can suppress OS alerts for the focused window.
   $effect(() => {
-    window.api.setActiveContainer(selectedWindow?.container_id ?? null)
+    const containerId = selectedWindow?.container_id ?? null
+    window.api.setActiveContainer(containerId)
+    if (containerId) {
+      waitingWindows.remove(containerId)
+    }
   })
 </script>
 
