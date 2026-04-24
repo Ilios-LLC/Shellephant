@@ -487,6 +487,62 @@ describe('WindowDetailPane', () => {
     })
   })
 
+  describe('Pull Main button', () => {
+    it('not rendered when onPullMain prop is absent', () => {
+      getCurrentBranch.mockResolvedValue('x')
+      render(WindowDetailPane, { props: { win, project } })
+      expect(screen.queryByRole('button', { name: /pull main/i })).not.toBeInTheDocument()
+    })
+
+    it('rendered when onPullMain prop is provided', () => {
+      getCurrentBranch.mockResolvedValue('x')
+      render(WindowDetailPane, { props: { win, project, onPullMain: vi.fn() } })
+      expect(screen.getByRole('button', { name: /pull main/i })).toBeInTheDocument()
+    })
+
+    it('calls onPullMain when clicked', async () => {
+      getCurrentBranch.mockResolvedValue('x')
+      const onPullMain = vi.fn()
+      render(WindowDetailPane, { props: { win, project, onPullMain } })
+      await fireEvent.click(screen.getByRole('button', { name: /pull main/i }))
+      expect(onPullMain).toHaveBeenCalled()
+    })
+  })
+
+  describe('Pull Main button (multi-project)', () => {
+    const multiWin = {
+      id: 2,
+      name: 'Multi Window',
+      project_id: null,
+      container_id: 'multi123',
+      created_at: '2026-04-14T00:00:00Z',
+      status: 'running' as const,
+      window_type: 'manual' as const,
+      projects: [
+        { id: 10, window_id: 2, project_id: 1, clone_path: '/workspace/repo-a', project_name: 'Repo A' },
+        { id: 11, window_id: 2, project_id: 2, clone_path: '/workspace/repo-b', project_name: 'Repo B' }
+      ]
+    }
+
+    it('rendered per row when onPullMainProject prop provided', async () => {
+      getCurrentBranch.mockResolvedValue('x')
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onPullMainProject: vi.fn() } })
+      await tick()
+      const row = document.querySelector('.project-row') as HTMLElement
+      expect(within(row).getByRole('button', { name: /pull main/i })).toBeInTheDocument()
+    })
+
+    it('calls onPullMainProject with projectId and clonePath', async () => {
+      getCurrentBranch.mockResolvedValue('x')
+      const onPullMainProject = vi.fn()
+      render(WindowDetailPane, { props: { win: multiWin, project: null, onPullMainProject } })
+      await tick()
+      const row = document.querySelector('.project-row') as HTMLElement
+      await fireEvent.click(within(row).getByRole('button', { name: /pull main/i }))
+      expect(onPullMainProject).toHaveBeenCalledWith(1, '/workspace/repo-a')
+    })
+  })
+
   it('always shows Claude toggle button regardless of window_type', () => {
     render(WindowDetailPane, { props: { win, project } })
     expect(screen.getByRole('button', { name: /^claude$/i })).toBeDefined()

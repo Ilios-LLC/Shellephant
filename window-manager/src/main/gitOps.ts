@@ -357,6 +357,15 @@ export async function stageAndCommit(
   return execInContainer(container, commitArgs)
 }
 
+export async function pullMain(
+  container: Container,
+  clonePath: string
+): Promise<GitResult> {
+  const fetchResult = await execInContainer(container, ['git', '-C', clonePath, 'fetch', 'origin'])
+  if (!fetchResult.ok) return fetchResult
+  return execInContainer(container, ['git', '-C', clonePath, 'merge', 'origin/main', '--no-edit'])
+}
+
 export async function push(
   container: Container,
   clonePath: string,

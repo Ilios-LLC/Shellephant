@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.invoke('git:commit-project', windowId, projectId, payload),
   pushProject: (windowId: number, projectId: number) =>
     ipcRenderer.invoke('git:push-project', windowId, projectId),
+  pullMain: (windowId: number) =>
+    ipcRenderer.invoke('git:pull-main', windowId),
+  pullMainProject: (windowId: number, projectId: number) =>
+    ipcRenderer.invoke('git:pull-main-project', windowId, projectId),
 
   // Settings API
   getGitHubPatStatus: () => ipcRenderer.invoke('settings:get-github-pat-status'),

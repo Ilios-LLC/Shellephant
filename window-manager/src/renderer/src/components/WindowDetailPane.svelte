@@ -17,6 +17,8 @@
     onGitStatus?: (status: { isDirty: boolean; added: number; deleted: number } | null) => void
     onCommitProject?: (projectId: number, clonePath: string) => void
     onPushProject?: (projectId: number, clonePath: string) => void
+    onPullMain?: () => void
+    onPullMainProject?: (projectId: number, clonePath: string) => void
   }
 
   let {
@@ -31,7 +33,9 @@
     summary = undefined,
     onGitStatus = () => {},
     onCommitProject = undefined,
-    onPushProject = undefined
+    onPushProject = undefined,
+    onPullMain = undefined,
+    onPullMainProject = undefined
   }: Props = $props()
 
   const isMulti = $derived(win.project_id === null && win.projects.length > 1)
@@ -309,6 +313,9 @@
       {#if !isMulti}
         <button type="button" disabled={commitDisabled} onclick={onCommit}>Commit</button>
         <button type="button" disabled={pushDisabled} onclick={onPush}>Push</button>
+        {#if onPullMain}
+          <button type="button" onclick={onPullMain} aria-label="Pull Main">Pull Main</button>
+        {/if}
       {/if}
       {#if onDelete}
         <button
@@ -327,6 +334,9 @@
         <span class="project-row-label">{wp.project_name ?? wp.clone_path.split('/').pop()}</span>
         <button type="button" disabled={commitDisabled} onclick={() => onCommitProject?.(wp.project_id, wp.clone_path)}>Commit</button>
         <button type="button" disabled={pushDisabled} onclick={() => onPushProject?.(wp.project_id, wp.clone_path)}>Push</button>
+        {#if onPullMainProject}
+          <button type="button" onclick={() => onPullMainProject?.(wp.project_id, wp.clone_path)} aria-label="Pull Main">Pull Main</button>
+        {/if}
       </div>
     {/each}
   {/if}
