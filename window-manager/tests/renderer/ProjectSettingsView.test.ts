@@ -242,35 +242,33 @@ describe('ProjectSettingsView', () => {
       })
     })
 
-    it('importing a .env file merges new keys and replaces existing ones', async () => {
-      // Start with FOO=bar, BAZ=qux
+    it('pasting .env contents merges new keys and replaces existing ones', async () => {
       mockGetProject.mockResolvedValue(projectWithVars)
       render(ProjectSettingsView, baseProps({ project: projectWithVars }))
       await waitFor(() => screen.getByDisplayValue('FOO'))
 
-      // Simulate file input change with a .env file that updates FOO and adds NEW
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
-      const fileContent = 'FOO=updated\nNEW=value\n'
-      const file = new File([fileContent], '.env', { type: 'text/plain' })
-
-      // Mock FileReader as a class (vi.stubGlobal requires constructor-compatible value)
-      class MockFileReader {
-        onload: ((ev: ProgressEvent) => void) | null = null
-        readAsText(_f: File): void {
-          this.onload?.({ target: { result: fileContent } } as unknown as ProgressEvent)
-        }
-      }
-      vi.stubGlobal('FileReader', MockFileReader)
-
-      await fireEvent.change(fileInput, { target: { files: [file] } })
+      await fireEvent.click(screen.getByRole('button', { name: /import \.env/i }))
+      const textarea = await screen.findByLabelText(/import env textarea/i)
+      await fireEvent.input(textarea, { target: { value: 'FOO=updated\nNEW=value\n' } })
+      await fireEvent.click(screen.getByRole('button', { name: /^apply$/i }))
 
       await waitFor(() => {
         expect(screen.getByDisplayValue('updated')).toBeInTheDocument()
         expect(screen.getByDisplayValue('NEW')).toBeInTheDocument()
         expect(screen.getByDisplayValue('BAZ')).toBeInTheDocument()
       })
+    })
 
-      vi.unstubAllGlobals()
+    it('export .env reveals a readonly textarea with serialized contents', async () => {
+      mockGetProject.mockResolvedValue(projectWithVars)
+      render(ProjectSettingsView, baseProps({ project: projectWithVars }))
+      await waitFor(() => screen.getByDisplayValue('FOO'))
+
+      await fireEvent.click(screen.getByRole('button', { name: /export \.env/i }))
+      const textarea = (await screen.findByLabelText(/export env textarea/i)) as HTMLTextAreaElement
+      expect(textarea.readOnly).toBe(true)
+      expect(textarea.value).toContain('FOO=bar')
+      expect(textarea.value).toContain('BAZ=qux')
     })
   })
 

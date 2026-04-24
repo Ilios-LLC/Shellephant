@@ -30,10 +30,13 @@
   let portRows = $state<PortRow[]>([])
   let busy = $state(false)
   let error = $state('')
-  let fileInputEl = $state<HTMLInputElement | null>(null)
   let networks = $state<{ id: string; name: string }[]>([])
   let networksLoading = $state(false)
   let selectedNetwork = $state('')
+  let importOpen = $state(false)
+  let importText = $state('')
+  let importError = $state('')
+  let exportOpen = $state(false)
 
   async function loadNetworks(): Promise<void> {
     networksLoading = true
@@ -122,57 +125,50 @@
     return out
   }
 
-  function handleImportClick(): void {
-    fileInputEl?.click()
+  function toggleImport(): void {
+    importOpen = !importOpen
+    if (importOpen) exportOpen = false
+    importError = ''
   }
 
-  function handleFileChange(e: Event): void {
-    const file = (e.target as HTMLInputElement).files?.[0]
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      try {
-        const text = ev.target?.result as string
-        const parsed = parseEnvFile(text)
-        const incoming = Object.entries(parsed).map(([key, value]) => ({
-          id: nextId++,
-          key,
-          value
-        }))
-        // Merge: replace existing keys, append new ones
-        const merged = [...rows]
-        for (const inc of incoming) {
-          const idx = merged.findIndex((r) => r.key === inc.key)
-          if (idx >= 0) {
-            merged[idx] = { ...merged[idx], value: inc.value }
-          } else {
-            merged.push(inc)
-          }
+  function toggleExport(): void {
+    exportOpen = !exportOpen
+    if (exportOpen) importOpen = false
+  }
+
+  function applyImport(): void {
+    importError = ''
+    try {
+      const parsed = parseEnvFile(importText)
+      const incoming = Object.entries(parsed).map(([key, value]) => ({
+        id: nextId++,
+        key,
+        value
+      }))
+      const merged = [...rows]
+      for (const inc of incoming) {
+        const idx = merged.findIndex((r) => r.key === inc.key)
+        if (idx >= 0) {
+          merged[idx] = { ...merged[idx], value: inc.value }
+        } else {
+          merged.push(inc)
         }
-        rows = merged
-      } catch (err) {
-        error = err instanceof Error ? err.message : String(err)
       }
-      // Reset so same file can be re-imported
-      if (fileInputEl) fileInputEl.value = ''
+      rows = merged
+      importText = ''
+      importOpen = false
+    } catch (err) {
+      importError = err instanceof Error ? err.message : String(err)
     }
-    reader.readAsText(file)
   }
 
-  function handleExport(): void {
+  let exportContent = $derived.by(() => {
     const vars: Record<string, string> = {}
     for (const row of rows) {
       if (row.key.trim()) vars[row.key.trim()] = row.value
     }
-    const content = serializeEnvFile(vars)
-    const blob = new Blob([content], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${project.name}.env`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
+    return serializeEnvFile(vars)
+  })
 
   async function save(): Promise<void> {
     if (busy) return
@@ -203,14 +199,6 @@
 
     <section class="section">
       <div class="section-title">Environment Variables</div>
-      <input
-        bind:this={fileInputEl}
-        type="file"
-        accept=".env,text/plain"
-        aria-label="import env file"
-        style="display:none"
-        onchange={handleFileChange}
-      />
       <div class="env-table">
         {#each rows as row, i (row.id)}
           <div class="env-row">
@@ -243,13 +231,51 @@
         <button type="button" class="add-btn" onclick={addRow} disabled={busy}>
           + Add Variable
         </button>
-        <button type="button" class="add-btn" onclick={handleImportClick} disabled={busy} aria-label="import .env">
+        <button type="button" class="add-btn" onclick={toggleImport} disabled={busy} aria-label="import .env">
           ↑ Import .env
         </button>
-        <button type="button" class="add-btn" onclick={handleExport} disabled={busy || rows.length === 0} aria-label="export .env">
+        <button type="button" class="add-btn" onclick={toggleExport} disabled={busy || rows.length === 0} aria-label="export .env">
           ↓ Export .env
         </button>
       </div>
+
+      {#if importOpen}
+        <div class="paste-box">
+          <label for="import-env-textarea" class="hint">Paste .env contents and click Apply</label>
+          <textarea
+            id="import-env-textarea"
+            aria-label="import env textarea"
+            bind:value={importText}
+            placeholder={'KEY=value\nANOTHER=thing'}
+            rows="6"
+            disabled={busy}
+          ></textarea>
+          {#if importError}
+            <p class="error">{importError}</p>
+          {/if}
+          <div class="env-actions">
+            <button type="button" class="add-btn" onclick={applyImport} disabled={busy || !importText.trim()}>
+              Apply
+            </button>
+            <button type="button" class="add-btn" onclick={toggleImport} disabled={busy}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      {/if}
+
+      {#if exportOpen}
+        <div class="paste-box">
+          <label for="export-env-textarea" class="hint">Copy the contents below</label>
+          <textarea
+            id="export-env-textarea"
+            aria-label="export env textarea"
+            readonly
+            rows="6"
+            value={exportContent}
+          ></textarea>
+        </div>
+      {/if}
     </section>
 
     <section class="section">
@@ -463,6 +489,30 @@
     font-size: 0.78rem;
     color: var(--danger);
     margin: 0;
+  }
+
+  .paste-box {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    margin-top: 0.35rem;
+  }
+
+  .paste-box textarea {
+    width: 100%;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    color: var(--fg-0);
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+    padding: 0.5rem 0.6rem;
+    outline: none;
+    resize: vertical;
+  }
+
+  .paste-box textarea:focus {
+    border-color: var(--accent);
   }
 
   .actions {
