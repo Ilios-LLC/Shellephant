@@ -62,6 +62,18 @@ RUN GOBIN=/usr/local/bin go install github.com/go-task/task/v3/cmd/task@latest &
 # Install step CLI (step-ca cert inspection for mTLS dev stack)
 COPY --from=step-cli /usr/local/bin/step /usr/local/bin/step
 
+# Install AWS CLI v2
+RUN ARCH=$(dpkg --print-architecture) && \
+    case "$ARCH" in \
+      amd64) AWSARCH=x86_64 ;; \
+      arm64) AWSARCH=aarch64 ;; \
+      *) echo "unsupported arch $ARCH" && exit 1 ;; \
+    esac && \
+    wget -q "https://awscli.amazonaws.com/awscli-exe-linux-${AWSARCH}.zip" -O /tmp/awscliv2.zip && \
+    unzip -q /tmp/awscliv2.zip -d /tmp && \
+    /tmp/aws/install && \
+    rm -rf /tmp/awscliv2.zip /tmp/aws
+
 # Install OpenBao CLI (transit engine for envelope encryption — replaces AWS KMS)
 ARG OPENBAO_VERSION=2.1.1
 RUN ARCH=$(dpkg --print-architecture) && \
