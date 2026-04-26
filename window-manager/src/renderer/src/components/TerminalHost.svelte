@@ -89,6 +89,14 @@
     }, { passive: false })
   }
 
+  function attachTerminalScrollInterceptor(): void {
+    terminalEl.addEventListener('wheel', (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      term?.scrollLines(e.deltaY > 0 ? 3 : -3)
+    }, { passive: false })
+  }
+
   function reinitClaudeTerminal(): void {
     claudeResizeObserver?.disconnect()
     claudeResizeObserver = undefined
@@ -119,6 +127,7 @@
     term.loadAddon(fitAddon)
     term.loadAddon(new WebLinksAddon())
     term.open(terminalEl)
+    attachTerminalScrollInterceptor()
     fitAddon.fit()
     term.focus()
     resizeObserver = new ResizeObserver(() => fitAddon?.fit())
