@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte'
   import type { ProjectRecord, ProjectGroupRecord, TokenStatus, WindowRecord } from './types'
-  import { waitingWindows, type WaitingEntry } from './lib/waitingWindows'
+  import { waitingWindows } from './lib/waitingWindows'
   import { chatFocusSignal } from './lib/chatFocusSignal'
   import { pushToast } from './lib/toasts'
   import Sidebar from './components/Sidebar.svelte'
@@ -178,14 +178,15 @@
     if (selectedWindowId === id) selectedWindowId = null
   }
 
-  async function handleWaitingWindowSelect(entry: WaitingEntry): Promise<void> {
-    waitingWindows.remove(entry.containerId)
-    selectedProjectId = entry.projectId
+  async function handleSidebarWindowSelect(win: WindowRecord): Promise<void> {
+    const projectId = win.project_id ?? win.projects[0]?.project_id ?? null
+    waitingWindows.remove(win.container_id)
+    selectedProjectId = projectId
     selectedWindowId = null
     view = 'default'
-    windows = await window.api.listWindows(entry.projectId)
-    selectedWindowId = entry.windowId
-    chatFocusSignal.set(entry.windowId)
+    windows = projectId === null ? [] : await window.api.listWindows(projectId)
+    selectedWindowId = win.id
+    chatFocusSignal.set(win.id)
   }
 
   function handleGroupSelect(id: number | 'ungrouped'): void {
@@ -243,11 +244,12 @@
     {selectedProjectId}
     {groups}
     {activeGroupId}
+    {allWindows}
     onProjectSelect={handleProjectSelect}
     onRequestNewProject={handleRequestNewProject}
     onRequestSettings={handleRequestSettings}
     onRequestHome={handleRequestHome}
-    onWaitingWindowSelect={handleWaitingWindowSelect}
+    onWindowSelect={handleSidebarWindowSelect}
     onGroupSelect={handleGroupSelect}
     onGroupCreated={handleGroupCreated}
     onProjectSettingsClick={handleProjectSettingsClick}
