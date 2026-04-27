@@ -359,10 +359,15 @@ export async function stageAndCommit(
 
 export async function pullMain(
   container: Container,
-  clonePath: string
+  clonePath: string,
+  sshUrl: string,
+  pat: string
 ): Promise<GitResult> {
-  const fetchResult = await execInContainer(container, ['git', '-C', clonePath, 'fetch', 'origin'])
-  if (!fetchResult.ok) return fetchResult
+  const httpsUrl = sshUrlToHttps(sshUrl, pat)
+  const fetchResult = await execInContainer(container, ['git', '-C', clonePath, 'fetch', httpsUrl])
+  if (!fetchResult.ok) {
+    return { ...fetchResult, stdout: scrubPat(fetchResult.stdout, pat) }
+  }
   return execInContainer(container, ['git', '-C', clonePath, 'merge', 'origin/main', '--no-edit'])
 }
 

@@ -227,12 +227,16 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('git:pull-main', async (_, windowId: number) => {
     const ctx = resolveWindowGitContext(windowId)
-    return gitPullMain(ctx.container, ctx.clonePath)
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    return gitPullMain(ctx.container, ctx.clonePath, ctx.gitUrl, pat)
   })
 
   ipcMain.handle('git:pull-main-project', async (_, windowId: number, projectId: number) => {
     const ctx = resolveWindowProjectGitContext(windowId, projectId)
-    return gitPullMain(ctx.container, ctx.clonePath)
+    const pat = getGitHubPat()
+    if (!pat) throw new Error('GitHub PAT not configured.')
+    return gitPullMain(ctx.container, ctx.clonePath, ctx.gitUrl, pat)
   })
 
   ipcMain.handle('git:list-branches', async (_, gitUrl: string) => {
