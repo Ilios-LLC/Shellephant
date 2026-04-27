@@ -332,6 +332,18 @@ Exports: `getPhoneServerHtml()` — returns HTML string for the phone web UI.
 - Contains xterm.js CDN script tag, WebSocket connection code, and `/api/windows` fetch.
 - Tests live in `window-manager/tests/main/phoneServer.test.ts` (first 3 tests).
 
+### window-manager/src/renderer/src/components/RunningWindowsSection.svelte
+Svelte 5 runes-mode sidebar section listing all running windows across all projects.
+- Props: `allWindows: WindowRecord[]`, `onWindowSelect: (win: WindowRecord) => void`
+- `runningWindows` derived state filters `allWindows` to `status === 'running'` only.
+- Renders nothing (no `.running-section` element) when `runningWindows` is empty.
+- `projectLabel(win)` — joins `win.projects[].project_name` with `, `; returns `'unknown'` if no projects.
+- Each item renders as `{projectLabel} / {win.name}` inside a `.running-item` button with a `.running-dot` indicator.
+- `waitingIds` derived `Set<string>` — maps `$waitingWindows` entries to `containerId` set for O(1) lookup.
+- `.running-item.waiting` class applied when `waitingIds.has(win.container_id)` (blue gradient highlight).
+- `handleClick(win)` — calls `waitingWindows.remove(win.container_id)` then `onWindowSelect(win)`.
+- Tests live in `window-manager/tests/renderer/RunningWindowsSection.test.ts` (9 tests).
+
 ### window-manager/src/main/phoneServer.ts
 Exports: `startPhoneServer(port?, bindHost?)`, `stopPhoneServer()`, `getPhoneServerStatus()`, `getTailscaleIp()`.
 - `getTailscaleIp()` — scans `networkInterfaces()` for a `100.x.x.x` IPv4 address (Tailscale); returns null if not found.

@@ -1,19 +1,20 @@
 <script lang="ts">
-  import type { ProjectRecord, ProjectGroupRecord } from '../types'
+  import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../types'
   import ProjectItem from './ProjectItem.svelte'
   import GroupStrip from './GroupStrip.svelte'
-  import { waitingWindows, type WaitingEntry } from '../lib/waitingWindows'
+  import RunningWindowsSection from './RunningWindowsSection.svelte'
 
   interface Props {
     projects: ProjectRecord[]
     selectedProjectId: number | null
     groups: ProjectGroupRecord[]
     activeGroupId: number | 'ungrouped' | null
+    allWindows: WindowRecord[]
     onProjectSelect: (project: ProjectRecord) => void
     onRequestNewProject: () => void
     onRequestSettings: () => void
     onRequestHome: () => void
-    onWaitingWindowSelect: (entry: WaitingEntry) => void
+    onWindowSelect: (win: WindowRecord) => void
     onGroupSelect: (id: number | 'ungrouped') => void
     onGroupCreated: (group: ProjectGroupRecord) => void
     onProjectSettingsClick: (project: ProjectRecord) => void
@@ -26,11 +27,12 @@
     selectedProjectId,
     groups,
     activeGroupId,
+    allWindows,
     onProjectSelect,
     onRequestNewProject,
     onRequestSettings,
     onRequestHome,
-    onWaitingWindowSelect,
+    onWindowSelect,
     onGroupSelect,
     onGroupCreated,
     onProjectSettingsClick,
@@ -108,21 +110,7 @@
       </button>
     </div>
   {/if}
-  {#if $waitingWindows.length > 0}
-    <div class="waiting-section">
-      <div class="waiting-header">Waiting</div>
-      {#each $waitingWindows as entry (entry.containerId)}
-        <button
-          type="button"
-          class="waiting-item"
-          onclick={() => onWaitingWindowSelect(entry)}
-        >
-          <span class="waiting-dot" aria-hidden="true">●</span>
-          <span class="waiting-label">{entry.projectName} / {entry.windowName}</span>
-        </button>
-      {/each}
-    </div>
-  {/if}
+  <RunningWindowsSection {allWindows} {onWindowSelect} />
   <GroupStrip {groups} {activeGroupId} {onGroupSelect} {onGroupCreated} />
 </aside>
 
@@ -226,49 +214,4 @@
     border-color: var(--accent);
   }
 
-  .waiting-section {
-    border-top: 1px solid var(--border);
-    padding: 0.35rem 0;
-  }
-
-  .waiting-header {
-    font-size: 0.68rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--fg-2);
-    padding: 0.35rem 0.85rem 0.2rem;
-  }
-
-  .waiting-item {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    width: 100%;
-    padding: 0.4rem 0.75rem;
-    background: transparent;
-    border: none;
-    cursor: pointer;
-    text-align: left;
-    color: var(--fg-1);
-    font-family: var(--font-ui);
-    font-size: 0.82rem;
-  }
-
-  .waiting-item:hover {
-    background: var(--bg-2);
-    color: var(--fg-0);
-  }
-
-  .waiting-dot {
-    font-size: 0.5rem;
-    color: var(--accent-hi);
-    flex-shrink: 0;
-  }
-
-  .waiting-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 </style>
