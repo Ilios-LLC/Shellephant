@@ -50,7 +50,12 @@ import {
 
 vi.mock('../../src/main/windowService', () => ({
   listWindows: vi.fn(),
+  createWindow: vi.fn(),
   getWindowTypeByContainerId: vi.fn()
+}))
+
+vi.mock('../../src/main/projectService', () => ({
+  listProjects: vi.fn()
 }))
 
 vi.mock('../../src/main/assistedWindowService', () => ({
@@ -77,7 +82,8 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: vi.fn(() => []) }
 }))
 
-import { listWindows } from '../../src/main/windowService'
+import { listWindows, createWindow } from '../../src/main/windowService'
+import { listProjects } from '../../src/main/projectService'
 import { sendToWindow, cancelWindow, getAssistedHistory } from '../../src/main/assistedWindowService'
 import { sendToClaudeDirectly, cancelClaudeDirect } from '../../src/main/claudeService'
 import { getFireworksKeyStatus, getPhoneEndpoint } from '../../src/main/settingsService'
@@ -85,6 +91,8 @@ import { getDb } from '../../src/main/db'
 import * as eventBroker from '../../src/main/assistedEventBroker'
 
 const mockListWindows = vi.mocked(listWindows)
+const mockCreateWindow = vi.mocked(createWindow)
+const mockListProjects = vi.mocked(listProjects)
 const mockSendToWindow = vi.mocked(sendToWindow)
 const mockCancelWindow = vi.mocked(cancelWindow)
 const mockGetAssistedHistory = vi.mocked(getAssistedHistory)
@@ -365,5 +373,93 @@ describe('WebSocket /events/:windowId', () => {
     const ws = new WebSocket(`ws://localhost:${port}/events/not-a-number`)
     await new Promise<void>(resolve => ws.on('close', () => resolve()))
     expect(true).toBe(true)
+  })
+})
+
+describe('GET /api/projects', () => {
+  afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
+
+  it('returns id and name for each project', async () => {
+    mockListProjects.mockReturnValue([
+      { id: 1, name: 'Alpha', git_url: 'git@github.com:a/a.git', ports: null, env_vars: null, group_id: null, default_network: null, created_at: '2024-01-01' },
+      { id: 2, name: 'Beta', git_url: 'git@github.com:b/b.git', ports: null, env_vars: null, group_id: null, default_network: null, created_at: '2024-01-01' }
+    ] as any)
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/projects`)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(await res.json()).toEqual([{ id: 1, name: 'Alpha' }, { id: 2, name: 'Beta' }])
+  })
+
+  it('returns empty array when no projects', async () => {
+    mockListProjects.mockReturnValue([])
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/projects`)
+    expect(await res.json()).toEqual([])
+  })
+})
+
+describe('POST /api/create-window', () => {
+  const mockWin = { id: 7, name: 'my-feature', status: 'running', container_id: 'abc123', window_type: 'manual' }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockCreateWindow.mockResolvedValue(mockWin as any)
+  })
+  afterEach(() => { stopPhoneServer(); vi.restoreAllMocks() })
+
+  it('calls createWindow with name and projectId array, returns window record', async () => {
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/create-window`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'my-feature', projectId: 3 })
+    })
+    expect(res.status).toBe(200)
+    expect(mockCreateWindow).toHaveBeenCalledWith('my-feature', [3])
+    expect(await res.json()).toEqual(mockWin)
+  })
+
+  it('400 when name missing', async () => {
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/create-window`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId: 3 })
+    })
+    expect(res.status).toBe(400)
+    expect(mockCreateWindow).not.toHaveBeenCalled()
+  })
+
+  it('400 when projectId missing', async () => {
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/create-window`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'my-feature' })
+    })
+    expect(res.status).toBe(400)
+    expect(mockCreateWindow).not.toHaveBeenCalled()
+  })
+
+  it('500 when createWindow throws', async () => {
+    mockCreateWindow.mockRejectedValue(new Error('Docker exploded'))
+    const port = await bootServer()
+    const res = await fetch(`http://localhost:${port}/api/create-window`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'my-feature', projectId: 3 })
+    })
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({ error: 'Docker exploded' })
+  })
+})
+
+describe('phoneServerHtml create-window references', () => {
+  it('contains #create-view element', () => {
+    expect(getPhoneServerHtml()).toContain('id="create-view"')
+  })
+
+  it('references /api/projects', () => {
+    expect(getPhoneServerHtml()).toContain('/api/projects')
+  })
+
+  it('references /api/create-window', () => {
+    expect(getPhoneServerHtml()).toContain('/api/create-window')
   })
 })
