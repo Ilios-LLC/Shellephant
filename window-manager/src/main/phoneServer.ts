@@ -3,7 +3,8 @@ import { networkInterfaces } from 'os'
 import type { AddressInfo } from 'net'
 import { WebSocketServer, WebSocket } from 'ws'
 import { BrowserWindow } from 'electron'
-import { listWindows } from './windowService'
+import { listWindows, createWindow } from './windowService'
+import { listProjects } from './projectService'
 import { getPhoneServerHtml } from './phoneServerHtml'
 import { sendToWindow, cancelWindow, getAssistedHistory } from './assistedWindowService'
 import { sendToClaudeDirectly, cancelClaudeDirect } from './claudeService'
@@ -98,6 +99,20 @@ async function handleApiSend(req: http.IncomingMessage, res: http.ServerResponse
   }
 }
 
+async function handleApiCreateWindow(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const body = await readJsonBody<{ name: string; projectId: number }>(req)
+  if (!body.name || !body.projectId) {
+    writeJson(res, 400, { error: 'name and projectId required' })
+    return
+  }
+  try {
+    const win = await createWindow(body.name, [body.projectId])
+    writeJson(res, 200, win)
+  } catch (err) {
+    writeJson(res, 500, { error: err instanceof Error ? err.message : String(err) })
+  }
+}
+
 async function handleApiCancel(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const body = await readJsonBody<{ windowId: number; recipient: 'claude' | 'shellephant' }>(req)
   if (!body.windowId || !body.recipient) {
@@ -115,6 +130,16 @@ async function handleHttpRequest(req: http.IncomingMessage, res: http.ServerResp
 
   if (path === '/api/windows') {
     writeJson(res, 200, await listWindows())
+    return
+  }
+
+  if (path === '/api/projects') {
+    writeJson(res, 200, listProjects().map(p => ({ id: p.id, name: p.name })))
+    return
+  }
+
+  if (path === '/api/create-window' && req.method === 'POST') {
+    await handleApiCreateWindow(req, res)
     return
   }
 

@@ -19,10 +19,30 @@ export function getPhoneServerHtml(): string {
     body { background: var(--bg-0); color: var(--fg-0); font-family: var(--font-ui); height: 100dvh; overflow: hidden; }
 
     #list-view { padding: 1rem; overflow-y: auto; height: 100dvh; }
-    h1 { font-size: 1.2rem; margin-bottom: 0.75rem; color: #ccc; }
+    .list-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    h1 { font-size: 1.2rem; color: #ccc; }
+    .new-win-btn { background: var(--accent); border: none; color: white; border-radius: 4px; font-size: 1.2rem; line-height: 1; padding: 0.2rem 0.6rem; cursor: pointer; min-height: 32px; min-width: 32px; }
     .window-card { background: var(--bg-2); border-radius: 6px; padding: 0.85rem 1rem; margin-bottom: 0.6rem; cursor: pointer; border: 1px solid var(--border); }
     .window-name { font-size: 1rem; font-weight: 600; }
     .window-status { font-size: 0.8rem; color: var(--fg-2); margin-top: 0.2rem; }
+
+    #create-view { display: none; flex-direction: column; height: 100dvh; }
+    #create-view.active { display: flex; }
+    #create-header { padding: 0.4rem 0.75rem; background: var(--bg-2); border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 0.6rem; flex-shrink: 0; }
+    #create-back-btn { background: none; border: 1px solid #555; color: #ccc; padding: 0.3rem 0.6rem; border-radius: 4px; cursor: pointer; font-size: 0.85rem; min-height: 36px; }
+    #create-title { font-size: 0.9rem; color: #ccc; }
+    #create-body { padding: 1.25rem 1rem; display: flex; flex-direction: column; gap: 1rem; }
+    .create-field { display: flex; flex-direction: column; gap: 0.4rem; }
+    .create-label { font-size: 0.8rem; color: var(--fg-2); text-transform: uppercase; letter-spacing: 0.05em; }
+    .create-select, .create-input { background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px; color: var(--fg-0); font-family: var(--font-ui); font-size: 0.95rem; padding: 0.5rem 0.6rem; outline: none; width: 100%; min-height: 44px; }
+    .create-select:focus, .create-input:focus { border-color: var(--accent); }
+    .create-select:disabled { opacity: 0.5; }
+    .create-submit { background: var(--accent); border: none; border-radius: 4px; color: white; cursor: pointer; font-family: var(--font-ui); font-size: 0.95rem; min-height: 44px; padding: 0.5rem 1rem; }
+    .create-submit:disabled { opacity: 0.4; cursor: not-allowed; }
+    #create-status { font-size: 0.85rem; color: var(--fg-2); display: none; }
+    #create-error { font-size: 0.85rem; color: var(--danger); display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; vertical-align: middle; margin-right: 0.4rem; }
 
     #panel-view { display: none; flex-direction: column; height: 100dvh; }
     #panel-view.active { display: flex; }
@@ -70,8 +90,30 @@ export function getPhoneServerHtml(): string {
 </head>
 <body>
   <div id="list-view">
-    <h1>Claude Windows</h1>
+    <div class="list-header">
+      <h1>Claude Windows</h1>
+      <button class="new-win-btn" onclick="showCreate()" title="New window">+</button>
+    </div>
     <div id="window-list"><p style="color:#888">Loading\u2026</p></div>
+  </div>
+  <div id="create-view">
+    <div id="create-header">
+      <button id="create-back-btn" onclick="showList()">&#8592; Back</button>
+      <span id="create-title">New Window</span>
+    </div>
+    <div id="create-body">
+      <div class="create-field">
+        <label class="create-label" for="create-project">Project</label>
+        <select class="create-select" id="create-project"><option value="">Loading\u2026</option></select>
+      </div>
+      <div class="create-field">
+        <label class="create-label" for="create-name">Name</label>
+        <input class="create-input" id="create-name" type="text" placeholder="my-feature" autocomplete="off">
+      </div>
+      <button class="create-submit" id="create-submit" disabled onclick="submitCreate()">Create</button>
+      <p id="create-status"></p>
+      <p id="create-error"></p>
+    </div>
   </div>
   <div id="panel-view">
     <div id="panel-header">
@@ -389,6 +431,7 @@ function getPanelScript(): string {
       if (state.ws) { try { state.ws.close(); } catch (e) {} state.ws = null; }
       document.getElementById('list-view').style.display = 'block';
       document.getElementById('panel-view').classList.remove('active');
+      document.getElementById('create-view').classList.remove('active');
       loadList();
     }
 
@@ -427,5 +470,82 @@ function getPanelScript(): string {
     }, true);
 
     loadList();
+
+    function showCreate() {
+      document.getElementById('list-view').style.display = 'none';
+      document.getElementById('panel-view').classList.remove('active');
+      document.getElementById('create-view').classList.add('active');
+      document.getElementById('create-error').style.display = 'none';
+      document.getElementById('create-status').style.display = 'none';
+      document.getElementById('create-name').value = '';
+      loadProjects();
+    }
+
+    async function loadProjects() {
+      var sel = document.getElementById('create-project');
+      sel.innerHTML = '<option value="">Loading…</option>';
+      sel.disabled = true;
+      updateCreateDisabled();
+      try {
+        var res = await fetch('/api/projects');
+        var projects = await res.json();
+        sel.innerHTML = '<option value="">Select project…</option>';
+        projects.forEach(function(p) {
+          var opt = document.createElement('option');
+          opt.value = String(p.id);
+          opt.textContent = p.name;
+          sel.appendChild(opt);
+        });
+        sel.disabled = false;
+      } catch (e) {
+        sel.innerHTML = '<option value="">Failed to load</option>';
+      }
+      updateCreateDisabled();
+    }
+
+    function updateCreateDisabled() {
+      var sel = document.getElementById('create-project');
+      var name = document.getElementById('create-name').value.trim();
+      var btn = document.getElementById('create-submit');
+      btn.disabled = !sel.value || !name || sel.disabled;
+    }
+
+    async function submitCreate() {
+      var sel = document.getElementById('create-project');
+      var name = document.getElementById('create-name').value.trim();
+      if (!sel.value || !name) return;
+      var btn = document.getElementById('create-submit');
+      var statusEl = document.getElementById('create-status');
+      var errorEl = document.getElementById('create-error');
+      btn.disabled = true;
+      errorEl.style.display = 'none';
+      statusEl.innerHTML = '<span class="spinner"></span>Creating window…';
+      statusEl.style.display = 'block';
+      try {
+        var res = await fetch('/api/create-window', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: name, projectId: Number(sel.value) })
+        });
+        var data = await res.json();
+        if (!res.ok) { throw new Error(data.error || 'Create failed'); }
+        statusEl.style.display = 'none';
+        document.getElementById('create-view').classList.remove('active');
+        openPanel(data.id, data.name);
+      } catch (err) {
+        statusEl.style.display = 'none';
+        errorEl.textContent = err.message || 'Create failed';
+        errorEl.style.display = 'block';
+        btn.disabled = false;
+        updateCreateDisabled();
+      }
+    }
+
+    document.addEventListener('input', function(e) {
+      if (e.target && (e.target.id === 'create-name' || e.target.id === 'create-project')) updateCreateDisabled();
+    });
+    document.addEventListener('change', function(e) {
+      if (e.target && e.target.id === 'create-project') updateCreateDisabled();
+    });
   `
 }
