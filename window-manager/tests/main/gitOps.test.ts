@@ -725,26 +725,30 @@ describe('pullMain', () => {
     return { id: 'c', exec }
   }
 
-  it('issues git fetch origin then git merge origin/main --no-edit', async () => {
+  const TEST_SSH_URL = 'git@github.com:org/repo.git'
+  const TEST_PAT = 'ghp_testtoken'
+  const EXPECTED_HTTPS = 'https://ghp_testtoken@github.com/org/repo.git'
+
+  it('issues git fetch <httpsUrl> then git merge origin/main --no-edit', async () => {
     const container = makeTwoCallContainer(0, 0)
     // @ts-expect-error mock
-    await pullMain(container, '/workspace/r')
+    await pullMain(container, '/workspace/r', TEST_SSH_URL, TEST_PAT)
     const cmds = container.exec.mock.calls.map((c: [{ Cmd: string[] }]) => c[0].Cmd)
-    expect(cmds[0]).toEqual(['git', '-C', '/workspace/r', 'fetch', 'origin'])
+    expect(cmds[0]).toEqual(['git', '-C', '/workspace/r', 'fetch', EXPECTED_HTTPS])
     expect(cmds[1]).toEqual(['git', '-C', '/workspace/r', 'merge', 'origin/main', '--no-edit'])
   })
 
   it('returns ok=true when both commands succeed', async () => {
     const container = makeTwoCallContainer(0, 0)
     // @ts-expect-error mock
-    const res = await pullMain(container, '/workspace/r')
+    const res = await pullMain(container, '/workspace/r', TEST_SSH_URL, TEST_PAT)
     expect(res.ok).toBe(true)
   })
 
   it('short-circuits and returns fetch result when fetch fails', async () => {
     const container = makeTwoCallContainer(1, 0)
     // @ts-expect-error mock
-    const res = await pullMain(container, '/workspace/r')
+    const res = await pullMain(container, '/workspace/r', TEST_SSH_URL, TEST_PAT)
     expect(res.ok).toBe(false)
     expect(container.exec).toHaveBeenCalledTimes(1)
   })
@@ -753,7 +757,7 @@ describe('pullMain', () => {
     const conflictOutput = 'CONFLICT (content): Merge conflict in src/app.ts\nAutomatic merge failed'
     const container = makeTwoCallContainer(0, 1, conflictOutput)
     // @ts-expect-error mock
-    const res = await pullMain(container, '/workspace/r')
+    const res = await pullMain(container, '/workspace/r', TEST_SSH_URL, TEST_PAT)
     expect(res.ok).toBe(false)
     expect(res.stdout).toMatch(/CONFLICT/)
   })
