@@ -16,9 +16,7 @@
     return win.projects.map((p) => p.project_name ?? 'unknown').join(', ')
   }
 
-  function isWaiting(win: WindowRecord): boolean {
-    return $waitingWindows.some((e) => e.containerId === win.container_id)
-  }
+  let waitingIds = $derived(new Set($waitingWindows.map((e) => e.containerId)))
 
   function handleClick(win: WindowRecord): void {
     waitingWindows.remove(win.container_id)
@@ -33,7 +31,7 @@
       <button
         type="button"
         class="running-item"
-        class:waiting={isWaiting(win)}
+        class:waiting={waitingIds.has(win.container_id)}
         onclick={() => handleClick(win)}
       >
         <span class="running-dot" aria-hidden="true">●</span>

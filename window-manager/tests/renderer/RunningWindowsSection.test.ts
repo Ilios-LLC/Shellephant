@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import RunningWindowsSection from '../../src/renderer/src/components/RunningWindowsSection.svelte'
 import type { WindowRecord } from '../../src/renderer/src/types'
 import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
+import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 
 function makeWindow(id: number, name: string, projectId: number, projectName: string, status: 'running' | 'stopped' = 'running'): WindowRecord {
   return {
@@ -94,10 +95,9 @@ describe('RunningWindowsSection', () => {
     render(RunningWindowsSection, baseProps({ allWindows: [w] }))
     await fireEvent.click(screen.getByText('proj1 / win1'))
     expect(onWindowSelect).toHaveBeenCalledWith(w)
-    let storeValue: typeof waitingWindows extends { subscribe: (fn: (v: infer V) => void) => void } ? V : never
-    waitingWindows.subscribe((v) => { storeValue = v })()
-    // @ts-ignore
-    expect(storeValue.find((e) => e.containerId === 'container-1')).toBeUndefined()
+    let captured: WaitingEntry[] = []
+    waitingWindows.subscribe((v) => { captured = v })()
+    expect(captured.find((e) => e.containerId === 'container-1')).toBeUndefined()
   })
 
   it('clicking a non-waiting item calls onWindowSelect only', async () => {
