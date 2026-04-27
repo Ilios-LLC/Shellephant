@@ -329,10 +329,15 @@ function persistWindow(
   const insertWp = db.prepare(
     'INSERT INTO window_projects (window_id, project_id, clone_path) VALUES (?, ?, ?)'
   )
+  const projectNames = new Map<number, string>()
+  for (const pid of projectIds) {
+    const p = db.prepare('SELECT name FROM projects WHERE id = ?').get(pid) as { name: string } | undefined
+    if (p) projectNames.set(pid, p.name)
+  }
   const wpRows: WindowProjectRecord[] = []
   for (let i = 0; i < projectIds.length; i++) {
     insertWp.run(id, projectIds[i], clonePaths[i])
-    wpRows.push({ id: 0, window_id: id, project_id: projectIds[i], clone_path: clonePaths[i] })
+    wpRows.push({ id: 0, window_id: id, project_id: projectIds[i], clone_path: clonePaths[i], project_name: projectNames.get(projectIds[i]) })
   }
 
   for (const { depId, containerId } of depContainerRecords) {
