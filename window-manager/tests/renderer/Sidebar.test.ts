@@ -1,9 +1,8 @@
 import { render, fireEvent, screen, cleanup } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import Sidebar from '../../src/renderer/src/components/Sidebar.svelte'
-import type { ProjectRecord, ProjectGroupRecord } from '../../src/renderer/src/types'
+import type { ProjectRecord, ProjectGroupRecord, WindowRecord } from '../../src/renderer/src/types'
 import { waitingWindows } from '../../src/renderer/src/lib/waitingWindows'
-import type { WaitingEntry } from '../../src/renderer/src/lib/waitingWindows'
 
 
 function makeProject(id: number, name: string): ProjectRecord {
@@ -15,12 +14,25 @@ function makeProject(id: number, name: string): ProjectRecord {
   }
 }
 
+function makeWindow(id: number, status: 'running' | 'stopped' = 'running'): WindowRecord {
+  return {
+    id,
+    name: `win${id}`,
+    project_id: 1,
+    container_id: `container-${id}`,
+    window_type: 'manual',
+    created_at: '2026-01-01T00:00:00Z',
+    status,
+    projects: [{ id, window_id: id, project_id: 1, clone_path: '/tmp', project_name: 'proj1' }]
+  }
+}
+
 describe('Sidebar', () => {
   let onProjectSelect: ReturnType<typeof vi.fn>
   let onRequestNewProject: ReturnType<typeof vi.fn>
   let onRequestSettings: ReturnType<typeof vi.fn>
   let onRequestHome: ReturnType<typeof vi.fn>
-  let onWaitingWindowSelect: ReturnType<typeof vi.fn>
+  let onWindowSelect: ReturnType<typeof vi.fn>
   let onGroupSelect: ReturnType<typeof vi.fn>
   let onGroupCreated: ReturnType<typeof vi.fn>
   let onProjectSettingsClick: ReturnType<typeof vi.fn>
@@ -30,7 +42,7 @@ describe('Sidebar', () => {
     onRequestNewProject = vi.fn()
     onRequestSettings = vi.fn()
     onRequestHome = vi.fn()
-    onWaitingWindowSelect = vi.fn()
+    onWindowSelect = vi.fn()
     onGroupSelect = vi.fn()
     onGroupCreated = vi.fn()
     onProjectSettingsClick = vi.fn()
@@ -48,11 +60,12 @@ describe('Sidebar', () => {
       selectedProjectId: null as number | null,
       groups: [] as ProjectGroupRecord[],
       activeGroupId: null as number | null,
+      allWindows: [] as WindowRecord[],
       onProjectSelect,
       onRequestNewProject,
       onRequestSettings,
       onRequestHome,
-      onWaitingWindowSelect,
+      onWindowSelect,
       onGroupSelect,
       onGroupCreated,
       onProjectSettingsClick,
@@ -159,40 +172,20 @@ describe('Sidebar', () => {
     })
   })
 
-  describe('waiting section', () => {
+  describe('running windows section', () => {
     beforeEach(() => waitingWindows._resetForTest())
+    afterEach(() => waitingWindows._resetForTest())
 
-    it('does not render the waiting section when no windows are waiting', () => {
+    it('does not render running section when no running windows', () => {
       render(Sidebar, baseProps())
-      expect(screen.queryByText(/waiting/i)).toBeNull()
+      expect(screen.queryByText(/^running$/i)).toBeNull()
     })
 
-    it('renders the waiting section when a window is waiting', () => {
-      const entry: WaitingEntry = {
-        containerId: 'c1',
-        windowId: 1,
-        windowName: 'my-window',
-        projectId: 1,
-        projectName: 'my-project'
-      }
-      waitingWindows.add(entry)
-      render(Sidebar, baseProps())
-      expect(screen.getByText(/waiting/i)).toBeDefined()
-      expect(screen.getByText('my-project / my-window')).toBeDefined()
-    })
-
-    it('clicking a waiting item calls onWaitingWindowSelect with the entry', async () => {
-      const entry: WaitingEntry = {
-        containerId: 'c1',
-        windowId: 1,
-        windowName: 'my-window',
-        projectId: 1,
-        projectName: 'my-project'
-      }
-      waitingWindows.add(entry)
-      render(Sidebar, baseProps())
-      await fireEvent.click(screen.getByText('my-project / my-window'))
-      expect(onWaitingWindowSelect).toHaveBeenCalledWith(entry)
+    it('renders running section when running windows exist', () => {
+      const w = makeWindow(1)
+      render(Sidebar, baseProps({ allWindows: [w] }))
+      expect(screen.getByText(/^running$/i)).toBeDefined()
+      expect(screen.getByText('proj1 / win1')).toBeDefined()
     })
   })
 })
